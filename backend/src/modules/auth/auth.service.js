@@ -78,9 +78,11 @@ async function impersonar({ adminId, usuarioAlvoId, ip }) {
 }
 
 // Cria usuário (usado no cadastro de empresa/cliente e de motoboy).
-async function criarUsuario({ empresaId = null, perfil, nome, email, telefone = null, senha }) {
+async function criarUsuario({ empresaId = null, perfil, nome, email, telefone = null, senha, executor = query }) {
   const senhaHash = await sh.hashSenha(senha);
-  const { rows } = await query(
+  // `executor` permite executar dentro de uma transação aberta (ex.: criação de empresa),
+  // garantindo que a FK usuarios.empresa_id enxergue a empresa ainda não commitada.
+  const { rows } = await executor(
     `INSERT INTO usuarios (empresa_id, perfil, nome, email, telefone, senha_hash)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, empresa_id, perfil, nome, email`,

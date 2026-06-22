@@ -45,6 +45,7 @@ async function criar(dados, { adminId, ip }) {
       empresaId: empresa.id, perfil: PERFIS.CLIENTE,
       nome: dados.responsavel || dados.razao_social, email: dados.email,
       telefone: dados.telefone, senha: dados.senha,
+      executor: (sql, params) => cliente.query(sql, params), // mesma transação da empresa
     });
     await cliente.query('COMMIT');
     await registrarAuditoria({
