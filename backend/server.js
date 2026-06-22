@@ -37,7 +37,8 @@ function montarApp() {
   app.set('trust proxy', 1);
 
   app.use(helmet());
-  app.use(cors({ origin: (process.env.CORS_ORIGIN || '').split(',').filter(Boolean) || true, credentials: true }));
+  const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+  app.use(cors({ origin: origensCors.length ? origensCors : true, credentials: true }));
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
   app.use(sanitizarEntrada);

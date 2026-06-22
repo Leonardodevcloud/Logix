@@ -25,7 +25,7 @@ function gerarRefreshToken() {
 }
 function hashRefresh(bruto) { return crypto.createHash('sha256').update(bruto).digest('hex'); }
 
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'strict', path: '/' };
+const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none', path: '/' }; // 'none' permite o painel (Vercel) usar o cookie de refresh
 const MS_ACCESS = 15 * 60_000;
 const MS_REFRESH = REFRESH_TTL_DIAS * 86400_000;
 

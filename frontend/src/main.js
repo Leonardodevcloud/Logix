@@ -9,15 +9,16 @@ async function boot() {
   if (window.LOGIX_API) api.setBase(window.LOGIX_API);
   router.definirSaida(app);
 
-  await carregarTema({ base: window.LOGIX_API || '/api/v1' });   // white-label por host (antes do login)
+  await carregarTema({ base: window.LOGIX_API || '/api/v1' });
 
-  // Cada módulo é carregado sob demanda (code-splitting nativo via import dinâmico).
   router.rota('/login', () => import('./modulos/login.js'));
   router.rota('/', () => import('./modulos/dashboard.js'));
+  router.rota('/clientes', () => import('./modulos/clientes.js'));
+  router.rota('/clientes/:id/modulos', () => import('./modulos/cliente-modulos.js'));
   router.rota('/entregas', () => import('./modulos/entregas.js'));
   router.rota('/motoboys', () => import('./modulos/motoboys.js'));
-  router.rota('/clientes', () => import('./modulos/clientes.js'));
   router.rota('/marca', () => import('./modulos/branding.js'));
+  router.rota('/equipe', () => import('./modulos/equipe.js'));
 
   router.definirGuarda((caminho) => {
     if (caminho !== '/login' && !auth.estaLogado()) return '/login';

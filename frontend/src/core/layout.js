@@ -1,21 +1,29 @@
-// Casca da aplicação (sidebar + topbar). Os módulos renderizam o conteúdo dentro dela.
+// Casca (sidebar + topbar). A navegação é montada conforme o perfil e as permissões.
 import { el } from './ui.js';
 import { navegar } from './router.js';
 import * as auth from './auth.js';
 
-const NAV = [
-  { rota: '/', rotulo: 'Painel' },
-  { rota: '/entregas', rotulo: 'Entregas' },
-  { rota: '/motoboys', rotulo: 'Motoboys' },
-  { rota: '/clientes', rotulo: 'Clientes' },
-  { rota: '/marca', rotulo: 'Marca' },
-];
+function itensNav() {
+  const a = auth.acessoAtual();
+  if (a.perfil === 'super_admin') {
+    return [
+      { rota: '/', rotulo: 'Painel' },
+      { rota: '/clientes', rotulo: 'Clientes' },
+    ];
+  }
+  const itens = [{ rota: '/', rotulo: 'Painel' }];
+  if (auth.temModulo('entregas') && auth.pode('entregas.ver')) itens.push({ rota: '/entregas', rotulo: 'Entregas' });
+  if (auth.temModulo('motoboys') && auth.pode('motoboys.ver')) itens.push({ rota: '/motoboys', rotulo: 'Motoboys' });
+  if (auth.temModulo('marca') && auth.pode('marca.ver')) itens.push({ rota: '/marca', rotulo: 'Marca' });
+  if (auth.pode('usuarios.gerenciar')) itens.push({ rota: '/equipe', rotulo: 'Equipe' });
+  return itens;
+}
 
 export function casca(titulo, conteudo) {
   const u = auth.usuarioAtual() || {};
   const ativo = location.hash.slice(1) || '/';
 
-  const links = NAV.map((n) => el('a', {
+  const links = itensNav().map((n) => el('a', {
     style: `display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13.5px;`
       + `color:${ativo === n.rota ? '#fff' : '#b9d2ee'};background:${ativo === n.rota ? 'rgba(55,138,221,.2)' : 'transparent'}`,
     onClick: () => navegar(n.rota),
@@ -26,6 +34,7 @@ export function casca(titulo, conteudo) {
     ...links,
     el('div', { style: 'margin-top:auto;padding:10px' },
       el('div', { style: 'color:#fff;font-weight:700;font-size:13px' }, u.nome || ''),
+      el('div', { style: 'color:#6f8db3;font-size:11px;margin-bottom:6px' }, perfilRotulo(u.perfil)),
       el('a', { style: 'cursor:pointer;color:#9cbbdd;font-size:12px', onClick: async () => { await auth.logout(); navegar('/login'); } }, 'Sair')));
 
   const main = el('div', { style: 'flex:1;display:flex;flex-direction:column;min-width:0' },
@@ -34,4 +43,8 @@ export function casca(titulo, conteudo) {
     el('div', { style: 'padding:24px;overflow:auto' }, conteudo));
 
   return el('div', { style: 'display:flex;min-height:100vh;background:var(--lx-fundo)' }, side, main);
+}
+
+function perfilRotulo(p) {
+  return { super_admin: 'Administrador master', cliente: 'Cliente', motoboy: 'Motoboy' }[p] || '';
 }
