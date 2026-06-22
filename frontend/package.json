@@ -1,0 +1,7 @@
+{
+  "name": "logix-frontend",
+  "version": "1.0.0",
+  "description": "Painel + Portal da Logix (SPA vanilla JS, sem build).",
+  "type": "module",
+  "private": true
+}

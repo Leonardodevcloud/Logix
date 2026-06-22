@@ -1,0 +1,166 @@
+/* =========================================================================
+   Logix · Inteligência em cada rota — Design Tokens
+   Derivado do Manual de Marca Logix. Reutilizável no Painel, Portal e (como
+   referência de tema) no app React Native.
+   ========================================================================= */
+
+:root {
+  /* ---- Tokens de marca (SOBRESCRITOS POR TENANT em runtime via aplicar-tema.js) ----
+     O white-label troca apenas estas 4 variáveis + navy derivado da secundária.
+     Os valores abaixo são o tema padrão IG (fallback). Mapeamento no aplicar-tema.js:
+       cor_primaria   -> --lx-azul-primario
+       cor_secundaria -> --lx-azul-profundo (+ --lx-navy-900/950)
+       cor_destaque   -> --lx-azul-vivo
+       cor_clara      -> --lx-azul-claro                                            */
+
+  /* ---- Cores institucionais (Manual de Marca) ---- */
+  --lx-azul-profundo: #042C53;
+  --lx-azul-primario: #185FA5;
+  --lx-azul-vivo:     #378ADD;
+  --lx-azul-claro:    #B5D4F4;
+  --lx-branco:        #FFFFFF;
+
+  /* ---- Escala azul Logix (numerada, do manual) ---- */
+  --lx-azul-900: #042C53;  --lx-azul-800: #0C447C;  --lx-azul-600: #185FA5;
+  --lx-azul-400: #378ADD;  --lx-azul-200: #85B7EB;  --lx-azul-100: #B5D4F4;  --lx-azul-50: #E6F1FB;
+
+  /* ---- Neutros de suporte Logix (manual) — quentes, p/ pontos de marca ---- */
+  --lx-carvao: #2C2C2A;  --lx-gelo: #F1EFE8;  --lx-cinza: #888780;  --lx-prata: #D3D1C7;
+
+  /* ---- Navy (fundos escuros / app / sidebars) ---- */
+  --lx-navy-950: #04203D;
+  --lx-navy-900: #062A4F;
+  --lx-navy-800: #0A3A66;
+  --lx-navy-700: #114A82;
+
+  /* ---- Neutros de interface ---- */
+  --lx-superficie:    #FFFFFF;
+  --lx-superficie-2:  #F4F8FD;
+  --lx-fundo:         #EAF1FA;
+  --lx-linha:         #DCE7F3;
+  --lx-tinta:         #0F2740;  /* texto principal */
+  --lx-tinta-2:       #486485;  /* texto secundário */
+  --lx-tinta-3:       #8AA2BE;  /* texto terciário / placeholder */
+
+  /* ---- Cores semânticas operacionais (fora da paleta do logo,
+          dessaturadas para legibilidade em status) ---- */
+  --lx-ok:        #1F9D6B;  --lx-ok-bg:        #E4F5EE;
+  --lx-atencao:   #C98A1A;  --lx-atencao-bg:   #FBF1DD;
+  --lx-erro:      #D0584F;  --lx-erro-bg:      #FBE8E6;
+  --lx-info:      #185FA5;  --lx-info-bg:      #E4EEF9;
+
+  /* ---- Status de entrega (mapeamento direto) ---- */
+  --lx-st-aguardando: var(--lx-tinta-2);
+  --lx-st-coleta:     #6B4FC9;
+  --lx-st-rota:       var(--lx-azul-primario);
+  --lx-st-entregue:   var(--lx-ok);
+  --lx-st-cancelada:  var(--lx-erro);
+
+  /* ---- Tipografia ---- */
+  --lx-fonte: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --lx-fs-xs:   11px;
+  --lx-fs-sm:   12.5px;
+  --lx-fs-base: 14px;
+  --lx-fs-md:   16px;
+  --lx-fs-lg:   20px;
+  --lx-fs-xl:   26px;
+  --lx-fs-2xl:  34px;
+  --lx-peso-regular: 400;
+  --lx-peso-medio:   600;
+  --lx-peso-bold:    700;
+  --lx-peso-black:   800;
+
+  /* ---- Raios ---- */
+  --lx-raio-sm: 8px;
+  --lx-raio:    12px;
+  --lx-raio-lg: 18px;
+  --lx-raio-pill: 999px;
+
+  /* ---- Sombras ---- */
+  --lx-sombra-sm: 0 1px 2px rgba(4, 44, 83, .06);
+  --lx-sombra:    0 4px 14px rgba(4, 44, 83, .08);
+  --lx-sombra-lg: 0 12px 32px rgba(4, 44, 83, .14);
+
+  /* ---- Espaçamento ---- */
+  --lx-esp-1: 4px;  --lx-esp-2: 8px;  --lx-esp-3: 12px;
+  --lx-esp-4: 16px; --lx-esp-5: 24px; --lx-esp-6: 32px;
+
+  /* ---- Gradientes da marca ---- */
+  --lx-grad-primario: linear-gradient(150deg, var(--lx-azul-primario), var(--lx-navy-800));
+  --lx-grad-vivo:     linear-gradient(135deg, var(--lx-azul-vivo), var(--lx-azul-primario));
+}
+
+/* =========================================================================
+   Base
+   ========================================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--lx-fonte);
+  font-size: var(--lx-fs-base);
+  color: var(--lx-tinta);
+  background: var(--lx-fundo);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 { font-size: var(--lx-fs-xl); font-weight: var(--lx-peso-black); margin: 0; }
+h2 { font-size: var(--lx-fs-lg); font-weight: var(--lx-peso-bold); margin: 0; }
+a  { color: var(--lx-azul-primario); text-decoration: none; }
+
+/* =========================================================================
+   Componentes utilitários
+   ========================================================================= */
+
+/* Botões */
+.lx-btn {
+  font-family: inherit; font-size: var(--lx-fs-base); font-weight: var(--lx-peso-bold);
+  border: 0; border-radius: var(--lx-raio); padding: 11px 18px; cursor: pointer;
+  transition: filter .15s ease, transform .05s ease;
+}
+.lx-btn:active { transform: translateY(1px); }
+.lx-btn-primario { background: var(--lx-azul-primario); color: #fff; }
+.lx-btn-primario:hover { filter: brightness(1.06); }
+.lx-btn-secundario { background: var(--lx-superficie-2); color: var(--lx-tinta); border: 1px solid var(--lx-linha); }
+.lx-btn-fantasma { background: transparent; color: var(--lx-azul-primario); border: 1.5px solid var(--lx-azul-vivo); }
+.lx-btn-perigo { background: var(--lx-erro-bg); color: var(--lx-erro); }
+
+/* Cartões */
+.lx-card {
+  background: var(--lx-superficie); border: 1px solid var(--lx-linha);
+  border-radius: var(--lx-raio); box-shadow: var(--lx-sombra-sm);
+}
+.lx-card-pad { padding: var(--lx-esp-4); }
+
+/* Campos */
+.lx-input {
+  width: 100%; font-family: inherit; font-size: var(--lx-fs-base);
+  padding: 11px 13px; border: 1px solid var(--lx-linha);
+  border-radius: var(--lx-raio-sm); background: var(--lx-superficie); color: var(--lx-tinta);
+}
+.lx-input:focus { outline: none; border-color: var(--lx-azul-vivo); box-shadow: 0 0 0 3px rgba(55,138,221,.18); }
+.lx-input::placeholder { color: var(--lx-tinta-3); }
+
+/* Status (badges) */
+.lx-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--lx-fs-xs); font-weight: var(--lx-peso-bold);
+  padding: 4px 10px; border-radius: var(--lx-raio-pill);
+}
+.lx-status-aguardando { background: var(--lx-superficie-2); color: var(--lx-st-aguardando); }
+.lx-status-coleta     { background: #ede9fb; color: var(--lx-st-coleta); }
+.lx-status-rota       { background: var(--lx-info-bg); color: var(--lx-st-rota); }
+.lx-status-entregue   { background: var(--lx-ok-bg); color: var(--lx-st-entregue); }
+.lx-status-cancelada  { background: var(--lx-erro-bg); color: var(--lx-st-cancelada); }
+
+/* Chips / filtros */
+.lx-chip {
+  font-size: var(--lx-fs-sm); font-weight: var(--lx-peso-medio);
+  padding: 5px 12px; border-radius: var(--lx-raio-pill);
+  background: var(--lx-superficie-2); color: var(--lx-tinta-2); border: 1px solid var(--lx-linha); cursor: pointer;
+}
+.lx-chip.ativo { background: var(--lx-azul-primario); color: #fff; border-color: var(--lx-azul-primario); }
+
+/* Texto auxiliar */
+.lx-muted { color: var(--lx-tinta-2); font-size: var(--lx-fs-sm); }
+.lx-forte { font-weight: var(--lx-peso-bold); color: var(--lx-tinta); }

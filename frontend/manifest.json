@@ -1,0 +1,9 @@
+{
+  "name": "Logix",
+  "short_name": "Logix",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#042C53",
+  "theme_color": "#185FA5",
+  "icons": [{ "src": "/assets/logo-logix.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
