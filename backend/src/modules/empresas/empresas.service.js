@@ -41,10 +41,14 @@ async function criar(dados, { adminId, ip }) {
        dados.cidade || null, dados.estado || null, dados.responsavel || null, dados.email, dados.telefone || null]
     );
     const empresa = rows[0];
+    // Provisiona o cliente: módulos padrão + responsável como Administrador (mesma transação).
+    const permissoesService = require('../permissoes/permissoes.service');
+    await permissoesService.habilitarModulosPadrao(empresa.id, (sql, params) => cliente.query(sql, params));
+    const papelAdminId = await permissoesService.idDoTemplate('Administrador');
     const usuario = await authService.criarUsuario({
       empresaId: empresa.id, perfil: PERFIS.CLIENTE,
       nome: dados.responsavel || dados.razao_social, email: dados.email,
-      telefone: dados.telefone, senha: dados.senha,
+      telefone: dados.telefone, senha: dados.senha, papelId: papelAdminId,
       executor: (sql, params) => cliente.query(sql, params), // mesma transação da empresa
     });
     await cliente.query('COMMIT');

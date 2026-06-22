@@ -1,14 +1,15 @@
 const express = require('express');
 const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
+const { exigirModulo, exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./motoboys.service');
 
 function initMotoboysRoutes() {
   const router = express.Router();
-  router.use(verificarToken, resolverTenant, exigirTenant);
+  router.use(verificarToken, resolverTenant, exigirTenant, exigirModulo('motoboys'));
 
   // GET /motoboys?status=ativo&online=true
-  router.get('/', async (req, res, next) => {
+  router.get('/', exigirPermissao('motoboys.ver'), async (req, res, next) => {
     try {
       const online = req.query.online === undefined ? undefined : req.query.online === 'true';
       res.json(await service.listar({ empresaId: req.empresaId, status: req.query.status, online }));
@@ -16,12 +17,12 @@ function initMotoboysRoutes() {
   });
 
   // GET /motoboys/:id
-  router.get('/:id', async (req, res, next) => {
+  router.get('/:id', exigirPermissao('motoboys.ver'), async (req, res, next) => {
     try { res.json(await service.obter({ empresaId: req.empresaId, id: req.params.id })); } catch (e) { next(e); }
   });
 
   // POST /motoboys
-  router.post('/', async (req, res, next) => {
+  router.post('/', exigirPermissao('motoboys.gerenciar'), async (req, res, next) => {
     try {
       const r = await service.criar({ empresaId: req.empresaId, dados: req.body, usuarioId: req.usuario.id, ip: req.ip });
       res.status(201).json(r);
@@ -29,7 +30,7 @@ function initMotoboysRoutes() {
   });
 
   // PUT /motoboys/:id
-  router.put('/:id', async (req, res, next) => {
+  router.put('/:id', exigirPermissao('motoboys.gerenciar'), async (req, res, next) => {
     try {
       const r = await service.atualizar({ empresaId: req.empresaId, id: req.params.id, dados: req.body, usuarioId: req.usuario.id, ip: req.ip });
       res.json(r);
@@ -37,7 +38,7 @@ function initMotoboysRoutes() {
   });
 
   // PATCH /motoboys/:id/online
-  router.patch('/:id/online', async (req, res, next) => {
+  router.patch('/:id/online', exigirPermissao('motoboys.gerenciar'), async (req, res, next) => {
     try {
       res.json(await service.definirOnline({ empresaId: req.empresaId, id: req.params.id, online: req.body.online }));
     } catch (e) { next(e); }

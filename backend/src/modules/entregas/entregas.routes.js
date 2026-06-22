@@ -1,6 +1,7 @@
 const express = require('express');
 const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant } = require('../../middleware/tenant');
+const { exigirModulo } = require('../../middleware/permissoes');
 
 const lancamento = require('./routes/lancamento.routes');
 const concluidas = require('./routes/concluidas.routes');
@@ -9,7 +10,7 @@ const protocolos = require('./routes/protocolos.routes');
 
 function initEntregasRoutes() {
   const router = express.Router();
-  router.use(verificarToken, resolverTenant);
+  router.use(verificarToken, resolverTenant, exigirModulo('entregas'));
 
   // Ordem importa: rotas estáticas (/concluidas) antes das com parâmetro (/:id/...)
   router.use('/', concluidas());

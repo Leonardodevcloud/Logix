@@ -18,11 +18,13 @@ const empresas = require('./src/modules/empresas');
 const motoboys = require('./src/modules/motoboys');
 const entregas = require('./src/modules/entregas');
 const branding = require('./src/modules/branding');
+const permissoes = require('./src/modules/permissoes');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
   await empresas.initEmpresasTables();
   await auth.initAuthTables();
+  await permissoes.initPermissoesTables();
   await motoboys.initMotoboysTables();
   await entregas.initEntregasTables();
   await branding.initBrandingTables();
@@ -50,6 +52,7 @@ function montarApp() {
   api.use('/motoboys', motoboys.initMotoboysRoutes());
   api.use('/entregas', entregas.initEntregasRoutes());
   api.use('/branding', branding.initBrandingRoutes());
+  api.use('/permissoes', permissoes.initPermissoesRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último

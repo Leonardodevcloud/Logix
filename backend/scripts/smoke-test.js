@@ -73,6 +73,20 @@ async function rodar() {
     checa('GET /entregas/:id/acompanhar', acomp.status === 200 && acomp.dados && acomp.dados.id === entregaId);
   }
 
+  // 8) permissões: catálogo de módulos + acesso efetivo do usuário logado
+  const mods = await req('GET', '/permissoes/modulos');
+  checa('GET /permissoes/modulos', mods.status === 200 && Array.isArray(mods.dados) && mods.dados.length > 0);
+
+  const eu = await req('GET', '/permissoes/eu');
+  checa('GET /permissoes/eu', eu.status === 200 && eu.dados && eu.dados.perfil === 'super_admin');
+
+  // 9) empresa recém-criada deve nascer com os módulos padrão habilitados
+  if (empresaId) {
+    const me = await req('GET', '/permissoes/empresas/' + empresaId + '/modulos');
+    const ativos = (me.dados || []).filter((m) => m.ativo).map((m) => m.codigo);
+    checa('módulos padrão na empresa nova', me.status === 200 && ativos.includes('entregas') && ativos.includes('motoboys'));
+  }
+
   resumo();
 }
 
