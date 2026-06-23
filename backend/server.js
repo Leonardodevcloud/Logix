@@ -20,6 +20,7 @@ const entregas = require('./src/modules/entregas');
 const branding = require('./src/modules/branding');
 const permissoes = require('./src/modules/permissoes');
 const filas = require('./src/modules/filas');
+const equipe = require('./src/modules/equipe');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -29,6 +30,7 @@ async function migrar() {
   await motoboys.initMotoboysTables();
   await entregas.initEntregasTables();
   await filas.initFilasTables();
+  await equipe.initEquipeTables();
   await branding.initBrandingTables();
   console.log('[migrations] tabelas verificadas/criadas');
 }
@@ -57,6 +59,7 @@ function montarApp() {
   api.use('/branding', branding.initBrandingRoutes());
   api.use('/permissoes', permissoes.initPermissoesRoutes());
   api.use('/filas', filas.initFilasRoutes());
+  api.use('/equipe', equipe.initEquipeRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último

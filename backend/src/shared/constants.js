@@ -10,6 +10,7 @@ const AUDIT_CATEGORIES = {
   FINANCEIRO: 'financeiro',
   MODULO: 'modulo',
   BRANDING: 'branding',
+  USUARIO: 'usuario',
 };
 
 const ERRO_MSGS = {
