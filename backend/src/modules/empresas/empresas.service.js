@@ -7,11 +7,14 @@ const authService = require('../auth/auth.service');
 
 async function listar({ ativo }) {
   const cond = []; const params = [];
-  if (ativo !== undefined) { params.push(ativo); cond.push(`ativo = $${params.length}`); }
+  if (ativo !== undefined) { params.push(ativo); cond.push(`e.ativo = $${params.length}`); }
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
   const { rows } = await query(
-    `SELECT e.*, (SELECT count(*)::int FROM motoboys m WHERE m.empresa_id = e.id) AS total_motoboys
-       FROM empresas e ${where} ORDER BY e.razao_social`,
+    `SELECT e.*,
+       (SELECT count(*)::int FROM motoboys m WHERE m.empresa_id = e.id) AS total_motoboys,
+       (SELECT u.id FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil = 'cliente' ORDER BY u.criado_em LIMIT 1) AS responsavel_usuario_id,
+       (SELECT u.email FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil = 'cliente' ORDER BY u.criado_em LIMIT 1) AS email_acesso
+     FROM empresas e ${where} ORDER BY e.razao_social`,
     params
   );
   return rows;
@@ -23,7 +26,6 @@ async function obter(id) {
   return rows[0];
 }
 
-// Cria a empresa e o usuário responsável (cliente) numa única transação.
 async function criar(dados, { adminId, ip }) {
   const faltando = obrigatorios(dados, ['razao_social', 'cnpj', 'email', 'senha']);
   if (faltando.length) throw AppError.validacao('Campos obrigatórios', { faltando });
@@ -41,7 +43,6 @@ async function criar(dados, { adminId, ip }) {
        dados.cidade || null, dados.estado || null, dados.responsavel || null, dados.email, dados.telefone || null]
     );
     const empresa = rows[0];
-    // Provisiona o cliente: módulos padrão + responsável como Administrador (mesma transação).
     const permissoesService = require('../permissoes/permissoes.service');
     await permissoesService.habilitarModulosPadrao(empresa.id, (sql, params) => cliente.query(sql, params));
     const papelAdminId = await permissoesService.idDoTemplate('Administrador');
@@ -49,7 +50,7 @@ async function criar(dados, { adminId, ip }) {
       empresaId: empresa.id, perfil: PERFIS.CLIENTE,
       nome: dados.responsavel || dados.razao_social, email: dados.email,
       telefone: dados.telefone, senha: dados.senha, papelId: papelAdminId,
-      executor: (sql, params) => cliente.query(sql, params), // mesma transação da empresa
+      executor: (sql, params) => cliente.query(sql, params),
     });
     await cliente.query('COMMIT');
     await registrarAuditoria({
@@ -88,4 +89,63 @@ async function atualizar(id, dados, { adminId, ip }) {
   return rows[0];
 }
 
-module.exports = { listar, obter, criar, atualizar };
+// Atualiza email e/ou senha do usuário responsável do cliente
+async function atualizarCredenciais(empresaId, dados, { adminId, ip }) {
+  await obter(empresaId);
+  const { rows: users } = await query(
+    `SELECT id FROM usuarios WHERE empresa_id = $1 AND perfil = 'cliente' ORDER BY criado_em LIMIT 1`,
+    [empresaId]
+  );
+  if (!users[0]) throw AppError.naoEncontrado('Usuário responsável não encontrado');
+  const userId = users[0].id;
+
+  if (!dados.email && !dados.senha) throw AppError.validacao('Informe o novo e-mail ou a nova senha');
+
+  if (dados.email) {
+    const { rows: exist } = await query(`SELECT id FROM usuarios WHERE email = $1 AND id != $2`, [dados.email, userId]);
+    if (exist.length) throw AppError.conflito('E-mail já em uso por outro usuário');
+    await query(`UPDATE usuarios SET email = $1, atualizado_em = now() WHERE id = $2`, [dados.email, userId]);
+  }
+  if (dados.senha) {
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash(dados.senha, 12);
+    await query(`UPDATE usuarios SET senha_hash = $1, atualizado_em = now() WHERE id = $2`, [hash, userId]);
+  }
+
+  await registrarAuditoria({
+    empresaId, usuarioId: adminId, categoria: AUDIT_CATEGORIES.EMPRESA,
+    acao: 'atualizar_credenciais', detalhe: { campos: Object.keys(dados) }, ip,
+  });
+  return { ok: true };
+}
+
+// Exclusão lógica: desativa empresa e anonimiza e-mail para liberar o endereço
+async function excluir(id, { adminId, ip }) {
+  await obter(id);
+  const ts = Date.now();
+  await query(
+    `UPDATE empresas SET ativo = false, email = email || '_excluido_${ts}', atualizado_em = now() WHERE id = $1`,
+    [id]
+  );
+  await query(
+    `UPDATE usuarios SET ativo = false, email = email || '_excluido_${ts}', atualizado_em = now()
+     WHERE empresa_id = $1`,
+    [id]
+  );
+  await registrarAuditoria({
+    empresaId: id, usuarioId: adminId, categoria: AUDIT_CATEGORIES.EMPRESA, acao: 'excluir', ip,
+  });
+}
+
+// Impersonação: gera token JWT como o responsável do cliente
+async function impersonarResponsavel(empresaId, { adminId, ip }) {
+  await obter(empresaId);
+  const { rows } = await query(
+    `SELECT id FROM usuarios WHERE empresa_id = $1 AND perfil = 'cliente' AND ativo = true ORDER BY criado_em LIMIT 1`,
+    [empresaId]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Nenhum usuário ativo neste cliente');
+  return authService.impersonar({ adminId, usuarioAlvoId: rows[0].id, ip });
+}
+
+module.exports = { listar, obter, criar, atualizar, atualizarCredenciais, excluir, impersonarResponsavel };

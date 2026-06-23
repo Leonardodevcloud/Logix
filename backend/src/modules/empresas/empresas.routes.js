@@ -5,9 +5,9 @@ const { buscarCep } = require('./empresas.shared');
 
 function initEmpresasRoutes() {
   const router = express.Router();
-  router.use(verificarToken, verificarAdmin); // gestão de tenants é exclusiva do super admin
+  router.use(verificarToken, verificarAdmin);
 
-  // GET /empresas?ativo=true
+  // GET /empresas
   router.get('/', async (req, res, next) => {
     try {
       const ativo = req.query.ativo === undefined ? undefined : req.query.ativo === 'true';
@@ -15,7 +15,7 @@ function initEmpresasRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /empresas/cep/:cep — autocompletar endereço
+  // GET /empresas/cep/:cep
   router.get('/cep/:cep', async (req, res, next) => {
     try { res.json(await buscarCep(req.params.cep)); } catch (e) { next(e); }
   });
@@ -33,10 +33,34 @@ function initEmpresasRoutes() {
     } catch (e) { next(e); }
   });
 
-  // PUT /empresas/:id
+  // PUT /empresas/:id — atualizar dados + ativo/inativo
   router.put('/:id', async (req, res, next) => {
     try {
       const r = await service.atualizar(req.params.id, req.body, { adminId: req.usuario.id, ip: req.ip });
+      res.json(r);
+    } catch (e) { next(e); }
+  });
+
+  // PATCH /empresas/:id/credenciais — trocar email e/ou senha do responsável
+  router.patch('/:id/credenciais', async (req, res, next) => {
+    try {
+      const r = await service.atualizarCredenciais(req.params.id, req.body, { adminId: req.usuario.id, ip: req.ip });
+      res.json(r);
+    } catch (e) { next(e); }
+  });
+
+  // DELETE /empresas/:id — exclusão lógica (desativa + anonimiza)
+  router.delete('/:id', async (req, res, next) => {
+    try {
+      await service.excluir(req.params.id, { adminId: req.usuario.id, ip: req.ip });
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+
+  // POST /empresas/:id/impersonar — gera token como responsável do cliente
+  router.post('/:id/impersonar', async (req, res, next) => {
+    try {
+      const r = await service.impersonarResponsavel(req.params.id, { adminId: req.usuario.id, ip: req.ip });
       res.json(r);
     } catch (e) { next(e); }
   });
