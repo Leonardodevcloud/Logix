@@ -92,3 +92,5 @@ export function casca(titulo, conteudo, subtitulo) {
 
   return el('div', { class: 'lx-app' }, side, main);
 }
+
+// deploy 20260623-1315
