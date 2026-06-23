@@ -4,13 +4,46 @@ import * as auth from './core/auth.js';
 import * as router from './core/router.js';
 import { carregarTema, aplicarTema } from './core/tema.js';
 
+const BASE = window.LOGIX_API || '/api/v1';
+
+// Tema padrão Logix — aplicado para super_admin e tela de login
+const TEMA_PADRAO = {
+  cor_primaria:   '#185FA5',
+  cor_secundaria: '#042C53',
+  cor_destaque:   '#378ADD',
+  cor_clara:      '#B5D4F4',
+  nome_exibicao:  'logix',
+};
+
+function restaurarTemaPadrao() {
+  aplicarTema(TEMA_PADRAO);
+  document.title = 'logix';
+}
+
+async function aplicarTemaDoUsuario() {
+  const u = auth.usuarioAtual();
+  if (!u) { restaurarTemaPadrao(); return; }
+
+  // Super admin vê sempre o tema padrão Logix (exceto quando impersonando)
+  if (u.perfil === 'super_admin' && !auth.estaImpersonando()) {
+    restaurarTemaPadrao();
+    return;
+  }
+
+  // Cliente ou impersonação: carrega o branding do tenant com o token atual
+  try {
+    const token = api.getToken();
+    if (token) await carregarTema({ base: BASE, token });
+  } catch { /* silencioso */ }
+}
+
 async function boot() {
   const app = document.getElementById('app');
   if (window.LOGIX_API) api.setBase(window.LOGIX_API);
   router.definirSaida(app);
 
-  // Tema público (fallback pelo host — funciona em domínios white-label customizados)
-  await carregarTema({ base: window.LOGIX_API || '/api/v1' });
+  // Boot sem auth: tema padrão Logix sempre (login, etc.)
+  restaurarTemaPadrao();
 
   router.rota('/login',                () => import('./modulos/login.js'));
   router.rota('/',                     () => import('./modulos/dashboard.js'));
@@ -28,29 +61,19 @@ async function boot() {
     return null;
   });
 
-  // Restaurar sessão e depois recarregar o tema com o token do usuário logado
+  // Restaurar sessão e aplicar tema correto
   const logado = await auth.restaurar();
-  if (logado) await recarregarTemaAutenticado();
+  if (logado) await aplicarTemaDoUsuario();
 
   router.iniciar();
 
-  // Ao fazer login, recarregar tema do tenant
-  document.addEventListener('logix:login', async () => {
-    await recarregarTemaAutenticado();
-  });
+  // Eventos de mudança de sessão
+  document.addEventListener('logix:login',      () => aplicarTemaDoUsuario());
+  document.addEventListener('logix:logout',     () => restaurarTemaPadrao());
+  document.addEventListener('logix:impersonar', () => aplicarTemaDoUsuario());
+  document.addEventListener('logix:voltar',     () => { restaurarTemaPadrao(); });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-}
-
-async function recarregarTemaAutenticado() {
-  try {
-    const token = api.getToken();
-    if (!token) return;
-    // super_admin não tem branding próprio — usa o padrão
-    const u = auth.usuarioAtual();
-    if (u && u.perfil === 'super_admin' && !auth.estaImpersonando()) return;
-    await carregarTema({ base: window.LOGIX_API || '/api/v1', token });
-  } catch { /* silencioso */ }
 }
 
 boot();

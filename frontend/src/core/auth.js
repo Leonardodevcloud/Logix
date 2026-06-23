@@ -38,7 +38,6 @@ export async function login(email, senha) {
 }
 
 export async function logout() {
-  // Se estava impersonando, limpar sem chamar /auth/logout (que usaria cookie do master)
   if (estaImpersonando()) {
     sessionStorage.removeItem(CHAVE_MASTER);
     api.bloquearRefresh(false);
@@ -49,6 +48,7 @@ export async function logout() {
   usuario = null;
   acesso = { perfil: null, modulos: [], permissoes: [] };
   sessionStorage.removeItem(CHAVE);
+  document.dispatchEvent(new CustomEvent('logix:logout'));
 }
 
 // Entra como cliente — salva token master, ativa bloqueio de refresh, troca sessão
@@ -62,7 +62,7 @@ export async function iniciarImpersonacao(tokenCliente, usuarioCliente) {
   usuario = usuarioCliente;
   sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
   await carregarAcesso();
-  document.dispatchEvent(new CustomEvent('logix:login'));
+  document.dispatchEvent(new CustomEvent('logix:impersonar'));
 }
 
 // Volta a ser master
@@ -81,6 +81,7 @@ export async function encerrarImpersonacao() {
   } catch { /* usa o token salvo */ }
   await carregarAcesso();
   sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
+  document.dispatchEvent(new CustomEvent('logix:voltar'));
 }
 
 // Boot: restaura sessão. Se impersonando, usa token salvo sem chamar refresh.
