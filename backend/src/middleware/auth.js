@@ -3,9 +3,11 @@ const AppError = require('../shared/AppError');
 const { ERRO_MSGS, PERFIS } = require('../shared/constants');
 
 function extrairToken(req) {
-  if (req.cookies && req.cookies.lx_access) return req.cookies.lx_access; // sessão web (httpOnly)
+  // Bearer tem prioridade — usado durante impersonação para sobrepor o cookie do master
   const h = req.headers.authorization;
-  if (h && h.startsWith('Bearer ')) return h.slice(7);                    // app / integrações
+  if (h && h.startsWith('Bearer ')) return h.slice(7);
+  // Cookie httpOnly — fluxo normal de sessão web
+  if (req.cookies && req.cookies.lx_access) return req.cookies.lx_access;
   return null;
 }
 
@@ -31,7 +33,6 @@ function exigirPerfil(...perfis) {
 }
 
 const verificarAdmin = exigirPerfil(PERFIS.SUPER_ADMIN);
-// Super admin ou cliente (que administra o próprio financeiro/maquininhas do tenant).
 const verificarAdminOuFinanceiro = exigirPerfil(PERFIS.SUPER_ADMIN, PERFIS.CLIENTE);
 
 module.exports = { verificarToken, exigirPerfil, verificarAdmin, verificarAdminOuFinanceiro };
