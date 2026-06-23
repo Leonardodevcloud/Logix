@@ -85,7 +85,7 @@ async function listar({ empresaId, status, motoboyId }) {
   if (motoboyId) { params.push(motoboyId); cond.push(`motoboy_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.motoboy_id, e.status, e.distancia_km, e.tempo_estimado_min,
-             e.coleta_endereco, e.criado_em, e.cancelada_em,
+             e.coleta_endereco, e.criado_em,
              m.nome_completo AS motoboy_nome,
              (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e

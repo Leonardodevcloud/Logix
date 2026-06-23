@@ -57,4 +57,21 @@ async function initEntregasTables() {
   await query(`CREATE INDEX IF NOT EXISTS idx_rastreamento_motoboy_tempo ON rastreamento(motoboy_id, capturado_em DESC)`);
 }
 
-module.exports = { initEntregasTables };
+async function migrarColunasExtras() {
+  const cols = [
+    "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ",
+    "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS cancelado_por UUID REFERENCES usuarios(id)",
+    "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS motivo_cancelamento TEXT",
+    "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ",
+  ];
+  for (const sql of cols) {
+    try { await query(sql); } catch {}
+  }
+}
+
+async function initEntregasTablesComMigracoes() {
+  await initEntregasTables();
+  await migrarColunasExtras();
+}
+
+module.exports = { initEntregasTables: initEntregasTablesComMigracoes };
