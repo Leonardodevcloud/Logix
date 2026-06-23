@@ -209,9 +209,8 @@ async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
      WHERE id = $1 AND empresa_id = $2`,
     [id, empresaId, usuarioId, motivo || null]
   );
-  const { emitirParaEmpresa } = require('../../realtime/ws');
   emitirParaEmpresa(empresaId, 'entrega.cancelada', { id, protocolo: ent[0].protocolo });
-  const { registrarAuditoria } = require('../../shared/auditLogger');
-  await registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'cancelar', detalhe: { id, motivo }, ip });
+  // auditoria sem await — não bloqueia a resposta
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'cancelar', detalhe: { id, motivo }, ip }).catch(() => {});
   return { ok: true };
 }

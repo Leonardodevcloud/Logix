@@ -609,34 +609,19 @@ export async function montar(container) {
 
       toast('✓ ' + r.protocolo + ' criada!', 'ok');
 
-      // FIX 2: zerar formulário — mas recarregar coleta padrão
-      // Remover pontos extras e resetar o primeiro
-      while (_pontos.length > 1) {
-        const ultimo = _pontos.pop();
-        pontosWrap.removeChild(ultimo);
-      }
-      _pontos[0]?.resetar();
-      mbId.val = null;
-      modoAuto.val = true;
-      btnAuto.click();
+      // Mostrar confirmação
       msgCriar.style.color = 'var(--lx-ok)';
       msgCriar.textContent = '✓ ' + r.protocolo + ' criada!';
       setTimeout(() => { msgCriar.textContent = ''; }, 3000);
 
-      // FIX 4: limpar mapa
+      // Limpar mapa
       if (_mapa) _mapa.limpar();
       statsPill.style.display = 'none';
 
-      // FIX 2: restaurar coleta padrão se existir
-      if (_coletaPadrao) {
-        buscaColeta.resetarSemLimpar();
-        setTimeout(() => buscaColeta._confirmarExterno(_coletaPadrao), 50);
-      } else {
-        buscaColeta.resetar();
-      }
+      // Recriar formulário do zero — garante DOM limpo sem estado corrompido
+      reconstruirFormulario();
 
-      // FIX 1: NÃO redirecionar — operador fica na tela nova para lançar mais
-      // Apenas recarregar lista em background
+      // Recarregar lista em background
       carregar();
 
     } catch (e) {
@@ -649,6 +634,35 @@ export async function montar(container) {
         Object.assign(document.createElement('span'), { innerHTML: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>` }),
         document.createTextNode(' Solicitar entrega'));
     }
+  }
+
+  // Função para reconstruir formulário do zero após criar entrega
+  function reconstruirFormulario() {
+    // Limpar pontos
+    _pontos = [];
+    pontosWrap.innerHTML = '';
+    novoPonto();
+
+    // Resetar coleta
+    buscaColeta.resetar();
+
+    // Restaurar coleta padrão
+    if (_coletaPadrao) {
+      setTimeout(() => buscaColeta._confirmarExterno(_coletaPadrao), 30);
+    }
+
+    // Resetar motoboy
+    mbId.val = null;
+    modoAuto.val = true;
+    btnAuto.style.borderColor = 'var(--lx-azul-vivo)';
+    btnAuto.style.background = 'var(--lx-info-bg)';
+    btnManual.style.borderColor = 'var(--lx-linha)';
+    btnManual.style.background = '';
+    mbListaWrap.style.display = 'none';
+    mbListaWrap.querySelectorAll('[data-mb]').forEach(r => {
+      r.style.borderColor = 'var(--lx-linha)';
+      r.style.background = '';
+    });
   }
 
   // Botão salvar coleta padrão
