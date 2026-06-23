@@ -1,51 +1,71 @@
-// Casca (sidebar + topbar). A navegação é montada conforme o perfil e as permissões.
-import { el } from './ui.js';
+// Casca (sidebar + topbar) no padrão do protótipo. Navegação dinâmica por perfil/permissões.
+import { el, icones } from './ui.js';
 import { navegar } from './router.js';
 import * as auth from './auth.js';
 
-function itensNav() {
+// Grupos de navegação conforme o acesso efetivo do usuário.
+function gruposNav() {
   const a = auth.acessoAtual();
   if (a.perfil === 'super_admin') {
-    return [
-      { rota: '/', rotulo: 'Painel' },
-      { rota: '/clientes', rotulo: 'Clientes' },
-    ];
+    return [{ titulo: 'Gestão', itens: [
+      { rota: '/', rotulo: 'Painel', icone: 'painel' },
+      { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
+    ] }];
   }
-  const itens = [{ rota: '/', rotulo: 'Painel' }];
-  if (auth.temModulo('entregas') && auth.pode('entregas.ver')) itens.push({ rota: '/entregas', rotulo: 'Entregas' });
-  if (auth.temModulo('motoboys') && auth.pode('motoboys.ver')) itens.push({ rota: '/motoboys', rotulo: 'Motoboys' });
-  if (auth.temModulo('filas') && auth.pode('filas.ver')) itens.push({ rota: '/filas', rotulo: 'Filas' });
-  if (auth.temModulo('marca') && auth.pode('marca.ver')) itens.push({ rota: '/marca', rotulo: 'Marca' });
-  if (auth.pode('usuarios.gerenciar')) itens.push({ rota: '/equipe', rotulo: 'Equipe' });
-  return itens;
+  const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
+  if (auth.temModulo('entregas') && auth.pode('entregas.ver')) operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
+  if (auth.temModulo('motoboys') && auth.pode('motoboys.ver')) operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
+  if (auth.temModulo('filas') && auth.pode('filas.ver')) operacao.push({ rota: '/filas', rotulo: 'Filas', icone: 'filas' });
+
+  const config = [];
+  if (auth.temModulo('marca') && auth.pode('marca.ver')) config.push({ rota: '/marca', rotulo: 'Marca', icone: 'marca' });
+  if (auth.pode('usuarios.gerenciar')) config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });
+
+  const grupos = [{ titulo: 'Operação', itens: operacao }];
+  if (config.length) grupos.push({ titulo: 'Configuração', itens: config });
+  return grupos;
 }
 
-export function casca(titulo, conteudo) {
+function iniciais(nome) {
+  const p = (nome || '').trim().split(/\s+/);
+  return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'U';
+}
+function perfilRotulo(p) {
+  return { super_admin: 'Administrador master', cliente: 'Cliente', motoboy: 'Motoboy' }[p] || '';
+}
+
+export function casca(titulo, conteudo, subtitulo) {
   const u = auth.usuarioAtual() || {};
   const ativo = location.hash.slice(1) || '/';
 
-  const links = itensNav().map((n) => el('a', {
-    style: `display:block;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13.5px;`
-      + `color:${ativo === n.rota ? '#fff' : '#b9d2ee'};background:${ativo === n.rota ? 'rgba(55,138,221,.2)' : 'transparent'}`,
-    onClick: () => navegar(n.rota),
-  }, n.rotulo));
+  // ---- sidebar ----
+  const grupos = gruposNav().map((g) => el('div', {},
+    el('div', { class: 'lx-nav-lbl' }, g.titulo),
+    ...g.itens.map((n) => el('button', {
+      class: 'lx-nav-i' + (ativo === n.rota ? ' on' : ''),
+      onClick: () => navegar(n.rota),
+    }, el('span', { html: icones[n.icone] || '' }), n.rotulo)),
+  ));
 
-  const side = el('aside', { style: 'width:240px;background:linear-gradient(185deg,#042C53,#031f3b);padding:20px 14px;display:flex;flex-direction:column;gap:6px' },
-    el('div', { 'data-lx-nome': '', style: 'color:#fff;font-weight:800;font-size:18px;padding:6px 10px 18px' }, 'Logix'),
-    ...links,
-    el('div', { style: 'margin-top:auto;padding:10px' },
-      el('div', { style: 'color:#fff;font-weight:700;font-size:13px' }, u.nome || ''),
-      el('div', { style: 'color:#6f8db3;font-size:11px;margin-bottom:6px' }, perfilRotulo(u.perfil)),
-      el('a', { style: 'cursor:pointer;color:#9cbbdd;font-size:12px', onClick: async () => { await auth.logout(); navegar('/login'); } }, 'Sair')));
+  const side = el('aside', { class: 'lx-side' },
+    el('div', { class: 'lx-side-logo' },
+      el('div', { class: 'lx-mono' }, 'LX'),
+      el('div', { class: 'wm' }, el('b', { 'data-lx-nome': '' }, 'logix'), el('span', {}, 'Inteligência em cada rota'))),
+    ...grupos,
+    el('div', { class: 'lx-side-user' },
+      el('div', { class: 'av' }, iniciais(u.nome)),
+      el('div', { style: 'min-width:0' },
+        el('b', {}, u.nome || '—'),
+        el('small', {}, perfilRotulo(u.perfil))),
+      el('button', { class: 'lx-sair', onClick: async () => { await auth.logout(); navegar('/login'); } }, 'Sair')));
 
-  const main = el('div', { style: 'flex:1;display:flex;flex-direction:column;min-width:0' },
-    el('div', { style: 'background:#fff;border-bottom:1px solid var(--lx-linha);padding:16px 24px' },
-      el('h1', { style: 'margin:0;font-size:18px;font-weight:800;color:var(--lx-tinta)' }, titulo)),
-    el('div', { style: 'padding:24px;overflow:auto' }, conteudo));
+  // ---- main ----
+  const sub = subtitulo || (u.empresa_nome ? u.empresa_nome : perfilRotulo(u.perfil));
+  const main = el('div', { class: 'lx-main' },
+    el('div', { class: 'lx-topbar' },
+      el('div', {}, el('h1', {}, titulo), sub ? el('div', { class: 'sub' }, sub) : el('span', {})),
+      el('span', { class: 'lx-role-pill' }, perfilRotulo(u.perfil))),
+    el('div', { class: 'lx-content' }, conteudo));
 
-  return el('div', { style: 'display:flex;min-height:100vh;background:var(--lx-fundo)' }, side, main);
-}
-
-function perfilRotulo(p) {
-  return { super_admin: 'Administrador master', cliente: 'Cliente', motoboy: 'Motoboy' }[p] || '';
+  return el('div', { class: 'lx-app' }, side, main);
 }

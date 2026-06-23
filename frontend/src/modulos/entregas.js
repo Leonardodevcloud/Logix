@@ -1,39 +1,63 @@
 import { casca } from '../core/layout.js';
-import { el } from '../core/ui.js';
+import { el, icones, statusBadge } from '../core/ui.js';
 import { get, post } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
+function fmtData(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' +
+         d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 export async function montar(container) {
-  const lista = el('div', { class: 'lx-card lx-card-pad' }, 'Carregando...');
+  const lista = el('div', { class: 'lx-card lx-card-pad' }, el('div', { class: 'lx-muted' }, 'Carregando…'));
   const filhos = [];
-  if (auth.pode('entregas.criar')) filhos.push(formNova(carregar));
-  filhos.push(lista);
-  container.append(casca('Entregas', el('div', { style: 'display:flex;flex-direction:column;gap:16px' }, ...filhos)));
+  if (auth.pode('entregas.criar')) {
+    filhos.push(el('div', { class: 'lx-sec-h' }, el('h2', {}, 'Lançar entrega')), formNova(carregar));
+  }
+  filhos.push(el('div', { class: 'lx-sec-h' }, el('h2', {}, 'Entregas')), lista);
+  container.append(casca('Entregas', el('div', {}, ...filhos)));
 
   async function carregar() {
-    lista.innerHTML = 'Carregando...';
+    lista.innerHTML = '';
+    lista.append(el('div', { class: 'lx-muted' }, 'Carregando…'));
     try {
       const es = await get('/entregas');
       lista.innerHTML = '';
-      if (!es.length) { lista.append(el('div', { class: 'lx-muted' }, 'Nenhuma entrega ainda.')); return; }
-      es.forEach((e) => lista.append(linha(e)));
-    } catch (err) { lista.innerHTML = ''; lista.append(el('div', { class: 'lx-muted' }, 'Erro: ' + err.message)); }
+      if (!es.length) { lista.append(vazio()); return; }
+      const tbody = el('tbody');
+      es.forEach((e) => tbody.append(el('tr', {},
+        el('td', {}, el('b', {}, e.protocolo || '—')),
+        el('td', {}, statusBadge(e.status)),
+        el('td', { class: 'lx-muted' }, e.distancia_km != null ? Number(e.distancia_km).toFixed(1) + ' km' : '—'),
+        el('td', { class: 'lx-muted' }, fmtData(e.criado_em)))));
+      lista.append(el('table', { class: 'lx-table' },
+        el('thead', {}, el('tr', {}, el('th', {}, 'Protocolo'), el('th', {}, 'Status'), el('th', {}, 'Distância'), el('th', {}, 'Criada'))), tbody));
+    } catch (err) { lista.innerHTML = ''; lista.append(el('div', { class: 'lx-muted' }, 'Não foi possível carregar: ' + err.message)); }
   }
   carregar();
 }
 
-function linha(e) {
-  return el('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--lx-linha)' },
-    el('b', {}, e.protocolo || '—'),
-    el('span', { class: 'lx-status lx-status-rota' }, e.status || ''));
+function vazio() {
+  return el('div', { class: 'lx-vazio' },
+    el('div', { class: 'ic', html: icones.entregas }),
+    el('b', {}, 'Nenhuma entrega ainda'),
+    el('div', {}, 'Lance a primeira entrega no formulário acima.'));
 }
 
 function formNova(aoCriar) {
-  const coleta = el('input', { class: 'lx-input', placeholder: 'Endereço de coleta' });
-  const destino = el('input', { class: 'lx-input', placeholder: 'Endereço de destino' });
-  const msg = el('div', { style: 'font-size:12px;min-height:16px' });
+  const coleta = el('input', { class: 'lx-input', placeholder: 'Rua, número, bairro — cidade' });
+  const destino = el('input', { class: 'lx-input', placeholder: 'Rua, número, bairro — cidade' });
+  const msg = el('div', { style: 'font-size:12px;min-height:18px;font-weight:600' });
+  const botao = el('button', { class: 'lx-btn lx-btn-primario', onClick: criar },
+    el('span', { html: icones.entregas }), 'Lançar entrega');
+
   async function criar() {
-    msg.textContent = ''; msg.style.color = 'var(--lx-erro)';
+    if (!coleta.value.trim() || !destino.value.trim()) {
+      msg.style.color = 'var(--lx-erro)'; msg.textContent = 'Preencha os endereços de coleta e destino.'; return;
+    }
+    botao.disabled = true; msg.style.color = 'var(--lx-tinta-2)'; msg.textContent = 'Geocodificando endereços…';
     try {
       const r = await post('/entregas', {
         coleta: { endereco: coleta.value.trim() },
@@ -43,12 +67,18 @@ function formNova(aoCriar) {
       coleta.value = destino.value = '';
       aoCriar();
     } catch (e) {
-      msg.textContent = e.message + ' — confira se a ORS_API_KEY está configurada (geocoding do endereço).';
-    }
+      msg.style.color = 'var(--lx-erro)'; msg.textContent = e.message;
+    } finally { botao.disabled = false; }
   }
+
+  const campoColeta = el('div', { class: 'lx-field' },
+    el('label', {}, el('span', { class: 'lx-stop-num coleta', style: 'display:inline-grid;margin-right:8px;vertical-align:middle' }, 'C'), 'Coleta'),
+    coleta);
+  const campoDestino = el('div', { class: 'lx-field' },
+    el('label', {}, el('span', { class: 'lx-stop-num', style: 'display:inline-grid;margin-right:8px;vertical-align:middle' }, '1'), 'Destino'),
+    destino);
+
   return el('div', { class: 'lx-card lx-card-pad' },
-    el('div', { style: 'font-weight:700;margin-bottom:10px' }, 'Lançar entrega'),
-    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, coleta, destino),
-    el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:10px', onClick: criar }, 'Lançar'),
-    msg);
+    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px' }, campoColeta, campoDestino),
+    el('div', { style: 'display:flex;align-items:center;gap:14px' }, botao, msg));
 }

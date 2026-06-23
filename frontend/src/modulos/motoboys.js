@@ -1,56 +1,57 @@
 import { casca } from '../core/layout.js';
-import { el } from '../core/ui.js';
+import { el, icones, secHeader, estadoVazio, campo } from '../core/ui.js';
 import { get, post, patch } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
 export async function montar(container) {
-  const lista = el('div', { class: 'lx-card lx-card-pad' }, 'Carregando...');
+  const podeGerenciar = auth.pode('motoboys.gerenciar');
+  const lista = el('div', { class: 'lx-card lx-card-pad' }, el('div', { class: 'lx-muted' }, 'Carregando…'));
   const filhos = [];
-  if (auth.pode('motoboys.gerenciar')) filhos.push(formNovo(carregar));
-  filhos.push(lista);
-  container.append(casca('Motoboys', el('div', { style: 'display:flex;flex-direction:column;gap:16px' }, ...filhos)));
+  if (podeGerenciar) filhos.push(secHeader('Novo motoboy'), formNovo(carregar));
+  filhos.push(secHeader('Motoboys'), lista);
+  container.append(casca('Motoboys', el('div', {}, ...filhos), 'Sua frota de entregadores'));
 
   async function carregar() {
-    lista.innerHTML = 'Carregando...';
+    lista.innerHTML = ''; lista.append(el('div', { class: 'lx-muted' }, 'Carregando…'));
     try {
       const ms = await get('/motoboys');
       lista.innerHTML = '';
-      if (!ms.length) { lista.append(el('div', { class: 'lx-muted' }, 'Nenhum motoboy cadastrado.')); return; }
-      ms.forEach((m) => lista.append(linha(m, carregar)));
-    } catch (e) { lista.innerHTML = ''; lista.append(el('div', { class: 'lx-muted' }, 'Erro: ' + e.message)); }
+      if (!ms.length) { lista.append(estadoVazio('motoboys', 'Nenhum motoboy cadastrado', podeGerenciar ? 'Cadastre o primeiro motoboy no formulário acima.' : '')); return; }
+      const tbody = el('tbody');
+      ms.forEach((m) => tbody.append(el('tr', {},
+        el('td', {}, el('b', {}, m.nome_completo)),
+        el('td', { class: 'lx-muted' }, fmtCpf(m.cpf)),
+        el('td', {}, badgeOnline(m.online)),
+        el('td', { style: 'text-align:right' }, podeGerenciar ? botaoToggle(m, carregar) : el('span', {})))));
+      lista.append(el('table', { class: 'lx-table' },
+        el('thead', {}, el('tr', {}, el('th', {}, 'Nome'), el('th', {}, 'CPF'), el('th', {}, 'Status'), el('th', { style: 'text-align:right' }, 'Ações'))), tbody));
+    } catch (e) { lista.innerHTML = ''; lista.append(el('div', { class: 'lx-muted' }, 'Não foi possível carregar: ' + e.message)); }
   }
   carregar();
 }
 
-function linha(m, recarregar) {
-  const status = el('span', { class: m.online ? 'lx-status lx-status-entregue' : 'lx-status lx-status-aguardando' }, m.online ? 'Online' : 'Offline');
-  const acao = auth.pode('motoboys.gerenciar')
-    ? el('button', { class: 'lx-btn lx-btn-secundario', onClick: async () => {
-        try { await patch('/motoboys/' + m.id + '/online', { online: !m.online }); recarregar(); } catch (e) { alert(e.message); }
-      } }, m.online ? 'Marcar offline' : 'Marcar online')
-    : el('span', {});
-  return el('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--lx-linha)' },
-    el('div', {}, el('b', {}, m.nome_completo), el('div', { class: 'lx-muted', style: 'font-size:12px' }, 'CPF ' + (m.cpf || '—'))),
-    el('div', { style: 'display:flex;gap:10px;align-items:center' }, status, acao));
+function fmtCpf(c) { const d = (c || '').replace(/\D/g, ''); return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : (c || '—'); }
+function badgeOnline(online) { return el('span', { class: 'lx-status ' + (online ? 'lx-status-entregue' : 'lx-status-aguardando') }, online ? 'Online' : 'Offline'); }
+function botaoToggle(m, recarregar) {
+  return el('button', { class: 'lx-btn lx-btn-secundario', onClick: async () => {
+    try { await patch('/motoboys/' + m.id + '/online', { online: !m.online }); recarregar(); } catch (e) { alert(e.message); }
+  } }, m.online ? 'Marcar offline' : 'Marcar online');
 }
-
 function formNovo(aoCriar) {
   const nome = el('input', { class: 'lx-input', placeholder: 'Nome completo' });
-  const cpf = el('input', { class: 'lx-input', placeholder: 'CPF (11 dígitos)' });
-  const tel = el('input', { class: 'lx-input', placeholder: 'Telefone (opcional)' });
-  const msg = el('div', { style: 'font-size:12px;min-height:16px' });
+  const cpf = el('input', { class: 'lx-input', placeholder: '000.000.000-00' });
+  const tel = el('input', { class: 'lx-input', placeholder: '(71) 90000-0000' });
+  const msg = el('div', { style: 'font-size:12px;min-height:18px;font-weight:600' });
+  const botao = el('button', { class: 'lx-btn lx-btn-primario', onClick: criar }, el('span', { html: icones.motoboys }), 'Cadastrar motoboy');
   async function criar() {
-    msg.textContent = ''; msg.style.color = 'var(--lx-erro)';
+    botao.disabled = true; msg.style.color = 'var(--lx-tinta-2)'; msg.textContent = 'Cadastrando…';
     try {
       await post('/motoboys', { nome_completo: nome.value.trim(), cpf: cpf.value.trim(), telefone_principal: tel.value.trim() || undefined });
-      msg.style.color = 'var(--lx-ok)'; msg.textContent = 'Motoboy cadastrado.';
-      nome.value = cpf.value = tel.value = '';
+      msg.style.color = 'var(--lx-ok)'; msg.textContent = 'Motoboy cadastrado.'; nome.value = cpf.value = tel.value = '';
       aoCriar();
-    } catch (e) { msg.textContent = e.message; }
+    } catch (e) { msg.style.color = 'var(--lx-erro)'; msg.textContent = e.message; } finally { botao.disabled = false; }
   }
   return el('div', { class: 'lx-card lx-card-pad' },
-    el('div', { style: 'font-weight:700;margin-bottom:10px' }, 'Novo motoboy'),
-    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px' }, nome, cpf, tel),
-    el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:10px', onClick: criar }, 'Cadastrar'),
-    msg);
+    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px' }, campo('Nome', nome), campo('CPF', cpf), campo('Telefone', tel)),
+    el('div', { style: 'display:flex;align-items:center;gap:14px' }, botao, msg));
 }
