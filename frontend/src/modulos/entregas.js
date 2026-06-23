@@ -270,8 +270,9 @@ function CampoBusca({ onConfirmar, onLimpar }) {
 
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) fecharDrops(); }, true);
 
-  const inpRow = el('div', { style: 'display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);background:var(--lx-superficie)' },
-    inp, btnPin, btnFav);
+  const inpRow = el('div', { style: 'display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);background:var(--lx-superficie);min-height:38px' },
+    inp,
+    el('div', { style: 'display:flex;gap:5px;flex:none' }, btnPin, btnFav));
 
   const wrap = el('div', { style: 'position:relative' }, inpRow, dropSalvos, dropGeo, confirmadoWrap);
   wrap.obterValor = () => _confirmado;
@@ -286,6 +287,17 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     confirmadoWrap.innerHTML = '';
     fecharDrops();
     if (onLimpar) onLimpar();
+  };
+
+  // resetar mantendo valor (para coleta padrão)
+  wrap.resetarSemLimpar = () => {
+    inp.value = '';
+    inpRow.style.display = '';
+    confirmadoWrap.style.display = 'none';
+    confirmadoWrap.innerHTML = '';
+    fecharDrops();
+    _confirmado = null;
+    // não chama onLimpar pois vai ser re-confirmado em seguida
   };
 
   return wrap;
@@ -330,6 +342,7 @@ function PontoDestino(numero, onRemover, onAtualizar) {
     Object.keys(dados).forEach(k => { dados[k] = null; });
     busca.resetar();
     camposExtras.style.display = 'none';
+    camposExtras.style.flexDirection = 'column'; // garantir flex-direction correto
     btnToggle.textContent = '+ Adicionar detalhes (NF, obs.)';
     camposExtras.querySelectorAll('input').forEach(i => { i.value = ''; });
   };
@@ -596,8 +609,7 @@ export async function montar(container) {
 
       toast('✓ ' + r.protocolo + ' criada!', 'ok');
 
-      // FIX 2: zerar o formulário completamente
-      buscaColeta.resetar();
+      // FIX 2: zerar formulário — mas recarregar coleta padrão
       // Remover pontos extras e resetar o primeiro
       while (_pontos.length > 1) {
         const ultimo = _pontos.pop();
@@ -608,18 +620,24 @@ export async function montar(container) {
       modoAuto.val = true;
       btnAuto.click();
       msgCriar.style.color = 'var(--lx-ok)';
-      msgCriar.textContent = '✓ ' + r.protocolo + ' criada com sucesso!';
+      msgCriar.textContent = '✓ ' + r.protocolo + ' criada!';
+      setTimeout(() => { msgCriar.textContent = ''; }, 3000);
 
       // FIX 4: limpar mapa
       if (_mapa) _mapa.limpar();
       statsPill.style.display = 'none';
 
-      // FIX 3: recarregar e ir para ativas
-      await carregar();
-      setTimeout(() => {
-        trocarAba('ativas');
-        msgCriar.textContent = '';
-      }, 1200);
+      // FIX 2: restaurar coleta padrão se existir
+      if (_coletaPadrao) {
+        buscaColeta.resetarSemLimpar();
+        setTimeout(() => buscaColeta._confirmarExterno(_coletaPadrao), 50);
+      } else {
+        buscaColeta.resetar();
+      }
+
+      // FIX 1: NÃO redirecionar — operador fica na tela nova para lançar mais
+      // Apenas recarregar lista em background
+      carregar();
 
     } catch (e) {
       msgCriar.style.color = 'var(--lx-erro)';
