@@ -1,264 +1,310 @@
 import { casca } from '../core/layout.js';
-import { el, icones, secHeader, statusBadge } from '../core/ui.js';
+import { el } from '../core/ui.js';
 import { get } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
-function fmtData(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' +
-    d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+// Coordenadas aproximadas das capitais/cidades principais no viewBox 500x480 do mapa
+const CIDADES_COORDS = {
+  'salvador':        { x: 328, y: 255 },
+  'feira de santana':{ x: 316, y: 248 },
+  'são paulo':       { x: 274, y: 348 },
+  'campinas':        { x: 268, y: 342 },
+  'rio de janeiro':  { x: 304, y: 342 },
+  'belo horizonte':  { x: 286, y: 326 },
+  'recife':          { x: 358, y: 226 },
+  'fortaleza':       { x: 348, y: 198 },
+  'manaus':          { x: 175, y: 110 },
+  'belém':           { x: 270, y: 120 },
+  'porto alegre':    { x: 218, y: 413 },
+  'curitiba':        { x: 248, y: 390 },
+  'florianópolis':   { x: 255, y: 400 },
+  'goiânia':         { x: 248, y: 278 },
+  'brasília':        { x: 262, y: 262 },
+  'natal':           { x: 368, y: 210 },
+  'joão pessoa':     { x: 362, y: 218 },
+  'maceió':          { x: 348, y: 242 },
+  'aracaju':         { x: 338, y: 248 },
+  'teresina':        { x: 318, y: 188 },
+  'são luís':        { x: 288, y: 162 },
+  'palmas':          { x: 268, y: 200 },
+  'porto velho':     { x: 155, y: 168 },
+  'rio branco':      { x: 138, y: 188 },
+  'boa vista':       { x: 205, y: 68 },
+  'macapá':          { x: 268, y: 85 },
+  'campo grande':    { x: 232, y: 320 },
+  'cuiabá':          { x: 215, y: 280 },
+  'vitória':         { x: 316, y: 318 },
+};
+
+function coordsParaCliente(c) {
+  const cidade = (c.cidade || c.razao_social || '').toLowerCase().trim();
+  for (const [key, coords] of Object.entries(CIDADES_COORDS)) {
+    if (cidade.includes(key)) return coords;
+  }
+  // fallback: posição aleatória mas dentro do Brasil
+  return { x: 220 + Math.random() * 80, y: 220 + Math.random() * 80 };
 }
 
-function kpi(iconeKey, valor, rotulo, delta, deltaUp) {
-  const top = el('div', { class: 'k-top' },
-    el('span', { class: 'k-ico', html: icones[iconeKey] || '' }));
-  const filhos = [top, el('div', { class: 'k-val' }, String(valor)), el('div', { class: 'k-lbl' }, rotulo)];
-  if (delta) filhos.push(el('div', { class: 'k-delta ' + (deltaUp ? 'up' : 'down') }, delta));
-  return el('div', { class: 'lx-card lx-kpi' }, ...filhos);
+function iniciais(nome) {
+  const p = (nome || '').trim().split(/\s+/);
+  return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '?';
 }
 
-// Mapa vetorial estilizado (on-brand, sem lib externa)
-function mapaVetorial(motoboysOnline) {
-  const svg = `<svg viewBox="0 0 800 340" preserveAspectRatio="xMidYMid slice" style="display:block;width:100%;height:100%">
-    <rect width="800" height="340" fill="#e3eefb"/>
-    <g stroke="#cfe0f3" stroke-width="2">
-      <path d="M0 90 H800 M0 200 H800 M0 280 H800 M120 0 V340 M320 0 V340 M520 0 V340 M680 0 V340"/>
-    </g>
-    <g fill="#d4e4f6">
-      <rect x="140" y="20" width="150" height="55" rx="5"/>
-      <rect x="350" y="110" width="140" height="70" rx="5"/>
-      <rect x="560" y="30" width="100" height="140" rx="5"/>
-      <rect x="160" y="220" width="120" height="50" rx="5"/>
-      <rect x="400" y="240" width="100" height="60" rx="5"/>
-    </g>
-    <path d="M90 250 Q220 230 300 150 T560 120 T700 70" fill="none" stroke="var(--lx-azul-vivo)" stroke-width="4" stroke-dasharray="2 9" stroke-linecap="round"/>
-    <path d="M120 280 Q260 280 340 210 T620 230" fill="none" stroke="var(--lx-azul-primario)" stroke-width="4" stroke-dasharray="2 9" stroke-linecap="round"/>
-    <g>
-      <circle cx="300" cy="150" r="12" fill="var(--lx-azul-primario)"/>
-      <circle cx="300" cy="150" r="12" fill="none" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="560" cy="120" r="12" fill="var(--lx-azul-vivo)"/>
-      <circle cx="560" cy="120" r="12" fill="none" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="340" cy="210" r="12" fill="var(--lx-ok)"/>
-      <circle cx="340" cy="210" r="12" fill="none" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="200" cy="120" r="9" fill="var(--lx-azul-primario)" opacity=".7"/>
-      <circle cx="640" cy="250" r="9" fill="var(--lx-azul-vivo)" opacity=".7"/>
-      <circle cx="450" cy="90" r="9" fill="var(--lx-ok)" opacity=".7"/>
-    </g>
-    <g fill="var(--lx-azul-profundo)">
-      <path d="M700 58 l9 9 -9 9 -9 -9z"/>
-      <path d="M620 218 l9 9 -9 9 -9 -9z"/>
-    </g>
-  </svg>`;
+const CORES_AV = [
+  { bg: '#E6F1FB', cor: '#185FA5' },
+  { bg: '#EEEDFE', cor: '#534AB7' },
+  { bg: '#E1F5EE', cor: '#0F6E56' },
+  { bg: '#FAEEDA', cor: '#854F0B' },
+  { bg: '#FAECE7', cor: '#993C1D' },
+  { bg: '#E1F5EE', cor: '#0F6E56' },
+];
+
+// ---- Dashboard Super Admin ----
+async function dashAdmin(content) {
+  // Estrutura base
+  const countEl = el('div', { style: 'font-size:26px;font-weight:500;color:var(--lx-tinta);line-height:1' }, '…');
+  const lblEl = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:3px' }, 'clientes ativos');
 
   const pill = el('div', { style: `
-    position:absolute;top:14px;left:14px;
-    background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
-    border:1px solid var(--lx-linha);border-radius:var(--lx-raio-pill);
-    padding:6px 13px;font-size:11.5px;font-weight:700;
-    color:var(--lx-ok);display:flex;align-items:center;gap:7px;
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:11px;font-weight:600;color:var(--lx-ok);
+    background:var(--lx-ok-bg);padding:4px 10px;
+    border-radius:var(--lx-raio-pill)
+  ` },
+    el('span', { style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-ok);animation:lx-pulse 1.8s infinite;display:inline-block' }),
+    'Ao vivo');
+
+  const svgWrap = el('div', { style: 'position:relative' });
+  const tooltip = el('div', { style: `
+    position:absolute;background:var(--lx-superficie);
+    border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);
+    padding:10px 13px;font-size:12px;pointer-events:none;
+    display:none;z-index:10;min-width:160px;
     box-shadow:var(--lx-sombra-sm)
-  ` },
-    el('span', { style: `
-      width:8px;height:8px;border-radius:50%;background:var(--lx-ok);
-      animation:lx-pulse 1.8s infinite;display:inline-block
-    ` }),
-    `Ao vivo · ${motoboysOnline} motoboys`
-  );
+  ` });
+  svgWrap.append(tooltip);
 
-  const legenda = el('div', { style: `
-    position:absolute;left:14px;bottom:14px;
-    background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
-    border:1px solid var(--lx-linha);border-radius:11px;
-    padding:10px 13px;font-size:11.5px;
-    display:flex;flex-direction:column;gap:7px;
-    box-shadow:var(--lx-sombra-sm)
-  ` },
-    el('span', { style: 'display:inline-flex;align-items:center;gap:8px;color:var(--lx-tinta-2);font-weight:600' },
-      el('b', { style: 'width:10px;height:10px;border-radius:3px;background:var(--lx-azul-primario);display:inline-block' }), 'Em rota'),
-    el('span', { style: 'display:inline-flex;align-items:center;gap:8px;color:var(--lx-tinta-2);font-weight:600' },
-      el('b', { style: 'width:10px;height:10px;border-radius:3px;background:var(--lx-ok);display:inline-block' }), 'Disponível'),
-    el('span', { style: 'display:inline-flex;align-items:center;gap:8px;color:var(--lx-tinta-2);font-weight:600' },
-      el('b', { style: 'width:10px;height:10px;border-radius:3px;background:var(--lx-azul-profundo);transform:rotate(45deg);display:inline-block' }), 'Destino')
-  );
+  const listaWrap = el('div', { style: 'display:flex;flex-direction:column;overflow-y:auto;flex:1' });
 
-  return el('div', { style: `
-    position:relative;border-radius:var(--lx-raio);overflow:hidden;
-    height:340px;background:linear-gradient(135deg,#eaf2fb,#dbe9f7)
-  ` },
-    el('div', { html: svg, style: 'height:100%' }),
-    pill, legenda
-  );
-}
+  const mapaCard = el('div', { class: 'lx-card', style: 'flex:1;overflow:hidden' },
+    el('div', { style: 'padding:12px 16px;border-bottom:1px solid var(--lx-linha);display:flex;align-items:center;justify-content:space-between' },
+      el('div', { style: 'display:flex;align-items:baseline;gap:12px' }, countEl, lblEl),
+      pill),
+    svgWrap);
 
-function entregaAtiva(e) {
-  const iniciais = (nome) => {
-    const p = (nome || '').trim().split(/\s+/);
-    return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'M';
-  };
-  const av = el('div', { style: `
-    width:32px;height:32px;border-radius:9px;
-    background:var(--lx-azul-primario);color:#fff;
-    display:grid;place-items:center;font-weight:800;font-size:12px;flex:none
-  ` }, iniciais(e.motoboy_nome || 'M'));
-
-  return el('div', { style: `
-    display:flex;align-items:center;gap:11px;
-    padding:11px 4px;border-bottom:1px solid var(--lx-linha)
-  ` },
-    av,
-    el('div', { style: 'flex:1;min-width:0' },
-      el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-tinta)' }, e.protocolo || '—'),
-      el('div', { style: 'color:var(--lx-tinta-2);font-size:12px;margin-top:1px' },
-        e.motoboy_nome ? e.motoboy_nome : 'Sem motoboy')),
-    statusBadge(e.status)
-  );
-}
-
-// Dashboard do super_admin
-async function dashAdmin(content) {
-  const grade = el('div', { class: 'lx-grid-kpi' },
-    el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, '…'), el('div', { class: 'k-lbl' }, 'Clientes ativos')),
-    el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, '…'), el('div', { class: 'k-lbl' }, 'Motoboys na rede')),
-    el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, '…'), el('div', { class: 'k-lbl' }, 'Entregas hoje')),
-    el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, '…'), el('div', { class: 'k-lbl' }, 'Online agora')),
-  );
-
-  const listaAtivas = el('div', { style: 'display:flex;flex-direction:column;gap:0' },
-    el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:12px 4px' }, 'Carregando…'));
-
-  const mapaWrap = el('div', { class: 'lx-card', style: 'flex:1.6;overflow:hidden' });
-  const lateralAtivas = el('div', { class: 'lx-card lx-card-pad', style: 'flex:1;min-width:0' },
-    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px' },
-      el('b', { style: 'font-size:14px' }, 'Entregas ativas'),
-      el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, 'carregando…')),
-    listaAtivas
-  );
+  const lateralCard = el('div', { class: 'lx-card', style: 'width:240px;display:flex;flex-direction:column;overflow:hidden' },
+    el('div', { style: 'padding:12px 14px;border-bottom:1px solid var(--lx-linha);font-size:13px;font-weight:700;color:var(--lx-tinta)' }, 'Clientes ativos'),
+    listaWrap);
 
   content.append(
-    grade,
-    secHeader('Mapa em tempo real'),
-    el('div', { style: 'display:flex;gap:18px;align-items:stretch' }, mapaWrap, lateralAtivas)
+    el('div', { style: 'display:flex;gap:14px;align-items:stretch' }, mapaCard, lateralCard)
   );
 
+  // Carregar dados
   try {
-    const [empresas, motoboysAll] = await Promise.all([
-      get('/empresas').catch(() => []),
-      get('/motoboys').catch(() => []),
-    ]);
+    const empresas = await get('/empresas').catch(() => []);
+    const ativos = empresas.filter(e => e.ativo !== false);
+    countEl.textContent = ativos.length;
 
-    const frota = empresas.reduce((s, e) => s + (e.total_motoboys || 0), 0);
-    const online = motoboysAll.filter(m => m.online).length;
+    // Montar SVG do mapa
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 500 480');
+    svg.style.cssText = 'width:100%;height:380px;display:block;background:#EAF3DE';
 
-    grade.innerHTML = '';
-    grade.append(
-      kpi('clientes', empresas.filter(e => e.ativo !== false).length, 'Clientes ativos', null),
-      kpi('motoboys', frota, 'Motoboys na rede', null),
-      kpi('entregas', '—', 'Entregas hoje', null),
-      kpi('motoboys', `${online}`, 'Online agora', `${Math.round(online / Math.max(frota, 1) * 100)}% da base`, true),
-    );
+    // Silhueta Brasil
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', 'M180 30 L220 25 L260 30 L290 45 L310 60 L330 55 L350 70 L360 90 L370 110 L375 135 L370 160 L355 180 L360 200 L375 220 L385 245 L390 270 L380 295 L365 315 L350 330 L340 350 L330 370 L315 385 L295 395 L275 405 L255 415 L235 420 L215 415 L195 405 L175 395 L160 380 L145 360 L135 340 L128 318 L125 295 L130 270 L140 248 L148 225 L145 200 L135 178 L125 158 L118 135 L115 110 L118 88 L130 68 L150 50 Z');
+    path.setAttribute('fill', '#C0DD97');
+    path.setAttribute('stroke', '#639922');
+    path.setAttribute('stroke-width', '1.2');
+    svg.append(path);
 
-    mapaWrap.append(mapaVetorial(online));
+    // Linhas divisórias de região
+    [
+      'M118 135 L375 135',
+      'M148 225 L385 245',
+      'M128 318 L380 295',
+      'M160 380 L315 385',
+    ].forEach(d => {
+      const l = document.createElementNS(ns, 'path');
+      l.setAttribute('d', d);
+      l.setAttribute('stroke', '#97C459');
+      l.setAttribute('stroke-width', '0.5');
+      l.setAttribute('stroke-dasharray', '4 4');
+      l.setAttribute('opacity', '0.5');
+      l.setAttribute('fill', 'none');
+      svg.append(l);
+    });
 
-    // Lista de ativas (busca por empresa para ter dados reais)
-    const todas = [];
-    for (const emp of empresas.slice(0, 5)) {
-      // Não temos endpoint de entregas com empresa_id no super_admin sem impersonação,
-      // então mostramos um estado representativo
-    }
+    // Labels de região
+    [
+      { x: 230, y: 105, t: 'Norte' },
+      { x: 338, y: 210, t: 'Nordeste' },
+      { x: 245, y: 278, t: 'Centro-Oeste' },
+      { x: 292, y: 348, t: 'Sudeste' },
+      { x: 202, y: 408, t: 'Sul' },
+    ].forEach(({ x, y, t }) => {
+      const txt = document.createElementNS(ns, 'text');
+      txt.setAttribute('x', x); txt.setAttribute('y', y);
+      txt.setAttribute('text-anchor', 'middle');
+      txt.setAttribute('font-size', '9.5');
+      txt.setAttribute('fill', '#3B6D11');
+      txt.setAttribute('opacity', '0.6');
+      txt.setAttribute('font-family', 'Inter, sans-serif');
+      txt.textContent = t;
+      svg.append(txt);
+    });
 
-    lateralAtivas.querySelector('span').textContent = `${frota} motoboys`;
-    listaAtivas.innerHTML = '';
+    // Legenda
+    const legRect = document.createElementNS(ns, 'rect');
+    legRect.setAttribute('x', '14'); legRect.setAttribute('y', '334');
+    legRect.setAttribute('width', '122'); legRect.setAttribute('height', '58');
+    legRect.setAttribute('rx', '8'); legRect.setAttribute('fill', 'white');
+    legRect.setAttribute('opacity', '0.9'); legRect.setAttribute('stroke', '#B5D4F4');
+    legRect.setAttribute('stroke-width', '0.5');
+    svg.append(legRect);
+    [
+      { y: 350, fill: '#185FA5', t: 'Ativo · operando' },
+      { y: 368, fill: '#1D9E75', t: 'Ativo · em crescimento' },
+      { y: 383, fill: '#BA7517', t: 'Atenção · baixo volume' },
+    ].forEach(({ y, fill, t }) => {
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', '26'); c.setAttribute('cy', y); c.setAttribute('r', '5');
+      c.setAttribute('fill', fill); svg.append(c);
+      const tx = document.createElementNS(ns, 'text');
+      tx.setAttribute('x', '36'); tx.setAttribute('y', y + 4);
+      tx.setAttribute('font-size', '10'); tx.setAttribute('fill', '#042C53');
+      tx.setAttribute('font-family', 'Inter, sans-serif');
+      tx.textContent = t; svg.append(tx);
+    });
 
-    if (!empresas.length) {
-      listaAtivas.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Nenhum cliente cadastrado ainda.'));
-    } else {
-      empresas.slice(0, 5).forEach(c => {
-        listaAtivas.append(el('div', { style: 'display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--lx-linha)' },
-          el('div', { style: 'width:32px;height:32px;border-radius:9px;background:var(--lx-info-bg);color:var(--lx-azul-primario);display:grid;place-items:center;font-weight:800;font-size:11px;flex:none' },
-            ((c.razao_social || c.nome_fantasia || '?')[0]).toUpperCase()),
-          el('div', { style: 'flex:1;min-width:0' },
-            el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.razao_social || c.nome_fantasia || '—'),
-            el('div', { style: 'color:var(--lx-tinta-2);font-size:12px;margin-top:1px' }, `${c.total_motoboys || 0} motoboys`)),
-          el('span', { class: 'lx-status lx-status-entregue' }, 'Ativo')
-        ));
+    // Pins dos clientes
+    ativos.forEach((c, i) => {
+      const coords = coordsParaCliente(c);
+      const cor = c.total_motoboys > 10 ? '#1D9E75' : c.total_motoboys > 0 ? '#185FA5' : '#BA7517';
+      const r = Math.min(8, Math.max(4, 4 + (c.total_motoboys || 0) * 0.3));
+
+      const anel = document.createElementNS(ns, 'circle');
+      anel.setAttribute('cx', coords.x); anel.setAttribute('cy', coords.y);
+      anel.setAttribute('r', r + 5); anel.setAttribute('fill', cor);
+      anel.setAttribute('opacity', '0.15'); svg.append(anel);
+
+      const pin = document.createElementNS(ns, 'circle');
+      pin.setAttribute('cx', coords.x); pin.setAttribute('cy', coords.y);
+      pin.setAttribute('r', r); pin.setAttribute('fill', cor);
+      pin.setAttribute('stroke', '#fff'); pin.setAttribute('stroke-width', '2');
+      pin.style.cursor = 'pointer';
+
+      pin.addEventListener('mouseenter', () => {
+        const wr = svgWrap.getBoundingClientRect();
+        const pr = pin.getBoundingClientRect();
+        tooltip.innerHTML = `
+          <div style="font-weight:700;font-size:13px;color:var(--lx-tinta);margin-bottom:3px">${c.razao_social || c.nome_fantasia || '—'}</div>
+          <div style="font-size:11px;color:var(--lx-tinta-2);margin-bottom:8px">${c.cidade || 'Brasil'}</div>
+          <div style="display:flex;gap:14px">
+            <div>
+              <div style="font-size:10px;color:var(--lx-tinta-3)">Motoboys</div>
+              <div style="font-size:16px;font-weight:700;color:var(--lx-tinta)">${c.total_motoboys || 0}</div>
+            </div>
+          </div>`;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (pr.left - wr.left + 12) + 'px';
+        tooltip.style.top = (pr.top - wr.top - 90) + 'px';
       });
+      pin.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      svg.append(pin);
+    });
+
+    svgWrap.append(svg);
+
+    // Lista lateral
+    listaWrap.innerHTML = '';
+    ativos.forEach((c, i) => {
+      const { bg, cor } = CORES_AV[i % CORES_AV.length];
+      const mb = c.total_motoboys || 0;
+      const uf = c.uf || (c.cidade ? c.cidade.split('·')[1]?.trim() : '') || '';
+      listaWrap.append(el('div', { style: `
+        display:flex;align-items:center;gap:10px;padding:10px 14px;
+        border-bottom:1px solid var(--lx-linha);cursor:pointer;
+        transition:background .12s
+      `,
+        onMouseenter: function() { this.style.background = 'var(--lx-superficie-2)'; },
+        onMouseleave: function() { this.style.background = ''; },
+      },
+        el('div', { style: `width:28px;height:28px;border-radius:7px;background:${bg};color:${cor};display:grid;place-items:center;font-size:11px;font-weight:700;flex:none` },
+          iniciais(c.razao_social || c.nome_fantasia)),
+        el('div', { style: 'flex:1;min-width:0' },
+          el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
+            c.razao_social || c.nome_fantasia || '—'),
+          el('div', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${mb} motoboys`)),
+        uf ? el('span', { style: `font-size:10px;font-weight:700;padding:3px 7px;border-radius:var(--lx-raio-pill);background:var(--lx-info-bg);color:var(--lx-azul-primario)` }, uf) : el('span', {})
+      ));
+    });
+
+    if (!ativos.length) {
+      listaWrap.append(el('div', { style: 'padding:24px;text-align:center;color:var(--lx-tinta-2);font-size:13px' },
+        'Nenhum cliente cadastrado ainda.'));
     }
+
   } catch {
-    grade.innerHTML = '';
-    grade.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Erro ao carregar dados.'));
+    svgWrap.append(el('div', { style: 'padding:24px;color:var(--lx-tinta-2);font-size:13px' }, 'Erro ao carregar dados.'));
   }
 }
 
-// Dashboard do cliente
+// ---- Dashboard Cliente ----
 async function dashCliente(content) {
   const grade = el('div', { class: 'lx-grid-kpi' });
-  const mapaWrap = el('div', { class: 'lx-card', style: 'flex:1.5;overflow:hidden' });
-  const listaAtivas = el('div', { style: 'display:flex;flex-direction:column;gap:2px' },
-    el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Carregando…'));
-
+  const listaAtivas = el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Carregando…');
   const lateralAtivas = el('div', { class: 'lx-card lx-card-pad', style: 'flex:1;min-width:0' },
-    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px' },
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' },
       el('b', { style: 'font-size:14px' }, 'Entregas ativas'),
       el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, '…')),
-    listaAtivas
-  );
+    listaAtivas);
 
-  // KPIs menores abaixo
-  const grade2 = el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:18px' });
-
-  content.append(
-    grade,
-    secHeader('Acompanhamento em tempo real'),
-    el('div', { style: 'display:flex;gap:18px;align-items:stretch' }, mapaWrap, lateralAtivas),
-    grade2
-  );
+  content.append(grade, lateralAtivas);
 
   try {
     const [entregas, motoboys] = await Promise.all([
       auth.temModulo('entregas') ? get('/entregas').catch(() => []) : Promise.resolve([]),
       auth.temModulo('motoboys') ? get('/motoboys').catch(() => []) : Promise.resolve([]),
     ]);
-
-    const naFila = entregas.filter(e => e.status === 'aguardando_atribuicao').length;
-    const emAndamento = entregas.filter(e => ['aguardando_coleta', 'em_coleta', 'em_rota'].includes(e.status));
+    const emAndamento = entregas.filter(e => ['aguardando_coleta','em_coleta','em_rota'].includes(e.status));
     const concluidas = entregas.filter(e => e.status === 'entregue').length;
+    const naFila = entregas.filter(e => e.status === 'aguardando_atribuicao').length;
     const online = motoboys.filter(m => m.online).length;
 
     grade.innerHTML = '';
-    grade.append(
-      kpi('entregas', emAndamento.length, 'Em andamento', null),
-      kpi('entregas', concluidas, 'Concluídas hoje', null),
-      kpi('filas', naFila, 'Na fila', null),
-      kpi('motoboys', `${online}/${motoboys.length}`, 'Motoboys online', online > 0 ? `${Math.round(online / Math.max(motoboys.length, 1) * 100)}% disponíveis` : '—', true),
-    );
-
-    const motoboysOnline = online;
-    mapaWrap.append(mapaVetorial(motoboysOnline));
+    [
+      { val: emAndamento.length, lbl: 'Em andamento' },
+      { val: concluidas, lbl: 'Concluídas hoje' },
+      { val: naFila, lbl: 'Na fila' },
+      { val: `${online}/${motoboys.length}`, lbl: 'Motoboys online' },
+    ].forEach(({ val, lbl }) => {
+      grade.append(el('div', { class: 'lx-card lx-kpi' },
+        el('div', { class: 'k-val', style: 'font-size:26px' }, String(val)),
+        el('div', { class: 'k-lbl' }, lbl)));
+    });
 
     lateralAtivas.querySelector('span').textContent = `${emAndamento.length} ativas`;
     listaAtivas.innerHTML = '';
-
     if (!emAndamento.length) {
-      listaAtivas.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;text-align:center;padding:20px 0' }, 'Nenhuma entrega em andamento.'));
+      listaAtivas.textContent = 'Nenhuma entrega em andamento.';
     } else {
-      emAndamento.slice(0, 6).forEach(e => listaAtivas.append(entregaAtiva(e)));
+      const { statusBadge } = await import('../core/ui.js');
+      emAndamento.slice(0, 8).forEach(e => {
+        listaAtivas.append(el('div', { style: 'display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--lx-linha)' },
+          el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '—'),
+          el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, e.motoboy_nome || '—'),
+          statusBadge(e.status)));
+      });
     }
-
-    grade2.append(
-      kpi('clientes', entregas.length, 'Total de entregas', null),
-      kpi('motoboys', motoboys.length, 'Motoboys cadastrados', null),
-      el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, '—'), el('div', { class: 'k-lbl' }, 'Tempo médio')),
-      el('div', { class: 'lx-card lx-kpi' }, el('div', { class: 'k-val', style: 'font-size:24px' }, concluidas > 0 ? Math.round(concluidas / Math.max(entregas.length, 1) * 100) + '%' : '—'), el('div', { class: 'k-lbl' }, 'Taxa de conclusão')),
-    );
-
   } catch {
-    grade.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Erro ao carregar.'));
+    grade.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, 'Erro ao carregar.'));
   }
 }
 
 export async function montar(container) {
-  // Injetar keyframe de pulse se não existir
   if (!document.getElementById('lx-pulse-style')) {
     const s = document.createElement('style');
     s.id = 'lx-pulse-style';
@@ -266,13 +312,11 @@ export async function montar(container) {
     document.head.append(s);
   }
 
-  const content = el('div', {});
   const isAdmin = auth.acessoAtual().perfil === 'super_admin';
-  container.append(casca('Painel', content, isAdmin ? 'Visão em tempo real de todas as operações' : 'Acompanhe sua operação'));
+  const content = el('div', {});
+  container.append(casca('Painel', content,
+    isAdmin ? 'Visão geral da plataforma' : 'Acompanhe sua operação'));
 
-  if (isAdmin) {
-    await dashAdmin(content);
-  } else {
-    await dashCliente(content);
-  }
+  if (isAdmin) await dashAdmin(content);
+  else await dashCliente(content);
 }
