@@ -55,6 +55,8 @@ async function obterCompleto(empresaId) {
 
 // Cria/atualiza (upsert) o branding de uma empresa.
 async function definir({ empresaId, dados, usuarioId, ip }) {
+  // Garantir que empresaId existe e é válido
+  if (!empresaId) throw AppError.validacao('empresa_id é obrigatório');
   for (const campo of ['cor_primaria', 'cor_secundaria', 'cor_destaque', 'cor_clara']) {
     if (dados[campo] != null && !ehCorHex(dados[campo])) {
       throw AppError.validacao(`Cor inválida em ${campo} (use o formato #RRGGBB)`);
@@ -90,7 +92,7 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
        dados.dominio ? dados.dominio.toLowerCase() : null,
        dados.subdominio ? dados.subdominio.toLowerCase() : null,
        dados.remetente_nome || null, dados.remetente_email || null,
-       dados.mostrar_powered_by === undefined ? null : !!dados.mostrar_powered_by,
+       dados.mostrar_powered_by === undefined ? true : !!dados.mostrar_powered_by,
        dados.extra ? JSON.stringify(dados.extra) : null]
     );
     await registrarAuditoria({
@@ -99,6 +101,8 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
     return rows[0];
   } catch (e) {
     if (e.code === '23505') throw AppError.conflito('Domínio ou subdomínio já está em uso por outra empresa');
+    // Log detalhado para diagnóstico
+    console.error('[branding.definir] ERRO:', e.message, '| empresaId:', empresaId, '| code:', e.code);
     throw e;
   }
 }
