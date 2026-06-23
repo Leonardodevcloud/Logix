@@ -2,7 +2,7 @@ import { casca } from '../core/layout.js';
 import { el, icones, secHeader, estadoVazio, campo } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import { navegar } from '../core/router.js';
-import { setToken } from '../core/api.js';
+
 
 function fmtCnpj(c) {
   const d = (c || '').replace(/\D/g, '');
@@ -213,14 +213,11 @@ export async function montar(container) {
     try {
       const r = await post('/empresas/' + c.id + '/impersonar', {});
       if (r.accessToken) {
-        setToken(r.accessToken);
-        // Recarrega a sessão com o novo token (como se fosse o cliente)
-        const { restaurar } = await import('../core/auth.js');
-        await restaurar();
+        const { iniciarImpersonacao } = await import('../core/auth.js');
+        await iniciarImpersonacao(r.accessToken, r.usuario);
         navegar('/');
-        toast(`Entrando como ${c.razao_social || c.nome_fantasia}…`, 'ok');
       }
-    } catch (e) { toast('Erro ao impersonar: ' + e.message, 'erro'); }
+    } catch (e) { toast('Erro ao entrar como cliente: ' + e.message, 'erro'); }
   }
 
   async function carregar() {
