@@ -1,7 +1,6 @@
 import { casca } from '../core/layout.js';
 import { el, statusBadge } from '../core/ui.js';
-import { get, post, patch } from '../core/api.js';
-import { getToken } from '../core/api.js';
+import { get, post, patch, getToken } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
 const BASE = window.LOGIX_API || '/api/v1';
@@ -19,7 +18,7 @@ function toast(msg, tipo) {
   setTimeout(() => t.remove(), 3000);
 }
 
-// ── MAPA ──────────────────────────────────────────────────────────────────────
+// ── MAPA ─────────────────────────────────────────────────────────────────────
 async function garantirLeaflet() {
   if (window.L) return;
   if (!document.getElementById('lx-leaflet-css')) {
@@ -28,14 +27,15 @@ async function garantirLeaflet() {
     l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
     document.head.append(l);
   }
-  await new Promise((res, rej) => {
-    if (document.getElementById('lx-leaflet-js')) { res(); return; }
-    const s = document.createElement('script');
-    s.id = 'lx-leaflet-js';
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-    s.onload = res; s.onerror = rej;
-    document.head.append(s);
-  });
+  if (!document.getElementById('lx-leaflet-js')) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.id = 'lx-leaflet-js';
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.append(s);
+    });
+  }
 }
 
 function pinIcon(txt, cor) {
@@ -49,18 +49,16 @@ function pinIcon(txt, cor) {
 function criarMapaInstance(div) {
   let map = null, poly = null, markers = [];
 
-  async function init(centro) {
+  async function init() {
     if (map) return;
     await garantirLeaflet();
-    map = window.L.map(div, {
-      center: centro || [-12.97, -38.5], zoom: 13,
-      scrollWheelZoom: true, zoomControl: true,
-    });
+    map = window.L.map(div, { center: [-12.97, -38.5], zoom: 13, scrollWheelZoom: true });
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap', maxZoom: 19,
     }).addTo(map);
   }
 
+  // FIX 4: limpar mapa antes de qualquer renderização
   function limpar() {
     markers.forEach(m => m.remove()); markers = [];
     if (poly) { poly.remove(); poly = null; }
@@ -68,24 +66,21 @@ function criarMapaInstance(div) {
 
   async function renderizar(coleta, destinos) {
     await init();
-    limpar();
+    limpar(); // sempre limpa antes
     const L = window.L;
     const todos = [coleta, ...destinos].filter(p => p?.lat);
-    if (!todos.length) return;
+    if (!todos.length) return null;
 
     if (coleta?.lat) {
-      const m = L.marker([coleta.lat, coleta.lng], { icon: pinIcon('C', '#042C53') })
-        .bindPopup(`<b>Coleta</b><br>${coleta.label || ''}`).addTo(map);
-      markers.push(m);
+      markers.push(L.marker([coleta.lat, coleta.lng], { icon: pinIcon('C', '#042C53') })
+        .bindPopup(`<b>Coleta</b><br>${coleta.label || ''}`).addTo(map));
     }
     destinos.forEach((d, i) => {
       if (!d?.lat) return;
-      const m = L.marker([d.lat, d.lng], { icon: pinIcon(i + 1, '#185FA5') })
-        .bindPopup(`<b>Destino ${i + 1}</b><br>${d.label || ''}`).addTo(map);
-      markers.push(m);
+      markers.push(L.marker([d.lat, d.lng], { icon: pinIcon(i + 1, '#185FA5') })
+        .bindPopup(`<b>Destino ${i + 1}</b><br>${d.label || ''}`).addTo(map));
     });
 
-    // Tentar geometria real via ORS
     try {
       const r = await fetch(`${BASE}/entregas/geocode-rota`, {
         method: 'POST',
@@ -102,27 +97,24 @@ function criarMapaInstance(div) {
       }
     } catch {}
 
-    // Fallback linha reta
     poly = L.polyline(todos.map(p => [p.lat, p.lng]), { color: '#185FA5', weight: 4, dashArray: '6 10' }).addTo(map);
-    map.fitBounds(poly.getBounds(), { padding: [40, 40] });
+    if (poly) map.fitBounds(poly.getBounds(), { padding: [40, 40] });
     return null;
   }
 
   async function renderizarExistente(entregaId) {
     await init();
-    limpar();
+    limpar(); // FIX 4: limpa rota anterior
     try {
       const r = await get('/entregas/' + entregaId + '/rota');
       if (r.coleta?.lat) {
-        const m = window.L.marker([r.coleta.lat, r.coleta.lng], { icon: pinIcon('C', '#042C53') })
-          .bindPopup(`<b>Coleta</b><br>${r.coleta.endereco || ''}`).addTo(map);
-        markers.push(m);
+        markers.push(window.L.marker([r.coleta.lat, r.coleta.lng], { icon: pinIcon('C', '#042C53') })
+          .bindPopup(`<b>Coleta</b><br>${r.coleta.endereco || ''}`).addTo(map));
       }
       (r.pontos || []).forEach((p, i) => {
         if (!p.lat) return;
-        const m = window.L.marker([p.lat, p.lng], { icon: pinIcon(i + 1, '#185FA5') })
-          .bindPopup(`<b>Destino ${i + 1}</b><br>${p.endereco || ''}`).addTo(map);
-        markers.push(m);
+        markers.push(window.L.marker([p.lat, p.lng], { icon: pinIcon(i + 1, '#185FA5') })
+          .bindPopup(`<b>Destino ${i + 1}</b><br>${p.endereco || ''}`).addTo(map));
       });
       if (r.coords?.length) {
         poly = window.L.polyline(r.coords, { color: '#185FA5', weight: 5, dashArray: '6 10', lineCap: 'round' }).addTo(map);
@@ -132,110 +124,113 @@ function criarMapaInstance(div) {
     } catch { return null; }
   }
 
-  function invalidar() { if (map) map.invalidateSize(); }
+  function invalidar() { if (map) setTimeout(() => map.invalidateSize(), 50); }
   function destruir() { if (map) { map.remove(); map = null; } }
 
-  return { init, renderizar, renderizarExistente, invalidar, destruir };
+  return { init, renderizar, renderizarExistente, limpar, invalidar, destruir };
 }
 
-// ── CAMPO BUSCA ENDEREÇO ──────────────────────────────────────────────────────
+// ── CAMPO BUSCA ENDEREÇO (FIX 5: só busca salvos quando há texto) ────────────
 function CampoBusca({ onConfirmar, onLimpar }) {
   let _confirmado = null;
   let _timerSalvos = null;
   let _timerGeo = null;
+  let _aberto = null; // 'salvos' | 'geo' | null
 
-  const inp = el('input', { style: 'flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--lx-tinta)', placeholder: 'Digite apelido ou endereço...' });
-  const btnPin = el('button', { style: 'width:28px;height:28px;border-radius:7px;background:var(--lx-azul-primario);color:#fff;border:none;cursor:pointer;display:grid;place-items:center;flex:none', title: 'Buscar no mapa', html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>` });
-  const btnSalvos = el('button', { style: 'width:28px;height:28px;border-radius:7px;background:var(--lx-superficie-2);color:var(--lx-tinta-2);border:0.5px solid var(--lx-linha);cursor:pointer;display:grid;place-items:center;flex:none', title: 'Endereços salvos', html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>` });
+  const inp = el('input', {
+    style: 'flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--lx-tinta)',
+    placeholder: 'Digite apelido ou endereço...'
+  });
+  const btnPin = el('button', {
+    style: 'width:28px;height:28px;border-radius:7px;background:var(--lx-azul-primario);color:#fff;border:none;cursor:pointer;display:grid;place-items:center;flex:none',
+    title: 'Buscar endereço',
+    html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`
+  });
+  const btnFav = el('button', {
+    style: 'width:28px;height:28px;border-radius:7px;background:var(--lx-superficie-2);color:var(--lx-tinta-2);border:0.5px solid var(--lx-linha);cursor:pointer;display:grid;place-items:center;flex:none',
+    title: 'Ver todos os endereços salvos',
+    html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`
+  });
 
-  const dropSalvos = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:100;max-height:280px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
-  const dropGeo = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:100;max-height:260px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
+  const dropSalvos = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:200;max-height:260px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
+  const dropGeo = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:200;max-height:260px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
+  const confirmadoWrap = el('div', { style: 'display:none' });
 
-  const confirmadoWrap = el('div', { style: 'display:none;padding:8px 10px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm);display:none;flex-direction:column;gap:3px' });
-
-  function fecharDrops() { dropSalvos.style.display = 'none'; dropGeo.style.display = 'none'; }
-
-  function confirmar(r) {
-    _confirmado = r;
-    fecharDrops();
-    inp.style.display = 'none';
-    btnPin.style.display = 'none';
-    btnSalvos.style.display = 'none';
-    confirmadoWrap.style.display = 'flex';
-    confirmadoWrap.innerHTML = '';
-    confirmadoWrap.append(
-      el('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px' },
-        el('div', { style: 'flex:1;min-width:0' },
-          el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
-          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '))),
-        el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap', onClick: () => {
-          _confirmado = null;
-          inp.style.display = '';
-          btnPin.style.display = '';
-          btnSalvos.style.display = '';
-          confirmadoWrap.style.display = 'none';
-          inp.value = '';
-          if (onLimpar) onLimpar();
-        }}, 'Trocar')));
-    if (onConfirmar) onConfirmar(r);
+  function fecharDrops() {
+    dropSalvos.style.display = 'none';
+    dropGeo.style.display = 'none';
+    _aberto = null;
   }
 
-  async function carregarSalvos(q = '') {
+  function rowItem(icone, titulo, sub, onUsar) {
+    const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)' });
+    row.addEventListener('mouseenter', () => row.style.background = 'var(--lx-superficie-2)');
+    row.addEventListener('mouseleave', () => row.style.background = '');
+    row.addEventListener('click', () => onUsar());
+    row.append(
+      el('span', { style: 'font-size:15px;flex:none' }, icone),
+      el('div', { style: 'flex:1;min-width:0' },
+        el('b', { style: 'font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--lx-tinta)' }, titulo),
+        el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, sub)));
+    return row;
+  }
+
+  // FIX 5: só carrega salvos quando há texto digitado (≥1 char)
+  async function buscarSalvos(q) {
+    if (!q || q.length < 1) { dropSalvos.style.display = 'none'; return; }
     try {
-      const r = await get('/entregas/enderecos-salvos' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      const r = await get('/entregas/enderecos-salvos?q=' + encodeURIComponent(q));
       dropSalvos.innerHTML = '';
       if (!r.length) { dropSalvos.style.display = 'none'; return; }
-      r.forEach(s => {
-        const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--lx-linha)', onClick: () => confirmar(s) });
-        row.addEventListener('mouseenter', () => row.style.background = 'var(--lx-superficie-2)');
-        row.addEventListener('mouseleave', () => row.style.background = '');
-        const star = el('span', { style: 'color:#f59e0b;font-size:14px' }, '★');
-        row.append(star,
-          el('div', { style: 'flex:1;min-width:0' },
-            el('b', { style: 'font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--lx-tinta)' }, s.apelido),
-            el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, (s.endereco_completo || '').slice(0, 55))),
-          el('span', { style: 'font-size:10px;color:var(--lx-tinta-3)' }, s.uso_count + 'x'));
-        dropSalvos.append(row);
-      });
+      r.forEach(s => dropSalvos.append(rowItem('★', s.apelido, (s.endereco_completo || '').slice(0, 50), () => confirmar(s))));
       dropGeo.style.display = 'none';
       dropSalvos.style.display = 'block';
+      _aberto = 'salvos';
+    } catch {}
+  }
+
+  // Busca todos os salvos (botão de favoritos)
+  async function verTodosSalvos() {
+    if (_aberto === 'salvos' && dropSalvos.style.display === 'block') { fecharDrops(); return; }
+    try {
+      const r = await get('/entregas/enderecos-salvos');
+      dropSalvos.innerHTML = '';
+      if (!r.length) {
+        dropSalvos.append(el('div', { style: 'padding:12px;font-size:12px;color:var(--lx-tinta-2)' }, 'Nenhum endereço salvo ainda.'));
+      } else {
+        r.forEach(s => dropSalvos.append(rowItem('★', s.apelido, (s.endereco_completo || '').slice(0, 50), () => confirmar(s))));
+      }
+      dropGeo.style.display = 'none';
+      dropSalvos.style.display = 'block';
+      _aberto = 'salvos';
     } catch {}
   }
 
   async function buscarGeo(q) {
+    if (!q || q.length < 5) return;
     try {
       const r = await get('/entregas/geocode?q=' + encodeURIComponent(q));
       const lista = r.resultados || [];
       dropGeo.innerHTML = '';
       if (!lista.length) { dropGeo.style.display = 'none'; return; }
-      lista.forEach(item => {
-        const row = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--lx-linha)' });
-        row.addEventListener('mouseenter', () => row.style.background = 'var(--lx-superficie-2)');
-        row.addEventListener('mouseleave', () => row.style.background = '');
-        row.addEventListener('click', () => abrirModalSalvar(item));
-        row.append(
-          el('span', { style: 'color:var(--lx-tinta-3);font-size:16px' }, '📍'),
-          el('div', { style: 'flex:1;min-width:0' },
-            el('b', { style: 'font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--lx-tinta)' }, item.label),
-            el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [item.bairro, item.cidade, item.uf].filter(Boolean).join(' · '))),
-          el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap', onClick: e => { e.stopPropagation(); confirmar(item); } }, 'Usar'));
-        dropGeo.append(row);
-      });
+      lista.forEach(item => dropGeo.append(rowItem('📍', item.label, [item.bairro, item.cidade, item.uf].filter(Boolean).join(' · '), () => abrirModalSalvar(item))));
       dropSalvos.style.display = 'none';
       dropGeo.style.display = 'block';
+      _aberto = 'geo';
     } catch {}
   }
 
   function abrirModalSalvar(r) {
+    fecharDrops();
     const apelido = el('input', { style: 'width:100%;padding:9px 12px;border:1px solid var(--lx-linha);border-radius:8px;font-size:13px;margin-top:8px', placeholder: 'Ex: Loja Pituba, CD Lauro...' });
-    const ov = el('div', { style: 'position:fixed;inset:0;background:rgba(4,44,83,.4);z-index:200;display:flex;align-items:center;justify-content:center' });
+    const ov = el('div', { style: 'position:fixed;inset:0;background:rgba(4,44,83,.4);z-index:1000;display:flex;align-items:center;justify-content:center' });
     const box = el('div', { style: 'background:var(--lx-superficie);border-radius:var(--lx-raio-lg);padding:22px;width:380px;box-shadow:0 20px 50px -15px rgba(4,44,83,.4)' },
       el('b', { style: 'font-size:14px;color:var(--lx-tinta)' }, 'Salvar endereço'),
-      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:6px' }, r.label),
+      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:6px;margin-bottom:4px' }, r.label),
       apelido,
       el('div', { style: 'display:flex;gap:8px;margin-top:14px;justify-content:flex-end' },
         el('button', { style: 'padding:8px 14px;border-radius:8px;border:1px solid var(--lx-linha);background:none;cursor:pointer;font-size:12.5px', onClick: () => { confirmar(r); ov.remove(); } }, 'Usar sem salvar'),
-        el('button', { style: 'padding:8px 14px;border-radius:8px;background:var(--lx-azul-primario);color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700', onClick: async () => {
+        el('button', { style: 'padding:8px 16px;border-radius:8px;background:var(--lx-azul-primario);color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700', onClick: async () => {
           if (apelido.value.trim()) {
             try { await post('/entregas/enderecos-salvos', { apelido: apelido.value.trim(), endereco_completo: r.label, lat: r.lat, lng: r.lng, bairro: r.bairro, cidade: r.cidade, uf: r.uf }); toast('"' + apelido.value.trim() + '" salvo!', 'ok'); } catch {}
           }
@@ -247,175 +242,225 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     document.body.append(ov);
   }
 
+  function confirmar(r) {
+    _confirmado = r;
+    fecharDrops();
+    inpRow.style.display = 'none';
+    confirmadoWrap.style.display = 'block';
+    confirmadoWrap.innerHTML = '';
+    confirmadoWrap.append(
+      el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
+        el('span', { style: 'font-size:16px;flex:none;margin-top:1px' }, '📍'),
+        el('div', { style: 'flex:1;min-width:0' },
+          el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
+          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '))),
+        el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap;flex:none', onClick: () => {
+          _confirmado = null;
+          inpRow.style.display = '';
+          confirmadoWrap.style.display = 'none';
+          inp.value = '';
+          if (onLimpar) onLimpar();
+        }}, 'Trocar')));
+    if (onConfirmar) onConfirmar(r);
+  }
+
+  // FIX 5: debounce — salvos em 300ms (se tiver texto), geocoding em 800ms (≥5 chars)
   inp.addEventListener('input', () => {
     const q = inp.value.trim();
     clearTimeout(_timerSalvos); clearTimeout(_timerGeo);
     if (!q) { fecharDrops(); return; }
-    _timerSalvos = setTimeout(() => carregarSalvos(q), 300);
+    // Salvos: só se tiver texto
+    _timerSalvos = setTimeout(() => buscarSalvos(q), 300);
+    // Geocoding: só com ≥5 chars
     if (q.length >= 5) _timerGeo = setTimeout(() => buscarGeo(q), 800);
   });
 
-  inp.addEventListener('focus', () => { if (!inp.value) carregarSalvos(); });
-
-  btnSalvos.addEventListener('click', () => {
-    if (dropSalvos.style.display === 'block') { fecharDrops(); return; }
-    carregarSalvos(inp.value.trim());
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const q = inp.value.trim(); if (q.length >= 3) buscarGeo(q); }
+    if (e.key === 'Escape') fecharDrops();
   });
 
   btnPin.addEventListener('click', () => { const q = inp.value.trim(); if (q) buscarGeo(q); });
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { const q = inp.value.trim(); if (q) buscarGeo(q); } });
+  btnFav.addEventListener('click', () => verTodosSalvos());
 
   document.addEventListener('click', e => { if (!wrap.contains(e.target)) fecharDrops(); }, true);
 
-  const wrap = el('div', { style: 'position:relative' },
-    el('div', { style: 'display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);background:var(--lx-superficie)' },
-      inp, btnPin, btnSalvos),
-    dropSalvos, dropGeo, confirmadoWrap);
+  const inpRow = el('div', { style: 'display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);background:var(--lx-superficie)' },
+    inp, btnPin, btnFav);
 
+  const wrap = el('div', { style: 'position:relative' }, inpRow, dropSalvos, dropGeo, confirmadoWrap);
   wrap.obterValor = () => _confirmado;
+
+  // FIX 2: reset do campo
+  wrap.resetar = () => {
+    _confirmado = null;
+    inp.value = '';
+    inpRow.style.display = '';
+    confirmadoWrap.style.display = 'none';
+    confirmadoWrap.innerHTML = '';
+    fecharDrops();
+    if (onLimpar) onLimpar();
+  };
+
   return wrap;
 }
 
-// ── PONTO DE DESTINO ──────────────────────────────────────────────────────────
+// ── PONTO DESTINO ─────────────────────────────────────────────────────────────
 function PontoDestino(numero, onRemover, onAtualizar) {
-  const busca = CampoBusca({
-    onConfirmar: (r) => { dados.lat = r.lat; dados.lng = r.lng; dados.endereco = r.label || r.apelido || r.endereco_completo; if (onAtualizar) onAtualizar(); },
-    onLimpar: () => { dados.lat = null; dados.lng = null; dados.endereco = null; if (onAtualizar) onAtualizar(); }
-  });
-
   const dados = { lat: null, lng: null, endereco: null, nome_fantasia: null, numero_nf: null, complemento: null, observacoes: null, telefone: null };
 
-  const campos = el('div', { style: 'display:none;flex-direction:column;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--lx-linha)' });
+  const busca = CampoBusca({
+    onConfirmar: r => { dados.lat = r.lat; dados.lng = r.lng; dados.endereco = r.label || r.apelido || r.endereco_completo; if (onAtualizar) onAtualizar(); },
+    onLimpar: () => { dados.lat = null; dados.lng = null; dados.endereco = null; if (onAtualizar) onAtualizar(); },
+  });
 
-  function input(placeholder, key, obrigatorio) {
-    const inp = el('input', { style: 'width:100%;padding:8px 10px;border:1px solid var(--lx-linha);border-radius:8px;font-size:12.5px;background:var(--lx-superficie)', placeholder: (obrigatorio ? '* ' : '') + placeholder });
-    inp.addEventListener('input', () => { dados[key] = inp.value.trim() || null; });
-    return el('div', {},
-      el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);margin-bottom:3px;font-weight:600' }, placeholder + (obrigatorio ? ' *' : '')),
-      inp);
+  const camposExtras = el('div', { style: 'display:none;flex-direction:column;gap:7px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--lx-linha)' });
+
+  function inp(placeholder, key) {
+    const i = el('input', { style: 'width:100%;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:7px;font-size:12.5px;background:var(--lx-superficie)', placeholder });
+    i.addEventListener('input', () => { dados[key] = i.value.trim() || null; });
+    return el('div', { style: 'font-size:11px' },
+      el('div', { style: 'color:var(--lx-tinta-2);margin-bottom:3px;font-weight:600' }, placeholder), i);
   }
 
-  campos.append(
-    input('Nome fantasia / destinatário', 'nome_fantasia', false),
-    input('Nº NF / Pedido', 'numero_nf', false),
-    input('Complemento', 'complemento', false),
-    input('Observações p/ motoboy', 'observacoes', false),
-    input('Telefone do cliente', 'telefone', false));
+  camposExtras.append(inp('Nome fantasia / destinatário', 'nome_fantasia'), inp('Nº NF / Pedido', 'numero_nf'), inp('Complemento', 'complemento'), inp('Obs. p/ motoboy', 'observacoes'), inp('Telefone do cliente', 'telefone'));
 
-  const btnCampos = el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600;background:none;border:none;cursor:pointer;margin-top:4px;text-align:left', onClick: () => {
-    const aberto = campos.style.display !== 'none';
-    campos.style.display = aberto ? 'none' : 'flex';
-    btnCampos.textContent = aberto ? '+ Adicionar detalhes' : '− Ocultar detalhes';
-  }}, '+ Adicionar detalhes');
+  const btnToggle = el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600;background:none;border:none;cursor:pointer;text-align:left;padding:2px 0;margin-top:2px', onClick: () => {
+    const vis = camposExtras.style.display !== 'none';
+    camposExtras.style.display = vis ? 'none' : 'flex';
+    btnToggle.textContent = vis ? '+ Adicionar detalhes (NF, obs.)' : '− Ocultar detalhes';
+  }}, '+ Adicionar detalhes (NF, obs.)');
 
-  const wrap = el('div', { style: 'background:var(--lx-superficie-2);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);padding:11px 13px;display:flex;flex-direction:column;gap:8px' },
-    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px' },
-      el('div', { style: 'display:flex;align-items:center;gap:8px' },
+  const wrap = el('div', { style: 'background:var(--lx-superficie-2);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio-sm);padding:11px 13px' },
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' },
+      el('div', { style: 'display:flex;align-items:center;gap:7px' },
         el('div', { style: 'width:24px;height:24px;border-radius:50%;background:var(--lx-azul-primario);color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none' }, numero),
         el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, 'Ponto de entrega')),
-      onRemover ? el('button', { style: 'color:var(--lx-erro);font-size:18px;cursor:pointer;background:none;border:none;line-height:1', onClick: onRemover }, '×') : el('span', {})),
-    busca, campos, btnCampos);
+      onRemover ? el('button', { style: 'color:var(--lx-tinta-3);font-size:20px;cursor:pointer;background:none;border:none;line-height:1', onClick: onRemover }, '×') : el('span', {})),
+    busca, camposExtras, btnToggle);
 
-  wrap.obterDados = () => ({ ...dados, ...busca.obterValor() ? {} : { lat: null } });
+  // FIX 2: reset do ponto
+  wrap.resetar = () => {
+    Object.keys(dados).forEach(k => { dados[k] = null; });
+    busca.resetar();
+    camposExtras.style.display = 'none';
+    btnToggle.textContent = '+ Adicionar detalhes (NF, obs.)';
+    camposExtras.querySelectorAll('input').forEach(i => { i.value = ''; });
+  };
+
+  wrap.obterDados = () => dados;
   wrap.obterBusca = () => busca;
   return wrap;
 }
 
-// ── TELA PRINCIPAL ──────────────────────────────────────────────────────────
+// ── TELA PRINCIPAL ────────────────────────────────────────────────────────────
 export async function montar(container) {
   const abaAtiva = { val: 'nova' };
   let _entregas = [];
   let _mapa = null;
   let _pontos = [];
+  let _mapaTimer = null;
 
-  // ── CSS local ──
+  // CSS
   if (!document.getElementById('lx-ent-style')) {
     const s = document.createElement('style');
     s.id = 'lx-ent-style';
     s.textContent = `
-      .lx-ent-shell { display: grid; grid-template-rows: auto 1fr; height: calc(100vh - 120px); }
-      .lx-ent-abas { display: flex; gap: 2px; padding: 0 0 0 2px; background: var(--lx-superficie); border-bottom: 1px solid var(--lx-linha); }
-      .lx-ent-aba { padding: 11px 18px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--lx-tinta-2); border-bottom: 2.5px solid transparent; }
-      .lx-ent-aba.on { color: var(--lx-azul-primario); border-bottom-color: var(--lx-azul-primario); }
-      .lx-ent-body { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
-      .lx-ent-side { overflow-y: auto; border-right: 1px solid var(--lx-linha); background: var(--lx-superficie); display: flex; flex-direction: column; }
-      .lx-ent-mapa { position: relative; }
-      .lx-mapa-stats { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 1px; background: var(--lx-superficie); border-radius: 10px; overflow: hidden; border: 1px solid var(--lx-linha); box-shadow: var(--lx-sombra-sm); }
-      .lx-mapa-stat { padding: 9px 18px; text-align: center; border-right: 1px solid var(--lx-linha); }
-      .lx-mapa-stat:last-child { border-right: none; }
-      .lx-mapa-stat label { font-size: 10px; color: var(--lx-tinta-2); display: block; }
-      .lx-mapa-stat b { font-size: 16px; font-weight: 700; color: var(--lx-tinta); }
+      .lx-ent-shell{display:flex;flex-direction:column;height:calc(100vh - 118px);overflow:hidden}
+      .lx-ent-abas{display:flex;background:var(--lx-superficie);border-bottom:1px solid var(--lx-linha);padding:0 2px;flex:none}
+      .lx-ent-aba{padding:11px 18px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--lx-tinta-2);border-bottom:2.5px solid transparent;white-space:nowrap}
+      .lx-ent-aba.on{color:var(--lx-azul-primario);border-bottom-color:var(--lx-azul-primario)}
+      .lx-ent-body{display:grid;grid-template-columns:360px 1fr;flex:1;overflow:hidden}
+      .lx-ent-side{overflow-y:auto;border-right:1px solid var(--lx-linha);background:var(--lx-superficie);display:flex;flex-direction:column}
+      .lx-ent-mapa{position:relative;overflow:hidden}
+      .lx-stats-pill{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:10;display:none;background:var(--lx-superficie);border-radius:10px;border:1px solid var(--lx-linha);overflow:hidden;box-shadow:var(--lx-sombra-sm)}
+      .lx-stat-item{padding:9px 18px;text-align:center;border-right:1px solid var(--lx-linha);display:inline-block}
+      .lx-stat-item:last-child{border-right:none}
+      .lx-stat-item label{font-size:10px;color:var(--lx-tinta-2);display:block}
+      .lx-stat-item b{font-size:16px;font-weight:700;color:var(--lx-tinta)}
+      .lx-hist-card{padding:13px 14px;border-bottom:0.5px solid var(--lx-linha);cursor:pointer}
+      .lx-hist-card:hover{background:var(--lx-superficie-2)}
     `;
     document.head.append(s);
   }
 
-  // ── Abas ──
-  const tabs = ['nova', 'ativas', 'concluidas', 'canceladas'].map((id, i) => {
-    const rotulos = { nova: '✦ Nova', ativas: 'Ativas', concluidas: 'Concluídas', canceladas: 'Canceladas' };
-    const aba = el('button', { class: 'lx-ent-aba' + (id === 'nova' ? ' on' : ''), onClick: () => trocarAba(id) }, rotulos[id]);
-    return { id, el: aba };
+  // Abas
+  const tabDefs = [
+    { id: 'nova', label: '✦ Nova' },
+    { id: 'ativas', label: 'Ativas' },
+    { id: 'concluidas', label: 'Concluídas' },
+    { id: 'canceladas', label: 'Canceladas' },
+  ];
+  const tabEls = {};
+  const abasEl = el('div', { class: 'lx-ent-abas' });
+  tabDefs.forEach(({ id, label }) => {
+    const t = el('button', { class: 'lx-ent-aba' + (id === 'nova' ? ' on' : ''), onClick: () => trocarAba(id) }, label);
+    tabEls[id] = t;
+    abasEl.append(t);
   });
 
-  const abasEl = el('div', { class: 'lx-ent-abas' }, ...tabs.map(t => t.el));
-
-  function trocarAba(id) {
-    abaAtiva.val = id;
-    tabs.forEach(t => t.el.classList.toggle('on', t.id === id));
-    sideNova.style.display = id === 'nova' ? 'flex' : 'none';
-    sideHistorico.style.display = id !== 'nova' ? 'block' : 'none';
-    if (id !== 'nova') renderHistorico();
-    if (id === 'nova' && _mapa) setTimeout(() => _mapa.invalidar(), 50);
-  }
-
-  // ── Sidebar: nova entrega ──
+  // Estatísticas do mapa
   const statDist = el('b', { style: 'font-size:16px;font-weight:700;color:var(--lx-tinta)' }, '—');
   const statTempo = el('b', { style: 'font-size:16px;font-weight:700;color:var(--lx-tinta)' }, '—');
+  const statParadas = el('b', { style: 'font-size:16px;font-weight:700;color:var(--lx-tinta)' }, '1');
+  const statsPill = el('div', { class: 'lx-stats-pill' },
+    el('div', { class: 'lx-stat-item' }, el('label', {}, 'Distância'), statDist),
+    el('div', { class: 'lx-stat-item' }, el('label', {}, 'Tempo est.'), statTempo),
+    el('div', { class: 'lx-stat-item' }, el('label', {}, 'Paradas'), statParadas));
 
-  // Campo coleta
+  // Mapa
+  const mapaDiv = el('div', { style: 'width:100%;height:100%' });
+  const mapaWrap = el('div', { class: 'lx-ent-mapa' }, mapaDiv, statsPill);
+
+  // ── Formulário nova entrega ──
   const buscaColeta = CampoBusca({
     onConfirmar: () => atualizarMapa(),
     onLimpar: () => atualizarMapa(),
   });
 
   const pontosWrap = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-
-  function adicionarPonto() {
+  function novoPonto() {
     const num = _pontos.length + 1;
     const ponto = PontoDestino(num,
       _pontos.length > 0 ? () => {
         _pontos = _pontos.filter(p => p !== ponto);
         pontosWrap.removeChild(ponto);
+        // renumerar
+        _pontos.forEach((p, i) => {
+          const badge = p.querySelector('div[style*="border-radius:50%"]');
+          if (badge) badge.textContent = i + 1;
+        });
         atualizarMapa();
       } : null,
       atualizarMapa);
     _pontos.push(ponto);
     pontosWrap.append(ponto);
   }
-  adicionarPonto(); // sempre começa com 1 destino
+  novoPonto();
 
-  const btnAddDestino = el('button', { style: 'display:flex;align-items:center;gap:7px;padding:9px 13px;border:1.5px dashed var(--lx-linha);border-radius:var(--lx-raio-sm);background:none;cursor:pointer;color:var(--lx-tinta-2);font-size:12.5px;font-weight:600;width:100%', onClick: () => { adicionarPonto(); atualizarMapa(); } },
-    el('span', { style: 'font-size:18px;line-height:1;color:var(--lx-azul-primario)' }, '+'), 'Adicionar destino');
+  const btnAddDest = el('button', { style: 'display:flex;align-items:center;gap:7px;padding:9px 13px;border:1.5px dashed var(--lx-linha);border-radius:var(--lx-raio-sm);background:none;cursor:pointer;color:var(--lx-tinta-2);font-size:12.5px;font-weight:600;width:100%', onClick: () => { novoPonto(); } },
+    el('span', { style: 'font-size:18px;color:var(--lx-azul-primario);line-height:1' }, '+'), 'Adicionar destino');
 
-  // Seleção de motoboy
+  // Motoboy
   const modoAuto = { val: true };
   const mbId = { val: null };
-  const mbListaWrap = el('div', { style: 'display:none;flex-direction:column;gap:5px;margin-top:8px;max-height:180px;overflow-y:auto' });
+  const mbListaWrap = el('div', { style: 'display:none;flex-direction:column;gap:5px;margin-top:8px;max-height:160px;overflow-y:auto' });
 
-  const btnAuto = el('div', { style: 'flex:1;border:1.5px solid var(--lx-azul-vivo);background:var(--lx-info-bg);border-radius:9px;padding:10px 12px;cursor:pointer', onClick: () => { modoAuto.val = true; btnAuto.style.borderColor='var(--lx-azul-vivo)'; btnAuto.style.background='var(--lx-info-bg)'; btnManual.style.borderColor='var(--lx-linha)'; btnManual.style.background=''; mbListaWrap.style.display='none'; } },
-    el('b', { style: 'font-size:12.5px;display:block' }, 'Automático'),
-    el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, 'Motoboy mais próximo'));
-  const btnManual = el('div', { style: 'flex:1;border:1.5px solid var(--lx-linha);border-radius:9px;padding:10px 12px;cursor:pointer', onClick: () => { modoAuto.val = false; btnManual.style.borderColor='var(--lx-azul-vivo)'; btnManual.style.background='var(--lx-info-bg)'; btnAuto.style.borderColor='var(--lx-linha)'; btnAuto.style.background=''; mbListaWrap.style.display='flex'; } },
-    el('b', { style: 'font-size:12.5px;display:block' }, 'Manual'),
-    el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, 'Escolher da lista'));
+  const btnAuto = el('div', { style: 'flex:1;border:1.5px solid var(--lx-azul-vivo);background:var(--lx-info-bg);border-radius:9px;padding:10px 12px;cursor:pointer', onClick: () => {
+    modoAuto.val = true; btnAuto.style.borderColor='var(--lx-azul-vivo)'; btnAuto.style.background='var(--lx-info-bg)'; btnManual.style.borderColor='var(--lx-linha)'; btnManual.style.background=''; mbListaWrap.style.display='none';
+  }}, el('b', { style: 'font-size:12.5px;display:block' }, 'Automático'), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, 'Mais próximo (GPS)'));
 
-  // Carregar motoboys
+  const btnManual = el('div', { style: 'flex:1;border:1.5px solid var(--lx-linha);border-radius:9px;padding:10px 12px;cursor:pointer', onClick: () => {
+    modoAuto.val = false; btnManual.style.borderColor='var(--lx-azul-vivo)'; btnManual.style.background='var(--lx-info-bg)'; btnAuto.style.borderColor='var(--lx-linha)'; btnAuto.style.background=''; mbListaWrap.style.display='flex';
+  }}, el('b', { style: 'font-size:12.5px;display:block' }, 'Manual'), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, 'Escolher da lista'));
+
   (async () => {
     try {
       const mbs = await get('/motoboys?online=true').catch(() => []);
       const CORES = ['#185FA5','#0F6E56','#534AB7','#854F0B'];
       mbs.filter(m => m.online && m.status !== 'inativo').forEach((m, i) => {
-        const ini = m.nome_completo.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-        const row = el('div', { style: `display:flex;align-items:center;gap:9px;padding:8px 10px;border:1.5px solid var(--lx-linha);border-radius:8px;cursor:pointer`, onClick: () => {
+        const ini = m.nome_completo.split(' ').map(p => p[0]).join('').slice(0,2).toUpperCase();
+        const row = el('div', { style: 'display:flex;align-items:center;gap:9px;padding:8px 10px;border:1.5px solid var(--lx-linha);border-radius:8px;cursor:pointer', onClick: () => {
           mbId.val = m.id;
           mbListaWrap.querySelectorAll('[data-mb]').forEach(r => { r.style.borderColor='var(--lx-linha)'; r.style.background=''; });
           row.style.borderColor='var(--lx-azul-primario)'; row.style.background='var(--lx-info-bg)';
@@ -423,57 +468,97 @@ export async function montar(container) {
         row.setAttribute('data-mb', m.id);
         row.append(
           el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none` }, ini),
-          el('div', { style: 'flex:1' }, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `Online · ${m.carga || 0} entrega(s)`)));
+          el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `Online · ${m.carga||0} entrega(s)`)));
         mbListaWrap.append(row);
       });
-      if (!mbs.filter(m => m.online).length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:6px 0' }, 'Nenhum online.'));
+      if (!mbs.filter(m=>m.online).length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:4px 0' }, 'Nenhum motoboy online.'));
     } catch {}
   })();
 
-  const msgCriar = el('div', { style: 'font-size:12px;min-height:16px;font-weight:600;text-align:center' });
+  const msgCriar = el('div', { style: 'font-size:12px;min-height:16px;font-weight:600;text-align:center;margin-top:6px' });
   const btnCriar = el('button', { style: 'width:100%;padding:13px;background:var(--lx-azul-primario);color:#fff;border:none;border-radius:var(--lx-raio-sm);font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px', onClick: criarEntrega },
     el('span', { html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>` }), 'Solicitar entrega');
 
+  // FIX 1+2+3: criar entrega sem congelar, zerar form, ir para ativas
   async function criarEntrega() {
     const coleta = buscaColeta.obterValor();
     if (!coleta?.lat) { toast('Confirme o endereço de coleta', 'erro'); return; }
     const destinos = _pontos.map(p => {
       const v = p.obterBusca().obterValor();
       const d = p.obterDados();
-      return v ? { endereco: v.label || v.apelido || v.endereco_completo, lat: v.lat, lng: v.lng, nome_fantasia: d.nome_fantasia, numero_nf: d.numero_nf, complemento: d.complemento, observacoes: d.observacoes, telefone: d.telefone } : null;
+      if (!v?.lat) return null;
+      return { endereco: v.label || v.apelido || v.endereco_completo, lat: v.lat, lng: v.lng, nome_fantasia: d.nome_fantasia, numero_nf: d.numero_nf, complemento: d.complemento, observacoes: d.observacoes, telefone: d.telefone };
     }).filter(Boolean);
     if (!destinos.length) { toast('Confirme ao menos um destino', 'erro'); return; }
     if (!modoAuto.val && !mbId.val) { toast('Selecione um motoboy ou modo automático', 'erro'); return; }
-    btnCriar.disabled = true; msgCriar.style.color = 'var(--lx-tinta-2)'; msgCriar.textContent = 'Criando…';
+
+    // FIX 1: desabilitar só o botão, não congelar a tela
+    btnCriar.disabled = true;
+    btnCriar.textContent = 'Criando…';
+    msgCriar.style.color = 'var(--lx-tinta-2)';
+    msgCriar.textContent = '';
+
     try {
-      const r = await post('/entregas', { coleta: { endereco: coleta.label || coleta.apelido || coleta.endereco_completo, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
-      msgCriar.style.color = 'var(--lx-ok)'; msgCriar.textContent = '✓ Entrega criada: ' + (r.protocolo || '');
-      toast('Entrega ' + r.protocolo + ' criada!', 'ok');
-      // Trocar para aba ativas
-      setTimeout(() => trocarAba('ativas'), 1500);
-    } catch (e) { msgCriar.style.color = 'var(--lx-erro)'; msgCriar.textContent = e.message; }
-    finally { btnCriar.disabled = false; }
+      const r = await post('/entregas', {
+        coleta: { endereco: coleta.label || coleta.apelido || coleta.endereco_completo, lat: coleta.lat, lng: coleta.lng },
+        destinos,
+        motoboy_id: !modoAuto.val ? mbId.val : undefined,
+      });
+
+      toast('✓ ' + r.protocolo + ' criada!', 'ok');
+
+      // FIX 2: zerar o formulário completamente
+      buscaColeta.resetar();
+      // Remover pontos extras e resetar o primeiro
+      while (_pontos.length > 1) {
+        const ultimo = _pontos.pop();
+        pontosWrap.removeChild(ultimo);
+      }
+      _pontos[0]?.resetar();
+      mbId.val = null;
+      modoAuto.val = true;
+      btnAuto.click();
+      msgCriar.style.color = 'var(--lx-ok)';
+      msgCriar.textContent = '✓ ' + r.protocolo + ' criada com sucesso!';
+
+      // FIX 4: limpar mapa
+      if (_mapa) _mapa.limpar();
+      statsPill.style.display = 'none';
+
+      // FIX 3: recarregar e ir para ativas
+      await carregar();
+      setTimeout(() => {
+        trocarAba('ativas');
+        msgCriar.textContent = '';
+      }, 1200);
+
+    } catch (e) {
+      msgCriar.style.color = 'var(--lx-erro)';
+      msgCriar.textContent = e.message;
+    } finally {
+      btnCriar.disabled = false;
+      btnCriar.innerHTML = '';
+      btnCriar.append(
+        Object.assign(document.createElement('span'), { innerHTML: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>` }),
+        document.createTextNode(' Solicitar entrega'));
+    }
   }
 
   const sideNova = el('div', { style: 'display:flex;flex-direction:column;gap:0;flex:1' },
-    // Coleta
-    el('div', { style: 'padding:14px;border-bottom:1px solid var(--lx-linha)' },
-      el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' },
+    el('div', { style: 'padding:14px;border-bottom:0.5px solid var(--lx-linha)' },
+      el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:9px' },
         el('div', { style: 'width:26px;height:26px;border-radius:50%;background:var(--lx-azul-profundo);color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none' }, 'C'),
         el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, 'Ponto de coleta')),
       buscaColeta),
-    // Destinos
-    el('div', { style: 'padding:14px;border-bottom:1px solid var(--lx-linha);display:flex;flex-direction:column;gap:10px' },
-      pontosWrap, btnAddDestino),
-    // Motoboy
-    el('div', { style: 'padding:14px;border-bottom:1px solid var(--lx-linha)' },
-      el('b', { style: 'font-size:12.5px;font-weight:700;display:block;margin-bottom:10px;color:var(--lx-tinta)' }, 'Motoboy'),
+    el('div', { style: 'padding:14px;border-bottom:0.5px solid var(--lx-linha);display:flex;flex-direction:column;gap:10px' },
+      pontosWrap, btnAddDest),
+    el('div', { style: 'padding:14px;border-bottom:0.5px solid var(--lx-linha)' },
+      el('b', { style: 'font-size:12.5px;font-weight:700;display:block;margin-bottom:9px;color:var(--lx-tinta)' }, 'Motoboy'),
       el('div', { style: 'display:flex;gap:7px' }, btnAuto, btnManual),
       mbListaWrap),
-    // Botão
     el('div', { style: 'padding:14px;margin-top:auto' }, btnCriar, msgCriar));
 
-  // ── Sidebar: histórico ──
+  // ── Histórico (abas ativas/concluidas/canceladas) ──
   const sideHistorico = el('div', { style: 'display:none;overflow-y:auto;flex:1' });
 
   function renderHistorico() {
@@ -489,59 +574,50 @@ export async function montar(container) {
     }
 
     lista.forEach(e => {
-      const card = el('div', { style: 'padding:13px 14px;border-bottom:1px solid var(--lx-linha);cursor:pointer' });
-      card.addEventListener('mouseenter', () => card.style.background = 'var(--lx-superficie-2)');
-      card.addEventListener('mouseleave', () => card.style.background = '');
+      const card = el('div', { class: 'lx-hist-card' });
       card.addEventListener('click', () => {
+        // FIX 4: limpa antes de renderizar nova
         if (_mapa) _mapa.renderizarExistente(e.id);
       });
       card.append(
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:5px' },
           el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, e.protocolo || '—'),
           statusBadge(e.status)),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' },
           '📍 ' + (e.coleta_endereco?.split(',')[0] || '—')),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' },
           '🏁 ' + (e.destino_endereco?.split(',')[0] || '—')),
-        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-top:6px' },
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between' },
           el('span', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, fmtData(e.criado_em)),
-          el('div', { style: 'display:flex;gap:5px' },
+          el('div', { style: 'display:flex;gap:6px;align-items:center' },
             e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, '🏍 ' + e.motoboy_nome.split(' ')[0]) : el('span', {}),
             auth.pode('entregas.criar') && !['entregue','cancelada'].includes(e.status)
-              ? el('button', { style: 'font-size:11px;padding:3px 8px;border-radius:6px;background:var(--lx-erro-bg);color:var(--lx-erro);border:none;cursor:pointer;font-weight:700', onClick: async ev => {
+              ? el('button', { style: 'font-size:11px;padding:3px 9px;border-radius:6px;background:var(--lx-erro-bg);color:var(--lx-erro);border:none;cursor:pointer;font-weight:700', onClick: async ev => {
                   ev.stopPropagation();
                   try { await patch('/entregas/' + e.id + '/cancelar', {}); toast('Cancelada.', 'ok'); carregar(); }
                   catch (err) { toast(err.message, 'erro'); }
-                }}, 'Cancelar') : el('span', {}))));
+                }}, 'Cancelar')
+              : el('span', {}))));
       sideHistorico.append(card);
     });
   }
 
-  // ── Mapa div ──
-  const mapaDiv = el('div', { style: 'width:100%;height:100%' });
-  const statsEl = el('div', { class: 'lx-mapa-stats', style: 'display:none' },
-    el('div', { class: 'lx-mapa-stat' }, el('label', {}, 'Distância'), statDist),
-    el('div', { class: 'lx-mapa-stat' }, el('label', {}, 'Tempo est.'), statTempo),
-    el('div', { class: 'lx-mapa-stat' }, el('label', {}, 'Paradas'), el('b', { id: 'lx-paradas', style: 'font-size:16px;font-weight:700;color:var(--lx-tinta)' }, '1')));
+  function trocarAba(id) {
+    abaAtiva.val = id;
+    Object.entries(tabEls).forEach(([k, t]) => t.classList.toggle('on', k === id));
+    sideNova.style.display = id === 'nova' ? 'flex' : 'none';
+    sideHistorico.style.display = id !== 'nova' ? 'block' : 'none';
 
-  const mapaWrap = el('div', { class: 'lx-ent-mapa' }, mapaDiv, statsEl);
+    // FIX 4: limpar mapa ao trocar para aba nova
+    if (id === 'nova' && _mapa) {
+      _mapa.limpar();
+      statsPill.style.display = 'none';
+      setTimeout(() => _mapa.invalidar(), 50);
+    }
+    if (id !== 'nova') renderHistorico();
+  }
 
-  // ── Layout completo ──
-  const body = el('div', { class: 'lx-ent-body' },
-    el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico),
-    mapaWrap);
-
-  const shell = el('div', { class: 'lx-ent-shell' }, abasEl, body);
-  container.append(casca('Entregas', shell, 'Coleta e destinos — rota otimizada automaticamente'));
-
-  // Iniciar mapa
-  setTimeout(async () => {
-    _mapa = criarMapaInstance(mapaDiv);
-    await _mapa.init();
-  }, 100);
-
-  // Atualizar mapa quando endereços mudam
-  let _mapaTimer = null;
+  // Atualizar mapa com debounce
   async function atualizarMapa() {
     clearTimeout(_mapaTimer);
     _mapaTimer = setTimeout(async () => {
@@ -550,20 +626,33 @@ export async function montar(container) {
       const destinos = _pontos.map(p => p.obterBusca().obterValor()).filter(Boolean);
       if (!coleta?.lat && !destinos.length) return;
       const r = await _mapa.renderizar(coleta, destinos);
-      if (r) {
+      if (r?.distanciaKm) {
         statDist.textContent = r.distanciaKm + ' km';
         statTempo.textContent = r.duracaoMin + ' min';
-        statsEl.style.display = 'flex';
-        const par = document.getElementById('lx-paradas');
-        if (par) par.textContent = String(destinos.length);
+        statParadas.textContent = String(destinos.length);
+        statsPill.style.display = 'block';
       }
-    }, 400);
+    }, 500);
   }
 
-  // Carregar entregas
   async function carregar() {
-    try { _entregas = await get('/entregas'); renderHistorico(); }
+    try { _entregas = await get('/entregas'); if (abaAtiva.val !== 'nova') renderHistorico(); }
     catch {}
   }
+
+  // Montar
+  const body = el('div', { class: 'lx-ent-body' },
+    el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico),
+    mapaWrap);
+
+  const shell = el('div', { class: 'lx-ent-shell' }, abasEl, body);
+  container.append(casca('Entregas', shell, 'Coleta e destinos — rota otimizada automaticamente'));
+
+  // Iniciar mapa depois do DOM
+  setTimeout(async () => {
+    _mapa = criarMapaInstance(mapaDiv);
+    await _mapa.init();
+  }, 150);
+
   carregar();
 }
