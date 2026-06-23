@@ -3,46 +3,48 @@ import { el } from '../core/ui.js';
 import { get } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
-// Coordenadas aproximadas das capitais/cidades principais no viewBox 500x480 do mapa
+// Coordenadas reais (lat/lng) das principais cidades brasileiras
 const CIDADES_COORDS = {
-  'salvador':        { x: 328, y: 255 },
-  'feira de santana':{ x: 316, y: 248 },
-  'são paulo':       { x: 274, y: 348 },
-  'campinas':        { x: 268, y: 342 },
-  'rio de janeiro':  { x: 304, y: 342 },
-  'belo horizonte':  { x: 286, y: 326 },
-  'recife':          { x: 358, y: 226 },
-  'fortaleza':       { x: 348, y: 198 },
-  'manaus':          { x: 175, y: 110 },
-  'belém':           { x: 270, y: 120 },
-  'porto alegre':    { x: 218, y: 413 },
-  'curitiba':        { x: 248, y: 390 },
-  'florianópolis':   { x: 255, y: 400 },
-  'goiânia':         { x: 248, y: 278 },
-  'brasília':        { x: 262, y: 262 },
-  'natal':           { x: 368, y: 210 },
-  'joão pessoa':     { x: 362, y: 218 },
-  'maceió':          { x: 348, y: 242 },
-  'aracaju':         { x: 338, y: 248 },
-  'teresina':        { x: 318, y: 188 },
-  'são luís':        { x: 288, y: 162 },
-  'palmas':          { x: 268, y: 200 },
-  'porto velho':     { x: 155, y: 168 },
-  'rio branco':      { x: 138, y: 188 },
-  'boa vista':       { x: 205, y: 68 },
-  'macapá':          { x: 268, y: 85 },
-  'campo grande':    { x: 232, y: 320 },
-  'cuiabá':          { x: 215, y: 280 },
-  'vitória':         { x: 316, y: 318 },
+  'salvador':          [-12.9714, -38.5014],
+  'feira de santana':  [-12.2664, -38.9663],
+  'são paulo':         [-23.5505, -46.6333],
+  'campinas':          [-22.9056, -47.0608],
+  'rio de janeiro':    [-22.9068, -43.1729],
+  'belo horizonte':    [-19.9167, -43.9345],
+  'recife':            [-8.0578,  -34.8829],
+  'fortaleza':         [-3.7172,  -38.5433],
+  'manaus':            [-3.1019,  -60.0250],
+  'belém':             [-1.4558,  -48.5044],
+  'porto alegre':      [-30.0346, -51.2177],
+  'curitiba':          [-25.4284, -49.2733],
+  'florianópolis':     [-27.5954, -48.5480],
+  'goiânia':           [-16.6869, -49.2648],
+  'brasília':          [-15.7801, -47.9292],
+  'natal':             [-5.7945,  -35.2110],
+  'joão pessoa':       [-7.1195,  -34.8450],
+  'maceió':            [-9.6658,  -35.7350],
+  'aracaju':           [-10.9472, -37.0731],
+  'teresina':          [-5.0920,  -42.8038],
+  'são luís':          [-2.5297,  -44.3028],
+  'palmas':            [-10.1837, -48.3336],
+  'porto velho':       [-8.7612,  -63.9004],
+  'rio branco':        [-9.9754,  -67.8249],
+  'boa vista':         [2.8235,   -60.6758],
+  'macapá':            [0.0349,   -51.0694],
+  'campo grande':      [-20.4697, -54.6201],
+  'cuiabá':            [-15.5989, -56.0949],
+  'vitória':           [-20.3155, -40.3128],
+  'camaçari':          [-12.6997, -38.3247],
+  'lauro de freitas':  [-12.8975, -38.3303],
 };
 
 function coordsParaCliente(c) {
-  const cidade = (c.cidade || c.razao_social || '').toLowerCase().trim();
+  const texto = (c.cidade || c.razao_social || c.nome_fantasia || '').toLowerCase();
   for (const [key, coords] of Object.entries(CIDADES_COORDS)) {
-    if (cidade.includes(key)) return coords;
+    if (texto.includes(key)) return coords;
   }
-  // fallback: posição aleatória mas dentro do Brasil
-  return { x: 220 + Math.random() * 80, y: 220 + Math.random() * 80 };
+  // fallback: centro do Brasil com pequeno offset aleatório
+  return [-14 + (Math.random() - 0.5) * 8, -50 + (Math.random() - 0.5) * 10];
 }
 
 function iniciais(nome) {
@@ -56,204 +58,147 @@ const CORES_AV = [
   { bg: '#E1F5EE', cor: '#0F6E56' },
   { bg: '#FAEEDA', cor: '#854F0B' },
   { bg: '#FAECE7', cor: '#993C1D' },
-  { bg: '#E1F5EE', cor: '#0F6E56' },
+  { bg: '#ede9fb', cor: '#6b4fc9' },
 ];
 
-// ---- Dashboard Super Admin ----
 async function dashAdmin(content) {
-  // Estrutura base
-  const countEl = el('div', { style: 'font-size:26px;font-weight:500;color:var(--lx-tinta);line-height:1' }, '…');
+  const countEl = el('div', { style: 'font-size:26px;font-weight:800;color:var(--lx-tinta);line-height:1' }, '…');
   const lblEl = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:3px' }, 'clientes ativos');
 
   const pill = el('div', { style: `
-    display:inline-flex;align-items:center;gap:6px;
-    font-size:11px;font-weight:600;color:var(--lx-ok);
-    background:var(--lx-ok-bg);padding:4px 10px;
-    border-radius:var(--lx-raio-pill)
+    display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+    color:var(--lx-ok);background:var(--lx-ok-bg);padding:4px 12px;border-radius:var(--lx-raio-pill)
   ` },
-    el('span', { style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-ok);animation:lx-pulse 1.8s infinite;display:inline-block' }),
+    el('span', { id: 'lx-live-dot', style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-ok);display:inline-block' }),
     'Ao vivo');
 
-  const svgWrap = el('div', { style: 'position:relative' });
-  const tooltip = el('div', { style: `
-    position:absolute;background:var(--lx-superficie);
-    border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);
-    padding:10px 13px;font-size:12px;pointer-events:none;
-    display:none;z-index:10;min-width:160px;
-    box-shadow:var(--lx-sombra-sm)
-  ` });
-  svgWrap.append(tooltip);
+  const mapDiv = el('div', { id: 'lx-mapa-brasil', style: 'width:100%;height:420px' });
 
-  const listaWrap = el('div', { style: 'display:flex;flex-direction:column;overflow-y:auto;flex:1' });
-
-  const mapaCard = el('div', { class: 'lx-card', style: 'flex:1;overflow:hidden' },
+  const mapaCard = el('div', { class: 'lx-card', style: 'flex:1;overflow:hidden;min-width:0' },
     el('div', { style: 'padding:12px 16px;border-bottom:1px solid var(--lx-linha);display:flex;align-items:center;justify-content:space-between' },
-      el('div', { style: 'display:flex;align-items:baseline;gap:12px' }, countEl, lblEl),
+      el('div', { style: 'display:flex;align-items:baseline;gap:10px' }, countEl, lblEl),
       pill),
-    svgWrap);
+    mapDiv);
 
-  const lateralCard = el('div', { class: 'lx-card', style: 'width:240px;display:flex;flex-direction:column;overflow:hidden' },
-    el('div', { style: 'padding:12px 14px;border-bottom:1px solid var(--lx-linha);font-size:13px;font-weight:700;color:var(--lx-tinta)' }, 'Clientes ativos'),
+  const listaWrap = el('div', { style: 'display:flex;flex-direction:column;overflow-y:auto;max-height:420px' });
+
+  const lateralCard = el('div', { class: 'lx-card', style: 'width:240px;flex:none;display:flex;flex-direction:column;overflow:hidden' },
+    el('div', { style: 'padding:12px 14px;border-bottom:1px solid var(--lx-linha);font-size:13px;font-weight:800;color:var(--lx-tinta)' }, 'Clientes ativos'),
     listaWrap);
 
   content.append(
     el('div', { style: 'display:flex;gap:14px;align-items:stretch' }, mapaCard, lateralCard)
   );
 
-  // Carregar dados
-  try {
-    const empresas = await get('/empresas').catch(() => []);
-    const ativos = empresas.filter(e => e.ativo !== false);
-    countEl.textContent = ativos.length;
+  // Injetar CSS do Leaflet
+  if (!document.getElementById('leaflet-css')) {
+    const link = document.createElement('link');
+    link.id = 'leaflet-css';
+    link.rel = 'stylesheet';
+    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.append(link);
+  }
 
-    // Montar SVG do mapa
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 500 480');
-    svg.style.cssText = 'width:100%;height:380px;display:block;background:#EAF3DE';
+  // Carregar dados e Leaflet em paralelo
+  const [empresas] = await Promise.all([
+    get('/empresas').catch(() => []),
+    new Promise((resolve, reject) => {
+      if (window.L) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.append(s);
+    }),
+  ]);
 
-    // Silhueta Brasil
-    const path = document.createElementNS(ns, 'path');
-    path.setAttribute('d', 'M180 30 L220 25 L260 30 L290 45 L310 60 L330 55 L350 70 L360 90 L370 110 L375 135 L370 160 L355 180 L360 200 L375 220 L385 245 L390 270 L380 295 L365 315 L350 330 L340 350 L330 370 L315 385 L295 395 L275 405 L255 415 L235 420 L215 415 L195 405 L175 395 L160 380 L145 360 L135 340 L128 318 L125 295 L130 270 L140 248 L148 225 L145 200 L135 178 L125 158 L118 135 L115 110 L118 88 L130 68 L150 50 Z');
-    path.setAttribute('fill', '#C0DD97');
-    path.setAttribute('stroke', '#639922');
-    path.setAttribute('stroke-width', '1.2');
-    svg.append(path);
+  const ativos = empresas.filter(e => e.ativo !== false);
+  countEl.textContent = ativos.length;
 
-    // Linhas divisórias de região
-    [
-      'M118 135 L375 135',
-      'M148 225 L385 245',
-      'M128 318 L380 295',
-      'M160 380 L315 385',
-    ].forEach(d => {
-      const l = document.createElementNS(ns, 'path');
-      l.setAttribute('d', d);
-      l.setAttribute('stroke', '#97C459');
-      l.setAttribute('stroke-width', '0.5');
-      l.setAttribute('stroke-dasharray', '4 4');
-      l.setAttribute('opacity', '0.5');
-      l.setAttribute('fill', 'none');
-      svg.append(l);
+  // Montar lista lateral
+  listaWrap.innerHTML = '';
+  ativos.forEach((c, i) => {
+    const { bg, cor } = CORES_AV[i % CORES_AV.length];
+    listaWrap.append(el('div', { style: `
+      display:flex;align-items:center;gap:10px;padding:10px 14px;
+      border-bottom:1px solid var(--lx-linha);cursor:pointer
+    ` },
+      el('div', { style: `width:28px;height:28px;border-radius:7px;background:${bg};color:${cor};display:grid;place-items:center;font-size:11px;font-weight:800;flex:none` },
+        iniciais(c.razao_social || c.nome_fantasia)),
+      el('div', { style: 'flex:1;min-width:0' },
+        el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
+          c.razao_social || c.nome_fantasia || '—'),
+        el('div', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${c.total_motoboys || 0} motoboys`))));
+  });
+
+  if (!ativos.length) {
+    listaWrap.append(el('div', { style: 'padding:24px;text-align:center;color:var(--lx-tinta-2);font-size:13px' },
+      'Nenhum cliente cadastrado ainda.'));
+  }
+
+  // Inicializar mapa Leaflet
+  const L = window.L;
+  const map = L.map('lx-mapa-brasil', {
+    center: [-14.235, -51.9253],
+    zoom: 4,
+    zoomControl: true,
+    scrollWheelZoom: false,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18,
+  }).addTo(map);
+
+  // Pins dos clientes
+  ativos.forEach((c, i) => {
+    const coords = coordsParaCliente(c);
+    const mb = c.total_motoboys || 0;
+    const corPin = mb > 10 ? '#1D9E75' : mb > 0 ? '#185FA5' : '#BA7517';
+    const r = Math.min(14, Math.max(8, 8 + mb * 0.4));
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:${r * 2}px;height:${r * 2}px;border-radius:50%;
+        background:${corPin};border:2.5px solid #fff;
+        box-shadow:0 2px 6px rgba(0,0,0,.25);
+        display:flex;align-items:center;justify-content:center;
+        cursor:pointer;
+      "></div>`,
+      iconSize: [r * 2, r * 2],
+      iconAnchor: [r, r],
     });
 
-    // Labels de região
-    [
-      { x: 230, y: 105, t: 'Norte' },
-      { x: 338, y: 210, t: 'Nordeste' },
-      { x: 245, y: 278, t: 'Centro-Oeste' },
-      { x: 292, y: 348, t: 'Sudeste' },
-      { x: 202, y: 408, t: 'Sul' },
-    ].forEach(({ x, y, t }) => {
-      const txt = document.createElementNS(ns, 'text');
-      txt.setAttribute('x', x); txt.setAttribute('y', y);
-      txt.setAttribute('text-anchor', 'middle');
-      txt.setAttribute('font-size', '9.5');
-      txt.setAttribute('fill', '#3B6D11');
-      txt.setAttribute('opacity', '0.6');
-      txt.setAttribute('font-family', 'Inter, sans-serif');
-      txt.textContent = t;
-      svg.append(txt);
-    });
+    const nome = c.razao_social || c.nome_fantasia || '—';
+    const cidade = c.cidade || '';
 
-    // Legenda
-    const legRect = document.createElementNS(ns, 'rect');
-    legRect.setAttribute('x', '14'); legRect.setAttribute('y', '334');
-    legRect.setAttribute('width', '122'); legRect.setAttribute('height', '58');
-    legRect.setAttribute('rx', '8'); legRect.setAttribute('fill', 'white');
-    legRect.setAttribute('opacity', '0.9'); legRect.setAttribute('stroke', '#B5D4F4');
-    legRect.setAttribute('stroke-width', '0.5');
-    svg.append(legRect);
-    [
-      { y: 350, fill: '#185FA5', t: 'Ativo · operando' },
-      { y: 368, fill: '#1D9E75', t: 'Ativo · em crescimento' },
-      { y: 383, fill: '#BA7517', t: 'Atenção · baixo volume' },
-    ].forEach(({ y, fill, t }) => {
-      const c = document.createElementNS(ns, 'circle');
-      c.setAttribute('cx', '26'); c.setAttribute('cy', y); c.setAttribute('r', '5');
-      c.setAttribute('fill', fill); svg.append(c);
-      const tx = document.createElementNS(ns, 'text');
-      tx.setAttribute('x', '36'); tx.setAttribute('y', y + 4);
-      tx.setAttribute('font-size', '10'); tx.setAttribute('fill', '#042C53');
-      tx.setAttribute('font-family', 'Inter, sans-serif');
-      tx.textContent = t; svg.append(tx);
-    });
-
-    // Pins dos clientes
-    ativos.forEach((c, i) => {
-      const coords = coordsParaCliente(c);
-      const cor = c.total_motoboys > 10 ? '#1D9E75' : c.total_motoboys > 0 ? '#185FA5' : '#BA7517';
-      const r = Math.min(8, Math.max(4, 4 + (c.total_motoboys || 0) * 0.3));
-
-      const anel = document.createElementNS(ns, 'circle');
-      anel.setAttribute('cx', coords.x); anel.setAttribute('cy', coords.y);
-      anel.setAttribute('r', r + 5); anel.setAttribute('fill', cor);
-      anel.setAttribute('opacity', '0.15'); svg.append(anel);
-
-      const pin = document.createElementNS(ns, 'circle');
-      pin.setAttribute('cx', coords.x); pin.setAttribute('cy', coords.y);
-      pin.setAttribute('r', r); pin.setAttribute('fill', cor);
-      pin.setAttribute('stroke', '#fff'); pin.setAttribute('stroke-width', '2');
-      pin.style.cursor = 'pointer';
-
-      pin.addEventListener('mouseenter', () => {
-        const wr = svgWrap.getBoundingClientRect();
-        const pr = pin.getBoundingClientRect();
-        tooltip.innerHTML = `
-          <div style="font-weight:700;font-size:13px;color:var(--lx-tinta);margin-bottom:3px">${c.razao_social || c.nome_fantasia || '—'}</div>
-          <div style="font-size:11px;color:var(--lx-tinta-2);margin-bottom:8px">${c.cidade || 'Brasil'}</div>
-          <div style="display:flex;gap:14px">
+    L.marker(coords, { icon })
+      .addTo(map)
+      .bindPopup(`
+        <div style="font-family:Inter,sans-serif;min-width:140px">
+          <div style="font-weight:700;font-size:13px;color:#0F2740;margin-bottom:3px">${nome}</div>
+          ${cidade ? `<div style="font-size:11px;color:#486485;margin-bottom:6px">${cidade}</div>` : ''}
+          <div style="display:flex;gap:12px">
             <div>
-              <div style="font-size:10px;color:var(--lx-tinta-3)">Motoboys</div>
-              <div style="font-size:16px;font-weight:700;color:var(--lx-tinta)">${c.total_motoboys || 0}</div>
+              <div style="font-size:10px;color:#8AA2BE">Motoboys</div>
+              <div style="font-size:16px;font-weight:700;color:#0F2740">${mb}</div>
             </div>
-          </div>`;
-        tooltip.style.display = 'block';
-        tooltip.style.left = (pr.left - wr.left + 12) + 'px';
-        tooltip.style.top = (pr.top - wr.top - 90) + 'px';
-      });
-      pin.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-      svg.append(pin);
-    });
+          </div>
+        </div>`, { maxWidth: 200 });
+  });
 
-    svgWrap.append(svg);
-
-    // Lista lateral
-    listaWrap.innerHTML = '';
-    ativos.forEach((c, i) => {
-      const { bg, cor } = CORES_AV[i % CORES_AV.length];
-      const mb = c.total_motoboys || 0;
-      const uf = c.uf || (c.cidade ? c.cidade.split('·')[1]?.trim() : '') || '';
-      listaWrap.append(el('div', { style: `
-        display:flex;align-items:center;gap:10px;padding:10px 14px;
-        border-bottom:1px solid var(--lx-linha);cursor:pointer;
-        transition:background .12s
-      `,
-        onMouseenter: function() { this.style.background = 'var(--lx-superficie-2)'; },
-        onMouseleave: function() { this.style.background = ''; },
-      },
-        el('div', { style: `width:28px;height:28px;border-radius:7px;background:${bg};color:${cor};display:grid;place-items:center;font-size:11px;font-weight:700;flex:none` },
-          iniciais(c.razao_social || c.nome_fantasia)),
-        el('div', { style: 'flex:1;min-width:0' },
-          el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
-            c.razao_social || c.nome_fantasia || '—'),
-          el('div', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${mb} motoboys`)),
-        uf ? el('span', { style: `font-size:10px;font-weight:700;padding:3px 7px;border-radius:var(--lx-raio-pill);background:var(--lx-info-bg);color:var(--lx-azul-primario)` }, uf) : el('span', {})
-      ));
-    });
-
-    if (!ativos.length) {
-      listaWrap.append(el('div', { style: 'padding:24px;text-align:center;color:var(--lx-tinta-2);font-size:13px' },
-        'Nenhum cliente cadastrado ainda.'));
-    }
-
-  } catch {
-    svgWrap.append(el('div', { style: 'padding:24px;color:var(--lx-tinta-2);font-size:13px' }, 'Erro ao carregar dados.'));
+  // Animação do dot ao vivo
+  if (!document.getElementById('lx-pulse-style')) {
+    const s = document.createElement('style');
+    s.id = 'lx-pulse-style';
+    s.textContent = `@keyframes lx-pulse{0%,100%{opacity:1}50%{opacity:.3}}#lx-live-dot{animation:lx-pulse 1.8s infinite}`;
+    document.head.append(s);
   }
 }
 
-// ---- Dashboard Cliente ----
 async function dashCliente(content) {
+  const { secHeader, estadoVazio, statusBadge, icones } = await import('../core/ui.js');
+
   const grade = el('div', { class: 'lx-grid-kpi' });
   const listaAtivas = el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Carregando…');
   const lateralAtivas = el('div', { class: 'lx-card lx-card-pad', style: 'flex:1;min-width:0' },
@@ -262,7 +207,7 @@ async function dashCliente(content) {
       el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, '…')),
     listaAtivas);
 
-  content.append(grade, lateralAtivas);
+  content.append(grade, secHeader('Em andamento'), lateralAtivas);
 
   try {
     const [entregas, motoboys] = await Promise.all([
@@ -289,9 +234,8 @@ async function dashCliente(content) {
     lateralAtivas.querySelector('span').textContent = `${emAndamento.length} ativas`;
     listaAtivas.innerHTML = '';
     if (!emAndamento.length) {
-      listaAtivas.textContent = 'Nenhuma entrega em andamento.';
+      listaAtivas.append(estadoVazio('entregas', 'Nenhuma entrega em andamento', ''));
     } else {
-      const { statusBadge } = await import('../core/ui.js');
       emAndamento.slice(0, 8).forEach(e => {
         listaAtivas.append(el('div', { style: 'display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--lx-linha)' },
           el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '—'),
@@ -305,13 +249,6 @@ async function dashCliente(content) {
 }
 
 export async function montar(container) {
-  if (!document.getElementById('lx-pulse-style')) {
-    const s = document.createElement('style');
-    s.id = 'lx-pulse-style';
-    s.textContent = `@keyframes lx-pulse{0%{box-shadow:0 0 0 0 rgba(31,157,107,.5)}70%{box-shadow:0 0 0 8px rgba(31,157,107,0)}100%{box-shadow:0 0 0 0 rgba(31,157,107,0)}}`;
-    document.head.append(s);
-  }
-
   const isAdmin = auth.acessoAtual().perfil === 'super_admin';
   const content = el('div', {});
   container.append(casca('Painel', content,
