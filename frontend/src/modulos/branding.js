@@ -63,6 +63,7 @@ export async function montar(container) {
 
     const nomeInp = el('input', { class: 'lx-input', value: dados.nome_exibicao || '', placeholder: 'Nome exibido no painel do cliente' });
     const logoInp = el('input', { class: 'lx-input', value: dados.logo_url || '', placeholder: 'https://…/logo.svg' });
+    const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
 
     // Preview ao vivo
     const preview = el('div', { class: 'lx-card', style: 'overflow:hidden' });
@@ -109,6 +110,10 @@ export async function montar(container) {
     }
 
     nomeInp.addEventListener('input', pintarPreview);
+    subdominioInp.addEventListener('input', () => {
+      const prev = document.getElementById('lx-sub-preview');
+      if (prev) prev.textContent = subdominioInp.value.trim() || 'pecasexpress';
+    });
     pintarPreview();
 
     function pickerCor(rotulo, chave) {
@@ -131,11 +136,13 @@ export async function montar(container) {
       msg.style.color = 'var(--lx-tinta-2)';
       msg.textContent = 'Salvando…';
       try {
+        const sub = subdominioInp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
         await put('/branding/', {
           ...valores,
-          empresa_id: empresaId,  // fallback caso X-Empresa-Id não chegue
+          empresa_id: empresaId,
           nome_exibicao: nomeInp.value.trim() || undefined,
           logo_url: logoInp.value.trim() || undefined,
+          subdominio: sub || undefined,
         }, { empresaId });
         msg.style.color = 'var(--lx-ok)';
         msg.textContent = 'Marca salva. Vale no próximo acesso do cliente.';

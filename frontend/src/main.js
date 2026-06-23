@@ -42,8 +42,21 @@ async function boot() {
   if (window.LOGIX_API) api.setBase(window.LOGIX_API);
   router.definirSaida(app);
 
-  // Boot sem auth: tema padrão Logix sempre (login, etc.)
-  restaurarTemaPadrao();
+  // Boot: tenta resolver tema pelo host (para domínios white-label como pecasexpress.logix.com.br)
+  // Em logix-ochre.vercel.app não resolve nada e cai no padrão — comportamento correto
+  const hostAtual = window.location.hostname;
+  try {
+    const resp = await fetch(`${BASE}/branding?host=${encodeURIComponent(hostAtual)}`);
+    const temaHost = await resp.json();
+    if (temaHost && temaHost.empresa_id) {
+      // É um domínio white-label — aplica o tema do cliente já na tela de login
+      aplicarTema(temaHost);
+    } else {
+      restaurarTemaPadrao();
+    }
+  } catch {
+    restaurarTemaPadrao();
+  }
 
   router.rota('/login',                () => import('./modulos/login.js'));
   router.rota('/',                     () => import('./modulos/dashboard.js'));
