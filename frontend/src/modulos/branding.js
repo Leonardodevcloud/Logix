@@ -133,6 +133,7 @@ export async function montar(container) {
       try {
         await put('/branding/', {
           ...valores,
+          empresa_id: empresaId,  // fallback caso X-Empresa-Id não chegue
           nome_exibicao: nomeInp.value.trim() || undefined,
           logo_url: logoInp.value.trim() || undefined,
         }, { empresaId });

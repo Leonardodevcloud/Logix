@@ -40,7 +40,7 @@ function initBrandingRoutes() {
   router.put('/', verificarToken, resolverTenant, async (req, res, next) => {
     try {
       const empresaId = req.usuario.perfil === PERFIS.SUPER_ADMIN
-        ? (req.empresaId || req.body.empresa_id)
+        ? (req.headers['x-empresa-id'] || req.empresaId || req.body.empresa_id || null)
         : req.usuario.empresaId;
       if (!empresaId) throw AppError.validacao('Empresa não informada');
       res.json(await service.definir({ empresaId, dados: req.body, usuarioId: req.usuario.id, ip: req.ip }));
