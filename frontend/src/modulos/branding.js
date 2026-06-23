@@ -51,8 +51,7 @@ export async function montar(container) {
 
     let dados = {};
     try {
-      // O super_admin passa X-Empresa-Id via header para buscar branding de um cliente específico
-      dados = await get('/branding/completo', { empresaId }).catch(() => ({}));
+      const _res = await get('/branding/completo', { empresaId }).catch(() => null); dados = _res || {};
     } catch { dados = {}; }
 
     const valores = {
