@@ -44,6 +44,21 @@ function initMotoboysRoutes() {
     } catch (e) { next(e); }
   });
 
+
+  // PATCH /motoboys/:id/reativar
+  router.patch('/:id/reativar', exigirPermissao('motoboys.gerenciar'), async (req, res, next) => {
+    try {
+      res.json(await service.reativar({ empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip }));
+    } catch (e) { next(e); }
+  });
+
+  // DELETE /motoboys/:id — desativa (exclusão lógica)
+  router.delete('/:id', exigirPermissao('motoboys.gerenciar'), async (req, res, next) => {
+    try {
+      res.json(await service.desativar({ empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip }));
+    } catch (e) { next(e); }
+  });
+
   return router;
 }
 

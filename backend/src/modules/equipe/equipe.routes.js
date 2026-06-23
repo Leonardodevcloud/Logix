@@ -18,6 +18,12 @@ function initEquipeRoutes() {
     } catch (e) { next(e); }
   });
 
+  router.delete('/:id', async (req, res, next) => {
+    try {
+      res.json(await service.removerMembro({ empresaId: req.empresaId, membroId: req.params.id, usuarioId: req.usuario.id, ip: req.ip }));
+    } catch (e) { next(e); }
+  });
+
   router.patch('/:id', async (req, res, next) => {
     try {
       res.json(await service.atualizarMembro({ empresaId: req.empresaId, membroId: req.params.id, papelId: req.body.papel_id, ativo: req.body.ativo, usuarioId: req.usuario.id, ip: req.ip }));

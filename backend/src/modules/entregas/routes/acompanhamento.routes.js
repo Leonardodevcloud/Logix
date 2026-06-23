@@ -1,5 +1,6 @@
 const express = require('express');
 const { exigirTenant } = require('../../../middleware/tenant');
+const { exigirPermissao } = require('../../../middleware/permissoes');
 const { limiteRastreamento } = require('../../../middleware/rateLimit');
 const service = require('../entregas.service');
 
@@ -21,6 +22,17 @@ module.exports = function acompanhamentoRoutes() {
         lat: req.body.lat, lng: req.body.lng,
       });
       res.json(r);
+    } catch (e) { next(e); }
+  });
+
+
+  // PATCH /entregas/:id/cancelar
+  router.patch('/:id/cancelar', exigirTenant, async (req, res, next) => {
+    try {
+      res.json(await service.cancelarEntrega({
+        empresaId: req.empresaId, id: req.params.id,
+        motivo: req.body.motivo, usuarioId: req.usuario.id, ip: req.ip,
+      }));
     } catch (e) { next(e); }
   });
 

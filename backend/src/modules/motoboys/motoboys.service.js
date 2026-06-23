@@ -74,4 +74,26 @@ async function definirOnline({ empresaId, id, online }) {
   return rows[0];
 }
 
-module.exports = { listar, obter, criar, atualizar, definirOnline };
+module.exports = { listar, obter, criar, atualizar, definirOnline, desativar, reativar };
+
+// Desativação lógica (não apaga do banco)
+async function desativar({ empresaId, id, usuarioId, ip }) {
+  await obter({ empresaId, id });
+  const { rows } = await query(
+    `UPDATE motoboys SET status = 'inativo', online = false WHERE id = $1 AND empresa_id = $2 RETURNING id, status`,
+    [id, empresaId]
+  );
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.MOTOBOY, acao: 'desativar', detalhe: { id }, ip });
+  return rows[0];
+}
+
+// Reativar motoboy
+async function reativar({ empresaId, id, usuarioId, ip }) {
+  await obter({ empresaId, id });
+  const { rows } = await query(
+    `UPDATE motoboys SET status = 'ativo' WHERE id = $1 AND empresa_id = $2 RETURNING id, status`,
+    [id, empresaId]
+  );
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.MOTOBOY, acao: 'reativar', detalhe: { id }, ip });
+  return rows[0];
+}

@@ -189,6 +189,24 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
   }
 }
 
-module.exports = {
+module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, acompanhar, registrarPosicao, registrarProtocoloPonto,
 };
+
+async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
+  const { rows: ent } = await query(
+    `SELECT id, status, protocolo FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  if (['entregue', 'cancelada'].includes(ent[0].status))
+    throw AppError.validacao(`Entrega já está ${ent[0].status} — não pode ser cancelada`);
+  await query(
+    `UPDATE entregas SET status = 'cancelada', cancelada_em = now(), cancelado_por = $3, motivo_cancelamento = $4
+     WHERE id = $1 AND empresa_id = $2`,
+    [id, empresaId, usuarioId, motivo || null]
+  );
+  const { emitirParaEmpresa } = require('../../realtime/ws');
+  emitirParaEmpresa(empresaId, 'entrega.cancelada', { id, protocolo: ent[0].protocolo });
+  const { registrarAuditoria } = require('../../shared/auditLogger');
+  await registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'cancelar', detalhe: { id, motivo }, ip });
+  return { ok: true };
+}

@@ -53,4 +53,17 @@ async function atualizarMembro({ empresaId, membroId, papelId, ativo, usuarioId,
   return { ok: true };
 }
 
-module.exports = { listarEquipe, listarPapeis, criarMembro, atualizarMembro };
+module.exports = { listarEquipe, listarPapeis, criarMembro, atualizarMembro, removerMembro };
+
+async function removerMembro({ empresaId, membroId, usuarioId, ip }) {
+  // Não permite se for o próprio usuário
+  if (String(membroId) === String(usuarioId)) throw AppError.validacao('Você não pode remover a si mesmo');
+  const { rows } = await query(
+    `UPDATE usuarios SET ativo = false, atualizado_em = now()
+     WHERE id = $1 AND empresa_id = $2 AND perfil != 'super_admin' RETURNING id`,
+    [membroId, empresaId]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Membro não encontrado');
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.USUARIO, acao: 'remover_membro', detalhe: { membroId }, ip });
+  return { ok: true };
+}
