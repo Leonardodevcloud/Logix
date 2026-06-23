@@ -27,7 +27,7 @@ const PERMISSOES = {
 const TODAS_PERMISSOES = Object.values(PERMISSOES).flat();
 
 // Módulos habilitados por padrão ao criar um cliente (o master ajusta depois).
-const MODULOS_PADRAO = ['entregas', 'motoboys', 'rastreamento', 'marca'];
+const MODULOS_PADRAO = ['entregas', 'motoboys', 'rastreamento', 'filas', 'marca'];
 
 // Papéis-modelo (templates do sistema, empresa_id = NULL). O cliente usa ou clona/cria os seus.
 const TEMPLATES = [

@@ -14,6 +14,7 @@ function itensNav() {
   const itens = [{ rota: '/', rotulo: 'Painel' }];
   if (auth.temModulo('entregas') && auth.pode('entregas.ver')) itens.push({ rota: '/entregas', rotulo: 'Entregas' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver')) itens.push({ rota: '/motoboys', rotulo: 'Motoboys' });
+  if (auth.temModulo('filas') && auth.pode('filas.ver')) itens.push({ rota: '/filas', rotulo: 'Filas' });
   if (auth.temModulo('marca') && auth.pode('marca.ver')) itens.push({ rota: '/marca', rotulo: 'Marca' });
   if (auth.pode('usuarios.gerenciar')) itens.push({ rota: '/equipe', rotulo: 'Equipe' });
   return itens;
