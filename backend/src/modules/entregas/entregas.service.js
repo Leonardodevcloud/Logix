@@ -52,9 +52,9 @@ async function criarEntrega({ empresaId, criadoPor, coleta, destinos, distribuic
     for (const idx of ordem) {
       const d = destinos[idx], g = destinosGeo[idx];
       await cliente.query(
-        `INSERT INTO entregas_pontos (entrega_id, ordem, nome, endereco, lat, lng, telefone, observacoes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [entregaId, posicao++, d.nome || null, d.endereco, g.lat, g.lng, d.telefone || null, d.observacoes || null]
+        `INSERT INTO entregas_pontos (entrega_id, ordem, nome, endereco, lat, lng, telefone, observacoes, numero_nf, nome_fantasia, complemento)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [entregaId, posicao++, d.nome || null, d.endereco, g.lat, g.lng, d.telefone || null, d.observacoes || null, d.numero_nf || null, d.nome_fantasia || null, d.complemento || null]
       );
     }
     await cliente.query('COMMIT');

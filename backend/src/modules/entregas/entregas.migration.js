@@ -63,6 +63,9 @@ async function migrarColunasExtras() {
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS cancelado_por UUID REFERENCES usuarios(id)",
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS motivo_cancelamento TEXT",
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ",
+    "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS numero_nf TEXT",
+    "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS nome_fantasia TEXT",
+    "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS complemento TEXT",
   ];
   for (const sql of cols) {
     try { await query(sql); } catch {}
