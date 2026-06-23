@@ -84,8 +84,13 @@ async function listar({ empresaId, status, motoboyId }) {
   if (status) { params.push(status); cond.push(`status = $${params.length}`); }
   if (motoboyId) { params.push(motoboyId); cond.push(`motoboy_id = $${params.length}`); }
   const { rows } = await query(
-    `SELECT id, protocolo, motoboy_id, status, distancia_km, tempo_estimado_min, criado_em
-       FROM entregas WHERE ${cond.join(' AND ')} ORDER BY criado_em DESC LIMIT 200`,
+    `SELECT e.id, e.protocolo, e.motoboy_id, e.status, e.distancia_km, e.tempo_estimado_min,
+             e.coleta_endereco, e.criado_em, e.cancelada_em,
+             m.nome_completo AS motoboy_nome,
+             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
+       FROM entregas e
+       LEFT JOIN motoboys m ON m.id = e.motoboy_id
+       WHERE e.empresa_id = $1 ORDER BY e.criado_em DESC LIMIT 200`,
     params
   );
   return rows;

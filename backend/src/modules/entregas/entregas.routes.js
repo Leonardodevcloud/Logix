@@ -7,12 +7,14 @@ const lancamento = require('./routes/lancamento.routes');
 const concluidas = require('./routes/concluidas.routes');
 const acompanhamento = require('./routes/acompanhamento.routes');
 const protocolos = require('./routes/protocolos.routes');
+const geocode = require('./routes/geocode.routes');
 
 function initEntregasRoutes() {
   const router = express.Router();
   router.use(verificarToken, resolverTenant, exigirModulo('entregas'));
 
   // Ordem importa: rotas estáticas (/concluidas) antes das com parâmetro (/:id/...)
+  router.use('/', geocode());
   router.use('/', concluidas());
   router.use('/', lancamento());
   router.use('/', acompanhamento());
