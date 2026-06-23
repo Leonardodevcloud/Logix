@@ -14,6 +14,7 @@ async function initEnderecosSalvosTables() {
       uf           VARCHAR(2),
       cep          VARCHAR(9),
       uso_count    INT NOT NULL DEFAULT 0,
+      is_coleta_padrao BOOLEAN NOT NULL DEFAULT FALSE,
       criado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (empresa_id, apelido)

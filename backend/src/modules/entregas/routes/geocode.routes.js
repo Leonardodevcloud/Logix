@@ -44,7 +44,7 @@ module.exports = function geocodeRoutes() {
       let sql = `SELECT * FROM enderecos_salvos WHERE empresa_id = $1`;
       const params = [req.empresaId];
       if (q) { params.push(`%${q}%`); sql += ` AND (apelido ILIKE $${params.length} OR endereco_completo ILIKE $${params.length})`; }
-      sql += ` ORDER BY uso_count DESC, apelido LIMIT 20`;
+      sql += ` ORDER BY is_coleta_padrao DESC, uso_count DESC, apelido LIMIT 20`;
       const { rows } = await query(sql, params);
       res.json(rows);
     } catch (e) { next(e); }
@@ -53,17 +53,22 @@ module.exports = function geocodeRoutes() {
   // POST /entregas/enderecos-salvos — salvar novo endereço
   router.post('/enderecos-salvos', exigirTenant, exigirPermissao('entregas.criar'), async (req, res, next) => {
     try {
-      const { apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep } = req.body;
+      const { apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep, is_coleta_padrao } = req.body;
       if (!apelido || !endereco_completo) throw AppError.validacao('Apelido e endereço são obrigatórios');
+      // Se for coleta padrão, desmarcar o anterior primeiro
+      if (is_coleta_padrao) {
+        await query(`UPDATE enderecos_salvos SET is_coleta_padrao = false WHERE empresa_id = $1 AND is_coleta_padrao = true`, [req.empresaId]);
+      }
       const { rows } = await query(
-        `INSERT INTO enderecos_salvos (empresa_id, apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `INSERT INTO enderecos_salvos (empresa_id, apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep, is_coleta_padrao)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (empresa_id, apelido) DO UPDATE SET
            endereco_completo = EXCLUDED.endereco_completo, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
            bairro = EXCLUDED.bairro, cidade = EXCLUDED.cidade, uf = EXCLUDED.uf, cep = EXCLUDED.cep,
+           is_coleta_padrao = EXCLUDED.is_coleta_padrao,
            uso_count = enderecos_salvos.uso_count + 1, atualizado_em = now()
          RETURNING *`,
-        [req.empresaId, apelido.trim(), endereco_completo, lat || null, lng || null, bairro || null, cidade || null, uf || null, cep || null]
+        [req.empresaId, apelido.trim(), endereco_completo, lat || null, lng || null, bairro || null, cidade || null, uf || null, cep || null, !!is_coleta_padrao]
       );
       res.status(201).json(rows[0]);
     } catch (e) { next(e); }
