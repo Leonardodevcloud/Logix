@@ -1,10 +1,12 @@
 // Cliente HTTP: injeta Bearer, trata 401 com refresh automático (uma vez) e padroniza erros.
 let BASE = window.LOGIX_API || '/api/v1';
 let accessToken = null;
+let _bloqueioRefresh = false; // true quando impersonando — nunca renovar com cookie do master
 
 export function setBase(url) { BASE = url; }
 export function setToken(t) { accessToken = t; }
 export function getToken() { return accessToken; }
+export function bloquearRefresh(v) { _bloqueioRefresh = v; }
 
 async function bruto(metodo, caminho, { corpo, headers = {}, empresaId } = {}) {
   const h = { 'Content-Type': 'application/json', ...headers };
@@ -17,6 +19,8 @@ async function bruto(metodo, caminho, { corpo, headers = {}, empresaId } = {}) {
 }
 
 async function tentarRenovar() {
+  // Nunca renovar via cookie quando impersonando — o cookie é do master e derrubaria a sessão do cliente
+  if (_bloqueioRefresh) return false;
   try {
     const resp = await fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include' });
     if (!resp.ok) return false;
@@ -38,8 +42,8 @@ export async function req(metodo, caminho, opts = {}) {
   return dados;
 }
 
-export const get = (c, o) => req('GET', c, o);
-export const post = (c, corpo, o = {}) => req('POST', c, { ...o, corpo });
-export const put = (c, corpo, o = {}) => req('PUT', c, { ...o, corpo });
-export const patch = (c, corpo, o = {}) => req('PATCH', c, { ...o, corpo });
-export const del = (c, o) => req('DELETE', c, o);
+export const get   = (c, o)       => req('GET',    c, o);
+export const post  = (c, corpo, o = {}) => req('POST',   c, { ...o, corpo });
+export const put   = (c, corpo, o = {}) => req('PUT',    c, { ...o, corpo });
+export const patch = (c, corpo, o = {}) => req('PATCH',  c, { ...o, corpo });
+export const del   = (c, o)       => req('DELETE',  c, o);

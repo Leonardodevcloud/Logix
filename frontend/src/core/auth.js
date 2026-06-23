@@ -1,15 +1,15 @@
 // Sessão do usuário + acesso efetivo (módulos contratados e permissões do papel).
 import * as api from './api.js';
 
-const CHAVE = 'logix_usuario';
-const CHAVE_MASTER = 'logix_master_token'; // token original do master durante impersonação
+const CHAVE        = 'logix_usuario';
+const CHAVE_MASTER = 'logix_master_token'; // token do master salvo durante impersonação
 
 let usuario = null;
-let acesso = { perfil: null, modulos: [], permissoes: [] };
+let acesso  = { perfil: null, modulos: [], permissoes: [] };
 
-export function usuarioAtual() { return usuario; }
-export function estaLogado() { return !!usuario; }
-export function acessoAtual() { return acesso; }
+export function usuarioAtual()     { return usuario; }
+export function estaLogado()       { return !!usuario; }
+export function acessoAtual()      { return acesso; }
 export function estaImpersonando() { return !!sessionStorage.getItem(CHAVE_MASTER); }
 
 export function pode(permissao) {
@@ -37,18 +37,25 @@ export async function login(email, senha) {
 }
 
 export async function logout() {
-  try { await api.post('/auth/logout', {}); } catch { /* ignora */ }
+  // Se estava impersonando, limpar sem chamar /auth/logout (que usaria cookie do master)
+  if (estaImpersonando()) {
+    sessionStorage.removeItem(CHAVE_MASTER);
+    api.bloquearRefresh(false);
+  } else {
+    try { await api.post('/auth/logout', {}); } catch { /* ignora */ }
+  }
   api.setToken(null);
   usuario = null;
   acesso = { perfil: null, modulos: [], permissoes: [] };
   sessionStorage.removeItem(CHAVE);
-  sessionStorage.removeItem(CHAVE_MASTER); // limpa impersonação se houver
 }
 
-// Entra como cliente: salva token do master e troca para o token do cliente
+// Entra como cliente — salva token master, ativa bloqueio de refresh, troca sessão
 export async function iniciarImpersonacao(tokenCliente, usuarioCliente) {
-  // Guarda o token atual do master
+  // Guarda token atual do master
   sessionStorage.setItem(CHAVE_MASTER, api.getToken());
+  // Bloqueia refresh para o cookie do master não destruir a sessão do cliente
+  api.bloquearRefresh(true);
   // Troca para o token do cliente
   api.setToken(tokenCliente);
   usuario = usuarioCliente;
@@ -61,36 +68,51 @@ export async function encerrarImpersonacao() {
   const tokenMaster = sessionStorage.getItem(CHAVE_MASTER);
   if (!tokenMaster) return;
   sessionStorage.removeItem(CHAVE_MASTER);
+  api.bloquearRefresh(false);
   api.setToken(tokenMaster);
-  // Recarrega dados do master
+  // Renova o token master (agora pode — cookie é do master)
   try {
     const r = await api.post('/auth/refresh', {});
     if (r.accessToken) api.setToken(r.accessToken);
     const eu = await api.get('/auth/eu');
     usuario = eu.usuario;
-  } catch { /* usa o token salvo mesmo */ }
+  } catch { /* usa o token salvo */ }
   await carregarAcesso();
   sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
 }
 
+// Boot: restaura sessão. Se impersonando, usa token salvo sem chamar refresh.
 export async function restaurar() {
   const guardado = sessionStorage.getItem(CHAVE);
-  if (guardado) usuario = JSON.parse(guardado);
-  try {
-    // Se estiver impersonando, usa o token salvo direto (não faz refresh que quebraria)
-    if (estaImpersonando()) {
-      await carregarAcesso();
-      return true;
+  if (guardado) {
+    try { usuario = JSON.parse(guardado); } catch { usuario = null; }
+  }
+
+  if (estaImpersonando()) {
+    // Sessão de impersonação: token já está no api via setToken anterior,
+    // mas pode ter sido perdido (F5). Não temos como renovar sem o cookie do cliente,
+    // então encerramos a impersonação automaticamente e voltamos para o master.
+    const tokenMaster = sessionStorage.getItem(CHAVE_MASTER);
+    if (tokenMaster) {
+      api.setToken(tokenMaster);
+      sessionStorage.removeItem(CHAVE_MASTER);
+      api.bloquearRefresh(false);
     }
+    // Agora segue o fluxo normal de restaurar como master
+  }
+
+  try {
     const r = await api.post('/auth/refresh', {});
     if (r.accessToken) {
       api.setToken(r.accessToken);
       const eu = await api.get('/auth/eu');
       usuario = eu.usuario;
+      sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
       await carregarAcesso();
       return true;
     }
   } catch { /* sessão expirada */ }
+
   usuario = null;
   return false;
 }

@@ -139,13 +139,19 @@ async function excluir(id, { adminId, ip }) {
 
 // Impersonação: gera token JWT como o responsável do cliente
 async function impersonarResponsavel(empresaId, { adminId, ip }) {
-  await obter(empresaId);
+  const empresa = await obter(empresaId);
   const { rows } = await query(
-    `SELECT id FROM usuarios WHERE empresa_id = $1 AND perfil = 'cliente' AND ativo = true ORDER BY criado_em LIMIT 1`,
+    `SELECT u.id, u.nome, u.email, u.perfil, u.empresa_id, e.razao_social AS empresa_nome
+     FROM usuarios u
+     JOIN empresas e ON e.id = u.empresa_id
+     WHERE u.empresa_id = $1 AND u.perfil = 'cliente' AND u.ativo = true
+     ORDER BY u.criado_em LIMIT 1`,
     [empresaId]
   );
   if (!rows[0]) throw AppError.naoEncontrado('Nenhum usuário ativo neste cliente');
-  return authService.impersonar({ adminId, usuarioAlvoId: rows[0].id, ip });
+  const sessao = await authService.impersonar({ adminId, usuarioAlvoId: rows[0].id, ip });
+  // Retorna o token + dados do usuário para o frontend montar a sessão do cliente
+  return { ...sessao, usuario: rows[0] };
 }
 
 module.exports = { listar, obter, criar, atualizar, atualizarCredenciais, excluir, impersonarResponsavel };
