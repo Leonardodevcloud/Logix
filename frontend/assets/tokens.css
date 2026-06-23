@@ -159,7 +159,7 @@ a  { color: var(--lx-azul-primario); text-decoration: none; }
   padding: 5px 12px; border-radius: var(--lx-raio-pill);
   background: var(--lx-superficie-2); color: var(--lx-tinta-2); border: 1px solid var(--lx-linha); cursor: pointer;
 }
-.lx-chip.ativo { background: var(--lx-azul-primario); color: #fff; border-color: var(--lx-azul-primario); }
+.lx-chip.ativo, .lx-chip-on { background: var(--lx-azul-primario); color: #fff; border-color: var(--lx-azul-primario); }
 
 /* Texto auxiliar */
 .lx-muted { color: var(--lx-tinta-2); font-size: var(--lx-fs-sm); }
