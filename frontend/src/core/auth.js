@@ -33,6 +33,7 @@ export async function login(email, senha) {
   usuario = r.usuario;
   sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
   await carregarAcesso();
+  document.dispatchEvent(new CustomEvent('logix:login'));
   return usuario;
 }
 
@@ -61,6 +62,7 @@ export async function iniciarImpersonacao(tokenCliente, usuarioCliente) {
   usuario = usuarioCliente;
   sessionStorage.setItem(CHAVE, JSON.stringify(usuario));
   await carregarAcesso();
+  document.dispatchEvent(new CustomEvent('logix:login'));
 }
 
 // Volta a ser master
