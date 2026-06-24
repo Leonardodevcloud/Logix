@@ -10,7 +10,7 @@ module.exports = function rastreioRoutes() {
   const router = express.Router();
 
   // GET /motoboys/rastreio — lista todos motoboys com última posição e carga atual
-  router.get('/rastreio', exigirTenant, exigirPermissao('motoboys.ver'), async (req, res, next) => {
+  router.get('/rastreio', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       const { rows } = await query(
         `SELECT m.id, m.nome_completo, m.telefone_principal, m.foto_url, m.online, m.status,
@@ -42,7 +42,7 @@ module.exports = function rastreioRoutes() {
   });
 
   // GET /motoboys/:id/rota-atual — rota do motoboy em andamento (posição → pontos pendentes)
-  router.get('/:id/rota-atual', exigirTenant, exigirPermissao('motoboys.ver'), async (req, res, next) => {
+  router.get('/:id/rota-atual', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       const motoboyId = req.params.id;
 
