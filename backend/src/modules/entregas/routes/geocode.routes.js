@@ -10,32 +10,62 @@ const BASE_ORS = 'https://api.openrouteservice.org';
 module.exports = function geocodeRoutes() {
   const router = express.Router();
 
-  // GET /entregas/geocode?q=endereco — busca de endereços via ORS (autocomplete)
+  // GET /entregas/geocode?q=endereco — busca via ORS com componentes estruturados
   router.get('/geocode', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       const q = (req.query.q || '').trim();
       if (!q || q.length < 3) return res.json({ resultados: [] });
 
+      // Detectar se é coordenada (geocode reverso)
+      const coordMatch = q.match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
+      if (coordMatch) {
+        const [, lat, lng] = coordMatch;
+        const url = `${BASE_ORS}/geocode/reverse?api_key=${process.env.ORS_API_KEY}&point.lat=${lat}&point.lon=${lng}&size=1&lang=pt`;
+        const { ok, dados } = await httpRequest(url);
+        if (!ok || !dados?.features?.length) return res.json({ resultados: [] });
+        const f = dados.features[0];
+        return res.json({ resultados: [orsFeatureToResult(f)] });
+      }
+
+      // Autocomplete
       const url = `${BASE_ORS}/geocode/autocomplete?api_key=${process.env.ORS_API_KEY}`
         + `&text=${encodeURIComponent(q)}&boundary.country=BR&size=6&lang=pt`;
       const { ok, dados } = await httpRequest(url);
 
-      if (!ok || !dados || !dados.features) return res.json({ resultados: [] });
-
-      const resultados = dados.features.map(f => ({
-        label: f.properties.label,
-        endereco: f.properties.label,
-        bairro: f.properties.neighbourhood || f.properties.locality || '',
-        cidade: f.properties.localadmin || f.properties.county || '',
-        uf: f.properties.region_a || '',
-        cep: f.properties.postalcode || '',
-        lat: f.geometry.coordinates[1],
-        lng: f.geometry.coordinates[0],
-      }));
-
-      res.json({ resultados });
+      if (!ok || !dados?.features) return res.json({ resultados: [] });
+      res.json({ resultados: dados.features.map(orsFeatureToResult) });
     } catch (e) { next(e); }
   });
+
+  // Converte feature ORS → formato com componentes (compatível com frontend)
+  function orsFeatureToResult(f) {
+    const p = f.properties;
+    const lat = f.geometry.coordinates[1];
+    const lng = f.geometry.coordinates[0];
+    // Montar componentes no formato Google para compatibilidade
+    const componentes = [
+      p.housenumber ? { types: ['street_number'], long_name: p.housenumber, short_name: p.housenumber } : null,
+      p.street ? { types: ['route'], long_name: p.street, short_name: p.street } : null,
+      p.neighbourhood ? { types: ['sublocality_level_1', 'sublocality'], long_name: p.neighbourhood, short_name: p.neighbourhood } : null,
+      p.locality || p.localadmin ? { types: ['administrative_area_level_2'], long_name: p.locality || p.localadmin, short_name: p.locality || p.localadmin } : null,
+      p.region_a ? { types: ['administrative_area_level_1'], long_name: p.region || p.region_a, short_name: p.region_a } : null,
+      p.postalcode ? { types: ['postal_code'], long_name: p.postalcode, short_name: p.postalcode } : null,
+    ].filter(Boolean);
+    return {
+      label: p.label,
+      endereco: p.label,
+      latitude: lat, longitude: lng,
+      lat, lng,
+      bairro: p.neighbourhood || p.locality || '',
+      cidade: p.localadmin || p.locality || p.county || '',
+      uf: p.region_a || '',
+      cep: p.postalcode || '',
+      numero: p.housenumber || '',
+      rua: p.street || '',
+      componentes,
+      tem_numero: !!p.housenumber,
+    };
+  }
 
   // GET /entregas/enderecos-salvos — lista endereços salvos da empresa
   router.get('/enderecos-salvos', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
