@@ -124,7 +124,7 @@ module.exports = function motoboyAppRoutes() {
       const { recebedor, fotos_urls } = req.body; // fotos_urls: string[] de URLs já upadas
 
       await query(
-        `UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now()
+        `UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
          WHERE id = $2 AND entrega_id = $3`,
         [recebedor || null, req.params.pontoId, req.params.entregaId]
       );
