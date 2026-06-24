@@ -522,7 +522,7 @@ export async function montar(container) {
   // Abas
   const tabEls = {};
   const abasEl = el('div', { class: 'lx-ent-abas' });
-  [{ id:'nova', label:'✦ Nova' },{ id:'ativas', label:'Ativas' },{ id:'concluidas', label:'Concluídas' },{ id:'canceladas', label:'Canceladas' }]
+  [{ id:'nova', label:'Nova' },{ id:'ativas', label:'Ativas' },{ id:'concluidas', label:'Concluídas' }]
     .forEach(({ id, label }) => {
       const t = el('button', { class: 'lx-ent-aba' + (id==='nova'?' on':''), onClick: () => trocarAba(id) }, label);
       tabEls[id] = t; abasEl.append(t);
