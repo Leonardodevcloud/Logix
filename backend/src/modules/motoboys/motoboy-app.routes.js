@@ -7,11 +7,8 @@ const { emitirParaEmpresa } = require('../../realtime/ws');
 module.exports = function motoboyAppRoutes() {
   const router = express.Router();
 
-  // Todas as rotas do app exigem token do motoboy
-  router.use(verificarTokenMotoboy);
-
   // GET /motoboys/app/eu — perfil + status atual
-  router.get('/app/eu', async (req, res, next) => {
+  router.get('/app/eu', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
         `SELECT m.id, m.nome_completo, m.telefone_principal, m.foto_url, m.online, m.status,
@@ -29,7 +26,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // GET /motoboys/app/fila — entregas atribuídas a este motoboy
-  router.get('/app/fila', async (req, res, next) => {
+  router.get('/app/fila', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
         `SELECT e.id, e.protocolo, e.status, e.criado_em,
@@ -57,7 +54,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // PATCH /motoboys/app/status — motoboy atualiza próprio status (online/offline)
-  router.patch('/app/status', async (req, res, next) => {
+  router.patch('/app/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { online } = req.body;
       await query(`UPDATE motoboys SET online = $1 WHERE id = $2`, [!!online, req.motoboy.id]);
@@ -67,7 +64,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // POST /motoboys/app/posicao — reportar GPS (chamado em background pelo app)
-  router.post('/app/posicao', async (req, res, next) => {
+  router.post('/app/posicao', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { lat, lng, entrega_id } = req.body;
       if (!lat || !lng) throw AppError.validacao('lat e lng obrigatórios');
@@ -84,7 +81,7 @@ module.exports = function motoboyAppRoutes() {
 
   // PATCH /motoboys/app/entregas/:id/status — motoboy avança o status da entrega
   // status: aguardando_coleta → em_coleta → em_rota → entregue
-  router.patch('/app/entregas/:id/status', async (req, res, next) => {
+  router.patch('/app/entregas/:id/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { status } = req.body;
       const FLUXO = ['aguardando_coleta', 'em_coleta', 'em_rota', 'entregue'];
@@ -118,7 +115,7 @@ module.exports = function motoboyAppRoutes() {
 
   // POST /motoboys/app/entregas/:entregaId/pontos/:pontoId/concluir
   // Motoboy finaliza um ponto de entrega e envia foto de protocolo (URL já no storage)
-  router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', async (req, res, next) => {
+  router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { recebedor, fotos_urls } = req.body; // fotos_urls: string[] de URLs já upadas
 
