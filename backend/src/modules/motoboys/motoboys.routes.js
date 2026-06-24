@@ -4,8 +4,11 @@ const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirModulo, exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./motoboys.service');
 
+const rastreioRoutes = require('./rastreio.routes');
+
 function initMotoboysRoutes() {
   const router = express.Router();
+  router.use('/', rastreioRoutes());
   router.use(verificarToken, resolverTenant, exigirTenant, exigirModulo('motoboys'));
 
   // GET /motoboys?status=ativo&online=true

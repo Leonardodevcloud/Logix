@@ -15,6 +15,7 @@ function gruposNav() {
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
         { rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' },
+        { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
         { rota: '/filas', rotulo: 'Filas', icone: 'filas' },
       ]},
       { titulo: 'Sistema', itens: [
@@ -28,6 +29,8 @@ function gruposNav() {
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
+  if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
+    operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
   if (auth.temModulo('filas') && auth.pode('filas.ver'))
     operacao.push({ rota: '/filas', rotulo: 'Filas', icone: 'filas' });
 
