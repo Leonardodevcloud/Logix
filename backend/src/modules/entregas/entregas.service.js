@@ -106,7 +106,7 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   const { rows } = await query(
-    `SELECT e.id, e.protocolo, e.status, e.motoboy_id, e.distancia_km, e.tempo_estimado_min,
+    `SELECT e.id, e.protocolo, e.status, e.motoboy_id, e.distancia_km,
             e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
             m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone AS motoboy_telefone,
             (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos,
