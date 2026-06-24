@@ -337,8 +337,12 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     row.addEventListener('mouseenter', () => row.style.background = 'var(--lx-superficie-2)');
     row.addEventListener('mouseleave', () => row.style.background = '');
     row.addEventListener('click', onClick);
+    // ico pode ser HTML string (ícone Tabler) — usar innerHTML
+    const icoEl = document.createElement('span');
+    icoEl.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;flex:none;color:var(--lx-tinta-3)';
+    icoEl.innerHTML = ico;
     row.append(
-      el('span', { style: 'font-size:14px;flex:none' }, ico),
+      icoEl,
       el('div', { style: 'flex:1;min-width:0' },
         el('b', { style: 'font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--lx-tinta)' }, titulo),
         el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, sub)));
