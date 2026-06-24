@@ -244,7 +244,7 @@ function PainelSalvos({ onSelecionar, onFechar }) {
         row.addEventListener('mouseleave', () => row.style.background = '');
         row.addEventListener('click', () => { onSelecionar(s); onFechar(); });
         row.append(
-          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'};display:grid;place-items:center;font-size:16px;flex:none` }, s.is_coleta_padrao ? '⚑' : '<i class='ti ti-bookmark'></i>'),
+          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};display:grid;place-items:center;flex:none;color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'}`, html: s.is_coleta_padrao ? '<i class="ti ti-home-check" style="font-size:17px"></i>' : '<i class="ti ti-bookmark" style="font-size:16px"></i>' }),
           el('div', { style: 'flex:1;min-width:0' },
             el('b', { style: 'font-size:13px;font-weight:700;color:var(--lx-tinta);display:flex;align-items:center;gap:6px' },
               s.apelido,
