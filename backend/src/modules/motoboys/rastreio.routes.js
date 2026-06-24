@@ -31,7 +31,7 @@ module.exports = function rastreioRoutes() {
          ) r ON true
          LEFT JOIN entregas e ON e.motoboy_id = m.id
            AND e.empresa_id = m.empresa_id
-           AND e.status IN ('aguardando_coleta','em_coleta','em_rota')
+           AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
          WHERE m.empresa_id = $1 AND m.status = 'ativo'
          GROUP BY m.id, r.lat, r.lng, r.capturado_em
          ORDER BY m.online DESC, r.capturado_em DESC NULLS LAST`,
@@ -60,7 +60,7 @@ module.exports = function rastreioRoutes() {
          JOIN entregas e ON e.id = ep.entrega_id
          WHERE e.motoboy_id = $1
            AND e.empresa_id = $2
-           AND e.status IN ('aguardando_coleta','em_coleta','em_rota')
+           AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
            AND ep.status = 'pendente'
          ORDER BY e.criado_em, ep.ordem`,
         [motoboyId, req.empresaId]

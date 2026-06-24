@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const AppError = require('../../shared/AppError');
 const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant } = require('../../middleware/tenant');
+let emitirParaEmpresa = () => {};
+try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 const { query } = require('../../shared/db');
 const { limiteLogin } = require('../../middleware/rateLimit');
 
@@ -50,6 +52,7 @@ module.exports = function motoboyAuthRoutes() {
 
       // Marcar online
       await query(`UPDATE motoboys SET online = true WHERE id = $1`, [m.id]);
+      emitirParaEmpresa(m.empresa_id, 'motoboy.status', { motoboyId: m.id, online: true });
 
       const token = gerarTokenApp(m);
       res.json({
@@ -72,6 +75,7 @@ module.exports = function motoboyAuthRoutes() {
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
         await query(`UPDATE motoboys SET online = false WHERE id = $1`, [decoded.id]);
+        emitirParaEmpresa(decoded.empresaId, 'motoboy.status', { motoboyId: decoded.id, online: false });
       }
       res.json({ ok: true });
     } catch { res.json({ ok: true }); }

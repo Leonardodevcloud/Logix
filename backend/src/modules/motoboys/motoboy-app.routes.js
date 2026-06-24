@@ -2,7 +2,8 @@ const express = require('express');
 const AppError = require('../../shared/AppError');
 const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
-const { emitirParaEmpresa } = require('../../realtime/ws');
+let emitirParaEmpresa = () => {};
+try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 
 module.exports = function motoboyAppRoutes() {
   const router = express.Router();
@@ -15,7 +16,7 @@ module.exports = function motoboyAppRoutes() {
                 count(e.id)::int AS entregas_ativas
          FROM motoboys m
          LEFT JOIN entregas e ON e.motoboy_id = m.id
-           AND e.status IN ('aguardando_coleta','em_coleta','em_rota')
+           AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
          WHERE m.id = $1
          GROUP BY m.id`,
         [req.motoboy.id]
@@ -44,7 +45,7 @@ module.exports = function motoboyAppRoutes() {
          JOIN entregas_pontos ep ON ep.entrega_id = e.id
          WHERE e.motoboy_id = $1
            AND e.empresa_id = $2
-           AND e.status IN ('aguardando_coleta','em_coleta','em_rota')
+           AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
          GROUP BY e.id
          ORDER BY e.criado_em`,
         [req.motoboy.id, req.motoboy.empresaId]
@@ -84,7 +85,7 @@ module.exports = function motoboyAppRoutes() {
   router.patch('/app/entregas/:id/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { status } = req.body;
-      const FLUXO = ['aguardando_coleta', 'em_coleta', 'em_rota', 'entregue'];
+      const FLUXO = ['aguardando_atribuicao', 'aguardando_coleta', 'em_coleta', 'em_rota', 'entregue'];
       if (!FLUXO.includes(status)) throw AppError.validacao('Status inválido');
 
       const { rows } = await query(

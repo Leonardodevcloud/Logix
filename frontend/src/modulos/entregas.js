@@ -118,6 +118,19 @@ function criarMapa(div) {
       if (r.coleta?.lat) markers.push(window.L.marker([r.coleta.lat, r.coleta.lng], { icon: pinIcon('C', '#042C53') }).addTo(map));
       (r.pontos||[]).forEach((p,i) => { if (p.lat) markers.push(window.L.marker([p.lat, p.lng], { icon: pinIcon(i+1,'#185FA5') }).addTo(map)); });
       if (r.coords?.length) { poly = window.L.polyline(r.coords, { color:'#185FA5', weight:5, dashArray:'6 10', lineCap:'round' }).addTo(map); map.fitBounds(poly.getBounds(), { padding:[40,40] }); }
+      // Mostrar posição atual do motoboy se disponível
+      try {
+        const acomp = await get('/entregas/' + id + '/acompanhar');
+        if (acomp?.ultima_posicao?.lat) {
+          const mbIcon = window.L.divIcon({
+            className: '',
+            html: `<div style="width:36px;height:36px;border-radius:50%;background:#FACC15;border:3px solid #fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D2200" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg></div>`,
+            iconSize: [36, 36], iconAnchor: [18, 18],
+          });
+          markers.push(window.L.marker([acomp.ultima_posicao.lat, acomp.ultima_posicao.lng], { icon: mbIcon, zIndexOffset: 500 })
+            .bindPopup('<b>Motoboy</b><br>' + (r.motoboy_nome || 'Em rota')).addTo(map));
+        }
+      } catch {}
       return r;
     } catch { return null; }
   }
