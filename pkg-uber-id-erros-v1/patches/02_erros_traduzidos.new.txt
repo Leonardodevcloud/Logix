@@ -1,0 +1,41 @@
+              // Erro último, com traducao PT-BR dos erros mais comuns
+              e.erro_ultimo && (function() {
+                const ERROS_MAP = {
+                  // Uber Direct
+                  'pickup_address_not_serviceable':      'Endereco de coleta fora da area de cobertura da Uber',
+                  'dropoff_address_not_serviceable':     'Endereco de entrega fora da area de cobertura da Uber',
+                  'address_not_found':                   'Endereco nao encontrado (verifique o CEP ou logradouro)',
+                  'geocode_failed':                      'Nao foi possivel geocodificar o endereco',
+                  'invalid_address':                     'Endereco invalido ou incompleto',
+                  'quote_expired':                       'Cotacao expirou — tente redespachar',
+                  'quote_not_found':                     'Cotacao nao encontrada (pode ter expirado)',
+                  'delivery_not_found':                  'Entrega nao encontrada na Uber',
+                  'no_couriers_available':               'Nenhum entregador disponivel na regiao no momento',
+                  'courier_unavailable':                 'Entregador indisponivel — tentando reatribuir',
+                  'cannot_cancel':                       'Cancelamento nao permitido neste status (entregador ja coletou)',
+                  'payment_failed':                      'Falha no pagamento junto a Uber — verifique credito da conta',
+                  'rate_limited':                        'Muitas requisicoes — aguarde alguns segundos e tente novamente',
+                  'unauthorized':                        'Credenciais Uber invalidas ou expiradas',
+                  'forbidden':                           'Sem permissao — verifique configuracao do provider Uber',
+                  'service_unavailable':                 'Servico Uber temporariamente indisponivel — tente novamente',
+                  // 99Entrega
+                  'cancel too frequently':               '99Entrega: muitos cancelamentos seguidos — aguarde antes de cancelar novamente',
+                  'errno=-1':                            '99Entrega: erro interno no sistema deles — tente novamente em instantes',
+                  'errno=1001':                          '99Entrega: limite de cancelamentos atingido — aguarde',
+                  'estimate_id':                         '99Entrega: cotacao invalida ou expirada — tente redespachar',
+                  'order_not_found':                     '99Entrega: pedido nao encontrado na plataforma deles',
+                  'invalid_pickup':                      '99Entrega: ponto de coleta invalido (CEP ou coordenada)',
+                  'invalid_dropoff':                     '99Entrega: ponto de entrega invalido (CEP ou coordenada)',
+                  // Generico
+                  'timeout':                             'Timeout na comunicacao com o provedor — tente novamente',
+                  'network':                             'Falha de rede ao comunicar com o provedor',
+                  'auth_failed':                         'Falha de autenticacao com o provedor — verifique as credenciais',
+                };
+                const raw = String(e.erro_ultimo || '').toLowerCase();
+                const traducao = Object.entries(ERROS_MAP).find(([k]) => raw.includes(k.toLowerCase()));
+                return h('div', { className: 'bg-red-50 border border-red-200 rounded-lg p-3 space-y-1' },
+                  h('div', { className: 'text-xs uppercase tracking-wider text-red-700 font-semibold' }, '\u26a0 Ultimo erro'),
+                  traducao && h('div', { className: 'text-sm text-red-900 font-medium' }, traducao[1]),
+                  h('div', { className: 'text-xs text-red-700 font-mono break-words opacity-70 pt-1 border-t border-red-100' }, e.erro_ultimo),
+                );
+              })(),

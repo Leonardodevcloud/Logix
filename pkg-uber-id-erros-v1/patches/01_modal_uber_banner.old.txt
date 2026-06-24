@@ -1,0 +1,13 @@
+        // Header do modal — limpo, só OS + status
+        h('div', { className: 'sticky top-0 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between' },
+          h('div', null,
+            h('h3', { className: 'text-xl font-bold text-gray-800' }, `OS ${e.codigo_os}`),
+            h('div', { className: 'flex items-center gap-2 mt-1' },
+              h(Badge, { entrega: e }),
+            )
+          ),
+          h('button', {
+            onClick: onClose,
+            className: 'text-gray-400 hover:text-gray-600 text-2xl leading-none px-2',
+          }, '×')
+        ),

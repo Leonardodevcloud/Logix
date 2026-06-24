@@ -190,3 +190,5 @@ module.exports = function motoboyAppRoutes() {
 
   return router;
 };
+/ /   f i x   t i p o   p r o t o c o l o   0 6 / 2 4 / 2 0 2 6   1 4 : 2 1 : 2 0  
+ 
