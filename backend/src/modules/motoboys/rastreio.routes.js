@@ -1,6 +1,5 @@
 const express = require('express');
 const { exigirTenant } = require('../../middleware/tenant');
-const { exigirPermissao } = require('../../middleware/permissoes');
 const { query } = require('../../shared/db');
 const { httpRequest } = require('../../shared/httpRequest');
 
@@ -10,7 +9,7 @@ module.exports = function rastreioRoutes() {
   const router = express.Router();
 
   // GET /motoboys/rastreio — lista todos motoboys com última posição e carga atual
-  router.get('/rastreio', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+  router.get('/rastreio', exigirTenant, async (req, res, next) => {
     try {
       const { rows } = await query(
         `SELECT m.id, m.nome_completo, m.telefone_principal, m.foto_url, m.online, m.status,
@@ -42,7 +41,7 @@ module.exports = function rastreioRoutes() {
   });
 
   // GET /motoboys/:id/rota-atual — rota do motoboy em andamento (posição → pontos pendentes)
-  router.get('/:id/rota-atual', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+  router.get('/:id/rota-atual', exigirTenant, async (req, res, next) => {
     try {
       const motoboyId = req.params.id;
 
@@ -61,7 +60,6 @@ module.exports = function rastreioRoutes() {
          WHERE e.motoboy_id = $1
            AND e.empresa_id = $2
            AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
-           AND ep.status = 'pendente'
          ORDER BY e.criado_em, ep.ordem`,
         [motoboyId, req.empresaId]
       );
@@ -89,7 +87,12 @@ module.exports = function rastreioRoutes() {
         }
       } catch {}
 
-      res.json({ geom: [], pontos, distanciaKm: 0, duracaoMin: 0, posicao: pos[0] });
+      // Sem rota ORS: retornar linha reta posição → destinos para mostrar no mapa
+      const geomReta = [
+        [pos[0].lat, pos[0].lng],
+        ...pontos.filter(p => p.lat && p.lng).map(p => [p.lat, p.lng])
+      ];
+      res.json({ geom: geomReta, pontos, distanciaKm: 0, duracaoMin: 0, posicao: pos[0] });
     } catch (e) { next(e); }
   });
 
