@@ -210,8 +210,12 @@ module.exports = function geocodeRoutes() {
   router.get('/:id/rota', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       const { rows } = await query(
-        `SELECT e.coleta_lat, e.coleta_lng, e.coleta_endereco,
-                json_agg(json_build_object('lat', ep.lat, 'lng', ep.lng, 'endereco', ep.endereco, 'ordem', ep.ordem) ORDER BY ep.ordem) AS pontos
+        `SELECT e.coleta_lat, e.coleta_lng, e.coleta_endereco, e.motivo_cancelamento,
+                json_agg(json_build_object(
+                  'lat', ep.lat, 'lng', ep.lng, 'endereco', ep.endereco, 'ordem', ep.ordem,
+                  'nome_fantasia', ep.nome_fantasia, 'numero_nf', ep.numero_nf,
+                  'complemento', ep.complemento, 'observacoes', ep.observacoes, 'telefone', ep.telefone
+                ) ORDER BY ep.ordem) AS pontos
          FROM entregas e LEFT JOIN entregas_pontos ep ON ep.entrega_id = e.id
          WHERE e.id = $1 AND e.empresa_id = $2 GROUP BY e.id`,
         [req.params.id, req.empresaId]
@@ -220,7 +224,7 @@ module.exports = function geocodeRoutes() {
       const e = rows[0];
       const coords = [[e.coleta_lng, e.coleta_lat]];
       (e.pontos || []).forEach(p => { if (p.lat && p.lng) coords.push([p.lng, p.lat]); });
-      if (coords.length < 2) return res.json({ coords: [], distanciaKm: 0, duracaoMin: 0, coleta: { lat: e.coleta_lat, lng: e.coleta_lng, endereco: e.coleta_endereco }, pontos: e.pontos });
+      if (coords.length < 2) return res.json({ coords: [], distanciaKm: 0, duracaoMin: 0, coleta: { lat: e.coleta_lat, lng: e.coleta_lng, endereco: e.coleta_endereco }, pontos: e.pontos, motivo_cancelamento: e.motivo_cancelamento || null });
       const { ok, dados } = await httpRequest(`${BASE_ORS}/v2/directions/driving-car/geojson`, {
         metodo: 'POST', headers: { Authorization: process.env.ORS_API_KEY }, corpo: { coordinates: coords },
       });
@@ -229,7 +233,7 @@ module.exports = function geocodeRoutes() {
       const distanciaKm = +(seg.reduce((s, x) => s + (x.distance||0), 0) / 1000).toFixed(1);
       const duracaoMin = Math.round(seg.reduce((s, x) => s + (x.duration||0), 0) / 60);
       const geom = dados.features[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      res.json({ coords: geom, distanciaKm, duracaoMin, coleta: { lat: e.coleta_lat, lng: e.coleta_lng, endereco: e.coleta_endereco }, pontos: e.pontos });
+      res.json({ coords: geom, distanciaKm, duracaoMin, coleta: { lat: e.coleta_lat, lng: e.coleta_lng, endereco: e.coleta_endereco }, pontos: e.pontos, motivo_cancelamento: e.motivo_cancelamento || null });
     } catch (e) { next(e); }
   });
 

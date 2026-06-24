@@ -445,6 +445,24 @@ function CampoBusca({ onConfirmar, onLimpar }) {
 // ── PONTO DESTINO ─────────────────────────────────────────────────────────────
 function PontoDestino(numero, onRemover, onAtualizar) {
   const dados = { lat: null, lng: null, endereco: null, numero: null, nome_fantasia: null, numero_nf: null, complemento: null, observacoes: null, telefone: null };
+
+  // Painel de resumo dos extras — atualiza ao digitar
+  const resumoExtras = el('div', { style: 'display:none;margin-top:5px;padding:6px 8px;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:7px' });
+
+  function atualizarResumo() {
+    const linhas = [
+      dados.nome_fantasia ? '👤 ' + dados.nome_fantasia : null,
+      dados.numero_nf ? '📄 NF ' + dados.numero_nf : null,
+      dados.complemento ? '🏠 ' + dados.complemento : null,
+      dados.observacoes ? '💬 ' + dados.observacoes : null,
+      dados.telefone ? '📞 ' + dados.telefone : null,
+    ].filter(Boolean);
+    if (!linhas.length) { resumoExtras.style.display = 'none'; return; }
+    resumoExtras.style.display = 'block';
+    resumoExtras.innerHTML = '';
+    linhas.forEach(l => resumoExtras.append(el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding:1px 0' }, l)));
+  }
+
   const busca = CampoBusca({
     onConfirmar: r => { Object.assign(dados, { lat: r.lat, lng: r.lng, endereco: r.label || r.apelido || r.endereco_completo, numero: r.numero || null }); if (onAtualizar) onAtualizar(); },
     onLimpar: () => { dados.lat = null; dados.lng = null; if (onAtualizar) onAtualizar(); },
@@ -452,7 +470,7 @@ function PontoDestino(numero, onRemover, onAtualizar) {
   const extras = el('div', { style: 'display:none;flex-direction:column;gap:7px;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--lx-linha)' });
   function inp(ph, key) {
     const i = el('input', { style: 'width:100%;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:7px;font-size:12.5px', placeholder: ph });
-    i.addEventListener('input', () => { dados[key] = i.value.trim() || null; });
+    i.addEventListener('input', () => { dados[key] = i.value.trim() || null; atualizarResumo(); });
     return el('div', {}, el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);margin-bottom:3px;font-weight:600' }, ph), i);
   }
   extras.append(inp('Nome fantasia / destinatário', 'nome_fantasia'), inp('Nº NF / Pedido', 'numero_nf'), inp('Complemento', 'complemento'), inp('Obs. p/ motoboy', 'observacoes'), inp('Telefone do cliente', 'telefone'));
@@ -465,11 +483,12 @@ function PontoDestino(numero, onRemover, onAtualizar) {
         el('div', { style: 'width:24px;height:24px;border-radius:50%;background:var(--lx-azul-primario);color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none' }, numero),
         el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, 'Ponto de entrega')),
       onRemover ? el('button', { style: 'color:var(--lx-tinta-3);font-size:20px;cursor:pointer;background:none;border:none;line-height:1', onClick: onRemover }, '×') : el('span', {})),
-    busca, extras, btnToggle);
+    busca, resumoExtras, extras, btnToggle);
   wrap.resetar = () => {
     Object.keys(dados).forEach(k => { dados[k] = null; });
     busca.resetar(); extras.style.display = 'none'; btnToggle.textContent = '+ Adicionar detalhes (NF, obs.)';
     extras.querySelectorAll('input').forEach(i => { i.value = ''; });
+    resumoExtras.style.display = 'none'; resumoExtras.innerHTML = '';
   };
   wrap.obterDados = () => dados;
   wrap.obterBusca = () => busca;
@@ -640,9 +659,56 @@ export async function montar(container) {
     if (!lista.length) { sideHistorico.append(el('div', { style: 'padding:32px;text-align:center;color:var(--lx-tinta-2);font-size:13px' }, 'Nenhuma entrega.')); return; }
     lista.forEach(e => {
       const card = el('div', { class: 'lx-hist-card' });
-      card.addEventListener('click', () => { if (_mapa) _mapa.renderizarExistente(e.id); });
+
+      // Detalhes do ponto (NF, obs, complemento) — carregados ao expandir
+      const detalhesWrap = el('div', { style: 'display:none;margin-top:8px;padding:8px;background:var(--lx-superficie-2);border-radius:8px;display:none;flex-direction:column;gap:3px' });
+      let detalhesCarregados = false;
+
+      card.addEventListener('click', async () => {
+        if (_mapa) _mapa.renderizarExistente(e.id);
+        // Toggle detalhes
+        const aberto = detalhesWrap.style.display === 'flex';
+        if (aberto) { detalhesWrap.style.display = 'none'; return; }
+        detalhesWrap.style.display = 'flex';
+        if (!detalhesCarregados) {
+          detalhesCarregados = true;
+          detalhesWrap.innerHTML = '';
+          detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Carregando detalhes…'));
+          try {
+            const r = await get('/entregas/' + e.id + '/rota');
+            detalhesWrap.innerHTML = '';
+            // Coleta
+            detalhesWrap.append(
+              el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, '📍 Coleta'),
+              el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px;margin-bottom:6px' }, r.coleta?.endereco || '—'));
+            // Pontos
+            (r.pontos || []).forEach((p, i) => {
+              const infos = [
+                p.nome_fantasia ? '👤 ' + p.nome_fantasia : null,
+                p.numero_nf ? '📄 NF ' + p.numero_nf : null,
+                p.complemento ? '🏠 ' + p.complemento : null,
+                p.observacoes ? '💬 ' + p.observacoes : null,
+                p.telefone ? '📞 ' + p.telefone : null,
+              ].filter(Boolean);
+              detalhesWrap.append(
+                el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, `🏁 Destino ${i+1}`),
+                el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px' }, p.endereco || '—'));
+              infos.forEach(info => detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);padding-left:4px' }, info)));
+              if (i < (r.pontos||[]).length - 1) detalhesWrap.append(el('div', { style: 'height:1px;background:var(--lx-linha);margin:5px 0' }));
+            });
+            if (e.motivo_cancelamento) {
+              detalhesWrap.append(
+                el('div', { style: 'height:1px;background:var(--lx-linha);margin:5px 0' }),
+                el('div', { style: 'font-size:11.5px;color:var(--lx-erro);font-weight:600' }, '❌ Motivo: ' + e.motivo_cancelamento));
+            }
+          } catch { detalhesWrap.innerHTML = ''; detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Sem detalhes.')); }
+        }
+      });
+
       card.append(
-        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:5px' }, el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, e.protocolo||'—'), statusBadge(e.status)),
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:5px' },
+          el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, e.protocolo||'—'),
+          statusBadge(e.status)),
         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' }, '📍 ' + (e.coleta_endereco?.split(',')[0]||'—')),
         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' }, '🏁 ' + (e.destino_endereco?.split(',')[0]||'—')),
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between' },
@@ -651,7 +717,8 @@ export async function montar(container) {
             e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, '🏍 ' + e.motoboy_nome.split(' ')[0]) : el('span', {}),
             auth.pode('entregas.criar') && !['entregue','cancelada'].includes(e.status)
               ? el('button', { style: 'font-size:11px;padding:3px 9px;border-radius:6px;background:var(--lx-erro-bg);color:var(--lx-erro);border:none;cursor:pointer;font-weight:700', onClick: ev => { ev.stopPropagation(); confirmarCancelar(e, () => carregar()); }}, 'Cancelar')
-              : el('span', {}))));
+              : el('span', {}))),
+        detalhesWrap);
       sideHistorico.append(card);
     });
   }
