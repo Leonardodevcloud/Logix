@@ -169,9 +169,9 @@ async function linhaDetalhe(e) {
 }
 
 // ── Tela principal de concluídas ──────────────────────────────────────────────
-export async function montarConcluidas(container) {
+export async function montarConcluidas(container, filtroInicial) {
   let _lista = [];
-  let _filtro = 'todas';
+  let _filtro = filtroInicial || 'todas';
   let _expandida = null;
   let _detalheEl = null;
 
@@ -329,6 +329,7 @@ export async function montarConcluidas(container) {
 
   container.innerHTML = '';
   container.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+  if (filtroInicial) setFiltro(filtroInicial);
   container.append(kpisEl, tabFiltros, tabelaWrap);
   carregar();
 }

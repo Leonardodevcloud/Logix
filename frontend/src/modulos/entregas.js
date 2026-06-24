@@ -736,21 +736,25 @@ export async function montar(container) {
     });
   }
 
-  // Container para tela de concluídas
+  // Containers para telas sem mapa
   const concluidasContainer = el('div', { style: 'display:none;flex:1;overflow:hidden;flex-direction:column' });
+  const canceladasContainer = el('div', { style: 'display:none;flex:1;overflow:hidden;flex-direction:column' });
 
   function trocarAba(id) {
     abaAtiva.val = id;
     Object.entries(tabEls).forEach(([k,t]) => t.classList.toggle('on', k===id));
     sideNova.style.display = id==='nova' ? 'flex' : 'none';
-    sideHistorico.style.display = (id==='ativas'||id==='canceladas') ? 'block' : 'none';
+    sideHistorico.style.display = id==='ativas' ? 'block' : 'none';
     concluidasContainer.style.display = id==='concluidas' ? 'flex' : 'none';
-    // Concluídas: sem mapa — side ocupa 100%, mapa some
-    mapaWrap.style.display = id==='concluidas' ? 'none' : '';
-    body.style.gridTemplateColumns = id==='concluidas' ? '1fr' : '360px 1fr';
+    canceladasContainer.style.display = id==='canceladas' ? 'flex' : 'none';
+    // Sem mapa nas abas de histórico completo
+    const semMapa = id==='concluidas' || id==='canceladas';
+    mapaWrap.style.display = semMapa ? 'none' : '';
+    body.style.gridTemplateColumns = semMapa ? '1fr' : '360px 1fr';
     if (id==='nova' && _mapa) { _mapa.limpar(); statsPill.style.display='none'; setTimeout(() => _mapa.invalidar(), 50); }
-    if (id==='ativas'||id==='canceladas') renderHistorico();
+    if (id==='ativas') renderHistorico();
     if (id==='concluidas') montarConcluidas(concluidasContainer);
+    if (id==='canceladas') montarConcluidas(canceladasContainer, 'cancelada');
   }
 
   async function atualizarMapa() {
@@ -769,7 +773,7 @@ export async function montar(container) {
     try { _entregas = await get('/entregas'); if (abaAtiva.val!=='nova') renderHistorico(); } catch {}
   }
 
-  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico, concluidasContainer), mapaWrap);
+  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico, concluidasContainer, canceladasContainer), mapaWrap);
   const shell = el('div', { class: 'lx-ent-shell' }, abasEl, body);
   container.append(casca('Entregas', shell, 'Coleta e destinos — rota otimizada automaticamente'));
 
