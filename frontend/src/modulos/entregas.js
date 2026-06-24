@@ -244,7 +244,7 @@ function PainelSalvos({ onSelecionar, onFechar }) {
         row.addEventListener('mouseleave', () => row.style.background = '');
         row.addEventListener('click', () => { onSelecionar(s); onFechar(); });
         row.append(
-          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'};display:grid;place-items:center;font-size:16px;flex:none` }, s.is_coleta_padrao ? '⚑' : '★'),
+          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'};display:grid;place-items:center;font-size:16px;flex:none` }, s.is_coleta_padrao ? '⚑' : '<i class='ti ti-bookmark'></i>'),
           el('div', { style: 'flex:1;min-width:0' },
             el('b', { style: 'font-size:13px;font-weight:700;color:var(--lx-tinta);display:flex;align-items:center;gap:6px' },
               s.apelido,
@@ -323,7 +323,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
   const btnFav = el('button', {
     style: 'width:30px;height:30px;border-radius:7px;background:var(--lx-info-bg);color:var(--lx-azul-primario);border:0.5px solid var(--lx-azul-claro);cursor:pointer;display:grid;place-items:center;flex:none;flex-shrink:0;font-size:15px',
     title: 'Endereços salvos',
-    html: '★'
+    html: '<i class="ti ti-bookmark" style="font-size:14px"></i>'
   });
 
   const dropSalvos = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:200;max-height:240px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
@@ -351,7 +351,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
       const r = await get('/entregas/enderecos-salvos?q=' + encodeURIComponent(q));
       dropSalvos.innerHTML = '';
       if (!r.length) { dropSalvos.style.display = 'none'; return; }
-      r.forEach(s => dropSalvos.append(rowItem('★', s.apelido, (s.endereco_completo||'').slice(0,50), () => confirmar(s))));
+      r.forEach(s => dropSalvos.append(rowItem('<i class="ti ti-bookmark" style="font-size:13px"></i>', s.apelido, (s.endereco_completo||'').slice(0,50), () => confirmar(s))));
       dropGeo.style.display = 'none';
       dropSalvos.style.display = 'block';
     } catch {}
@@ -366,7 +366,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
       dropGeo.innerHTML = '';
       if (!resultados.length) { dropGeo.style.display = 'none'; btnBuscar.disabled = false; return; }
       resultados.forEach(r => {
-        dropGeo.append(rowItem('📍', r.label || r.endereco, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '), () => {
+        dropGeo.append(rowItem('<i class="ti ti-map-pin" style="font-size:13px"></i>', r.label || r.endereco, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '), () => {
           fecharDrops();
           if (!r.tem_numero) {
             // Número obrigatório — pede antes de confirmar
@@ -394,7 +394,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     confirmadoWrap.innerHTML = '';
     confirmadoWrap.append(
       el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
-        el('span', { style: 'font-size:16px;flex:none;margin-top:1px' }, '📍'),
+        el('i', { class: 'ti ti-map-pin', style: 'font-size:16px;flex:none;margin-top:1px;color:var(--lx-azul-primario)' }),
         el('div', { style: 'flex:1;min-width:0' },
           el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
           r.numero ? el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600' }, 'Nº ' + r.numero) : el('span', {}),
@@ -451,16 +451,20 @@ function PontoDestino(numero, onRemover, onAtualizar) {
 
   function atualizarResumo() {
     const linhas = [
-      dados.nome_fantasia ? '👤 ' + dados.nome_fantasia : null,
-      dados.numero_nf ? '📄 NF ' + dados.numero_nf : null,
-      dados.complemento ? '🏠 ' + dados.complemento : null,
-      dados.observacoes ? '💬 ' + dados.observacoes : null,
-      dados.telefone ? '📞 ' + dados.telefone : null,
+      dados.nome_fantasia ? ['ti-user', dados.nome_fantasia] : null,
+      dados.numero_nf ? ['ti-file-text', 'NF ' + dados.numero_nf] : null,
+      dados.complemento ? ['ti-building', dados.complemento] : null,
+      dados.observacoes ? ['ti-message', dados.observacoes] : null,
+      dados.telefone ? ['ti-phone', dados.telefone] : null,
     ].filter(Boolean);
     if (!linhas.length) { resumoExtras.style.display = 'none'; return; }
     resumoExtras.style.display = 'block';
     resumoExtras.innerHTML = '';
-    linhas.forEach(l => resumoExtras.append(el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding:1px 0' }, l)));
+    linhas.forEach(([ico, txt]) => {
+      const r = el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--lx-tinta-2);padding:1px 0' });
+      r.append(el('i', { class: 'ti ' + ico, style: 'font-size:12px;flex:none;color:var(--lx-tinta-3)' }), document.createTextNode(txt));
+      resumoExtras.append(r);
+    });
   }
 
   const busca = CampoBusca({
@@ -594,9 +598,9 @@ export async function montar(container) {
       await post('/entregas/enderecos-salvos', { apelido: v.apelido || v.label || v.endereco_completo, endereco_completo: v.label || v.apelido || v.endereco_completo, lat: v.lat, lng: v.lng, bairro: v.bairro, cidade: v.cidade, uf: v.uf, is_coleta_padrao: true });
       _coletaPadrao = v;
       btnSalvarColeta.textContent = '✓ Padrão salvo'; btnSalvarColeta.style.color='var(--lx-ok)'; btnSalvarColeta.style.borderColor='var(--lx-ok)';
-      setTimeout(() => { btnSalvarColeta.innerHTML = '⭐ Salvar como padrão'; btnSalvarColeta.style.color='var(--lx-tinta-2)'; btnSalvarColeta.style.borderColor='var(--lx-linha)'; }, 2000);
+      setTimeout(() => { btnSalvarColeta.innerHTML = 'Salvar como padrão'; btnSalvarColeta.style.color='var(--lx-tinta-2)'; btnSalvarColeta.style.borderColor='var(--lx-linha)'; }, 2000);
     } catch (e) { toast(e.message, 'erro'); }
-  }}, '⭐ Salvar como padrão');
+  }}, el('i', { class: 'ti ti-bookmark', style: 'font-size:13px;margin-right:5px' }), 'Salvar como padrão');
 
   function reconstruirFormulario() {
     _pontos = []; pontosWrap.innerHTML = ''; novoPonto();
@@ -679,27 +683,31 @@ export async function montar(container) {
             detalhesWrap.innerHTML = '';
             // Coleta
             detalhesWrap.append(
-              el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, '📍 Coleta'),
+              el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('i', { class: 'ti ti-map-pin', style: 'font-size:12px;color:var(--lx-azul-profundo);flex:none' }), 'Coleta'),
               el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px;margin-bottom:6px' }, r.coleta?.endereco || '—'));
             // Pontos
             (r.pontos || []).forEach((p, i) => {
               const infos = [
-                p.nome_fantasia ? '👤 ' + p.nome_fantasia : null,
-                p.numero_nf ? '📄 NF ' + p.numero_nf : null,
-                p.complemento ? '🏠 ' + p.complemento : null,
-                p.observacoes ? '💬 ' + p.observacoes : null,
-                p.telefone ? '📞 ' + p.telefone : null,
+                p.nome_fantasia ? ['ti-user', p.nome_fantasia] : null,
+                p.numero_nf ? ['ti-file-text', 'NF ' + p.numero_nf] : null,
+                p.complemento ? ['ti-building', p.complemento] : null,
+                p.observacoes ? ['ti-message', p.observacoes] : null,
+                p.telefone ? ['ti-phone', p.telefone] : null,
               ].filter(Boolean);
               detalhesWrap.append(
-                el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, `🏁 Destino ${i+1}`),
+                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('i', { class: 'ti ti-flag', style: 'font-size:12px;color:var(--lx-azul-primario);flex:none' }), `Destino ${i+1}`),
                 el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px' }, p.endereco || '—'));
-              infos.forEach(info => detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);padding-left:4px' }, info)));
+              infos.forEach(([ico, txt]) => {
+                const row = el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lx-tinta-2);padding:2px 0' });
+                row.append(el('i', { class: 'ti ' + ico, style: 'font-size:11px;flex:none;color:var(--lx-tinta-3)' }), document.createTextNode(txt));
+                detalhesWrap.append(row);
+              });
               if (i < (r.pontos||[]).length - 1) detalhesWrap.append(el('div', { style: 'height:1px;background:var(--lx-linha);margin:5px 0' }));
             });
             if (e.motivo_cancelamento) {
               detalhesWrap.append(
                 el('div', { style: 'height:1px;background:var(--lx-linha);margin:5px 0' }),
-                el('div', { style: 'font-size:11.5px;color:var(--lx-erro);font-weight:600' }, '❌ Motivo: ' + e.motivo_cancelamento));
+                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--lx-erro);font-weight:600' }, el('i', { class: 'ti ti-x', style: 'font-size:12px;flex:none' }), 'Motivo: ' + e.motivo_cancelamento));
             }
           } catch { detalhesWrap.innerHTML = ''; detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Sem detalhes.')); }
         }
@@ -709,12 +717,12 @@ export async function montar(container) {
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:5px' },
           el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, e.protocolo||'—'),
           statusBadge(e.status)),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' }, '📍 ' + (e.coleta_endereco?.split(',')[0]||'—')),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' }, '🏁 ' + (e.destino_endereco?.split(',')[0]||'—')),
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' }, el('i', { class: 'ti ti-map-pin', style: 'font-size:12px;margin-right:4px;color:var(--lx-azul-profundo)' }), (e.coleta_endereco?.split(',')[0]||'—')),
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' }, el('i', { class: 'ti ti-flag', style: 'font-size:12px;margin-right:4px;color:var(--lx-azul-primario)' }), (e.destino_endereco?.split(',')[0]||'—')),
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between' },
           el('span', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, fmtData(e.criado_em)),
           el('div', { style: 'display:flex;gap:6px;align-items:center' },
-            e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, '🏍 ' + e.motoboy_nome.split(' ')[0]) : el('span', {}),
+            e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, el('i', { class: 'ti ti-motorbike', style: 'font-size:12px;margin-right:3px' }), e.motoboy_nome.split(' ')[0]) : el('span', {}),
             auth.pode('entregas.criar') && !['entregue','cancelada'].includes(e.status)
               ? el('button', { style: 'font-size:11px;padding:3px 9px;border-radius:6px;background:var(--lx-erro-bg);color:var(--lx-erro);border:none;cursor:pointer;font-weight:700', onClick: ev => { ev.stopPropagation(); confirmarCancelar(e, () => carregar()); }}, 'Cancelar')
               : el('span', {}))),
