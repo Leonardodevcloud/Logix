@@ -96,18 +96,46 @@ async function listar({ empresaId, status, motoboyId }) {
   return rows;
 }
 
-async function listarConcluidas({ empresaId, de, ate, motoboyId }) {
-  const cond = ['empresa_id = $1', `status = 'entregue'`]; const params = [empresaId];
-  if (de) { params.push(de); cond.push(`concluida_em >= $${params.length}`); }
-  if (ate) { params.push(ate); cond.push(`concluida_em <= $${params.length}`); }
-  if (motoboyId) { params.push(motoboyId); cond.push(`motoboy_id = $${params.length}`); }
+async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
+  const cond = ['e.empresa_id = $1']; const params = [empresaId];
+  // status: 'entregue' | 'cancelada' | null (todas)
+  if (status === 'entregue') cond.push("e.status = 'entregue'");
+  else if (status === 'cancelada') cond.push("e.status = 'cancelada'");
+  else cond.push("e.status IN ('entregue','cancelada')");
+  if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
+  if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
+  if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   const { rows } = await query(
-    `SELECT e.id, e.protocolo, e.motoboy_id, e.distancia_km, e.tempo_total_min, e.concluida_em,
-            (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos
-       FROM entregas e WHERE ${cond.join(' AND ')} ORDER BY e.concluida_em DESC LIMIT 500`,
+    `SELECT e.id, e.protocolo, e.status, e.motoboy_id, e.distancia_km, e.tempo_estimado_min,
+            e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
+            m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone AS motoboy_telefone,
+            (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos,
+            (SELECT ep.numero_nf FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf IS NOT NULL ORDER BY ep.ordem LIMIT 1) AS primeira_nf,
+            (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
+       FROM entregas e
+       LEFT JOIN motoboys m ON m.id = e.motoboy_id
+       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 500`,
     params
   );
   return rows;
+}
+
+// Detalhe de uma entrega concluída: pontos + protocolos (fotos)
+async function detalharConcluida({ empresaId, id }) {
+  const { rows: ent } = await query(
+    `SELECT e.*, m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone AS motoboy_telefone
+     FROM entregas e LEFT JOIN motoboys m ON m.id = e.motoboy_id
+     WHERE e.id = $1 AND e.empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const { rows: pontos } = await query(
+    `SELECT ep.*,
+            json_agg(json_build_object('url', pr.arquivo_url, 'tipo', pr.tipo) ORDER BY pr.criado_em)
+              FILTER (WHERE pr.id IS NOT NULL) AS fotos
+     FROM entregas_pontos ep
+     LEFT JOIN protocolos pr ON pr.entrega_ponto_id = ep.id
+     WHERE ep.entrega_id = $1
+     GROUP BY ep.id ORDER BY ep.ordem`, [id]);
+  return { ...ent[0], pontos };
 }
 
 // Acompanhamento: entrega + pontos + última posição conhecida do motoboy.
@@ -195,7 +223,7 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
 }
 
 module.exports = { cancelarEntrega,
-  criarEntrega, obter, listar, listarConcluidas, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

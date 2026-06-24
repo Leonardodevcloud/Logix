@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el, statusBadge } from '../core/ui.js';
 import { get, post, patch, getToken } from '../core/api.js';
+import { montarConcluidas } from './entregas-concluidas.js';
 import * as auth from '../core/auth.js';
 
 const BASE = window.LOGIX_API || '/api/v1';
@@ -735,13 +736,18 @@ export async function montar(container) {
     });
   }
 
+  // Container para tela de concluídas
+  const concluidasContainer = el('div', { style: 'display:none;flex:1;overflow:hidden;flex-direction:column' });
+
   function trocarAba(id) {
     abaAtiva.val = id;
     Object.entries(tabEls).forEach(([k,t]) => t.classList.toggle('on', k===id));
     sideNova.style.display = id==='nova' ? 'flex' : 'none';
-    sideHistorico.style.display = id!=='nova' ? 'block' : 'none';
+    sideHistorico.style.display = (id==='ativas'||id==='canceladas') ? 'block' : 'none';
+    concluidasContainer.style.display = id==='concluidas' ? 'flex' : 'none';
     if (id==='nova' && _mapa) { _mapa.limpar(); statsPill.style.display='none'; setTimeout(() => _mapa.invalidar(), 50); }
-    if (id!=='nova') renderHistorico();
+    if (id==='ativas'||id==='canceladas') renderHistorico();
+    if (id==='concluidas') montarConcluidas(concluidasContainer);
   }
 
   async function atualizarMapa() {
@@ -760,7 +766,7 @@ export async function montar(container) {
     try { _entregas = await get('/entregas'); if (abaAtiva.val!=='nova') renderHistorico(); } catch {}
   }
 
-  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico), mapaWrap);
+  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico, concluidasContainer), mapaWrap);
   const shell = el('div', { class: 'lx-ent-shell' }, abasEl, body);
   container.append(casca('Entregas', shell, 'Coleta e destinos — rota otimizada automaticamente'));
 
