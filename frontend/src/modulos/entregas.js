@@ -745,6 +745,9 @@ export async function montar(container) {
     sideNova.style.display = id==='nova' ? 'flex' : 'none';
     sideHistorico.style.display = (id==='ativas'||id==='canceladas') ? 'block' : 'none';
     concluidasContainer.style.display = id==='concluidas' ? 'flex' : 'none';
+    // Concluídas: sem mapa — side ocupa 100%, mapa some
+    mapaWrap.style.display = id==='concluidas' ? 'none' : '';
+    body.style.gridTemplateColumns = id==='concluidas' ? '1fr' : '360px 1fr';
     if (id==='nova' && _mapa) { _mapa.limpar(); statsPill.style.display='none'; setTimeout(() => _mapa.invalidar(), 50); }
     if (id==='ativas'||id==='canceladas') renderHistorico();
     if (id==='concluidas') montarConcluidas(concluidasContainer);
