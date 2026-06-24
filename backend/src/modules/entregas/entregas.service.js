@@ -128,9 +128,17 @@ async function detalharConcluida({ empresaId, id }) {
      WHERE e.id = $1 AND e.empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   const { rows: pontos } = await query(
-    `SELECT ep.*,
-            json_agg(json_build_object('url', pr.arquivo_url, 'tipo', pr.tipo) ORDER BY pr.criado_em)
-              FILTER (WHERE pr.id IS NOT NULL) AS fotos
+    `SELECT ep.id, ep.ordem, ep.nome, ep.endereco, ep.lat, ep.lng,
+            ep.telefone, ep.observacoes, ep.status, ep.recebedor,
+            ep.entregue_em, ep.chegou_em, ep.finalizado_em,
+            ep.numero_nf, ep.nome_fantasia, ep.complemento,
+            COALESCE(
+              json_agg(
+                json_build_object('url', pr.arquivo_url, 'tipo', pr.tipo)
+                ORDER BY pr.criado_em
+              ) FILTER (WHERE pr.id IS NOT NULL),
+              '[]'::json
+            ) AS fotos
      FROM entregas_pontos ep
      LEFT JOIN protocolos pr ON pr.entrega_ponto_id = ep.id
      WHERE ep.entrega_id = $1

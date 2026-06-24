@@ -67,7 +67,7 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // POST /motoboys/app/posicao — reportar GPS (chamado em background pelo app)
+  // POST /motoboys/app/posicao — reportar GPS
   router.post('/app/posicao', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { lat, lng, entrega_id } = req.body;
@@ -84,7 +84,6 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // PATCH /motoboys/app/entregas/:id/status — motoboy avança o status da entrega
-  // status: aguardando_coleta → em_coleta → em_rota → entregue
   router.patch('/app/entregas/:id/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { status } = req.body;
@@ -101,13 +100,8 @@ module.exports = function motoboyAppRoutes() {
       const novoIdx  = FLUXO.indexOf(status);
       if (novoIdx <= atualIdx) throw AppError.validacao('Não é possível voltar o status');
 
-      const extra = status === 'entregue'
-        ? `, concluida_em = now()` : '';
-
-      await query(
-        `UPDATE entregas SET status = $1${extra} WHERE id = $2`,
-        [status, req.params.id]
-      );
+      const extra = status === 'entregue' ? `, concluida_em = now()` : '';
+      await query(`UPDATE entregas SET status = $1${extra} WHERE id = $2`, [status, req.params.id]);
 
       emitirParaEmpresa(req.motoboy.empresaId, 'entrega.status', {
         entregaId: req.params.id, status, motoboyId: req.motoboy.id,
@@ -118,75 +112,138 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // POST /motoboys/app/entregas/:entregaId/pontos/:pontoId/concluir
-  // Motoboy finaliza um ponto de entrega e envia foto de protocolo (URL já no storage)
+  // FIX 3: responde imediatamente ao app e processa fotos em background
+  // Fotos grandes (base64) causavam timeout no app antes da resposta
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls } = req.body; // fotos_urls: string[] de URLs já upadas
+      const { recebedor, fotos_urls } = req.body;
+      const { entregaId, pontoId } = req.params;
+      const empresaId = req.motoboy.empresaId;
 
+      // 1. Atualizar ponto como entregue — operação rápida
       await query(
-        `UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
+        `UPDATE entregas_pontos
+         SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
          WHERE id = $2 AND entrega_id = $3`,
-        [recebedor || null, req.params.pontoId, req.params.entregaId]
+        [recebedor || null, pontoId, entregaId]
       );
 
-      // Registrar fotos de protocolo
-      if (Array.isArray(fotos_urls) && fotos_urls.length) {
-        for (const url of fotos_urls) {
-          await query(
-            `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
-            [req.params.pontoId, url]
-          );
-        }
-      }
-
-      // Verificar se todos os pontos foram entregues
+      // 2. Verificar se todos os pontos foram entregues — rápido
       const { rows: pendentes } = await query(
         `SELECT count(*)::int AS qtd FROM entregas_pontos
          WHERE entrega_id = $1 AND status != 'entregue'`,
-        [req.params.entregaId]
+        [entregaId]
       );
+      const todosEntregues = pendentes[0].qtd === 0;
 
-      if (pendentes[0].qtd === 0) {
+      if (todosEntregues) {
         await query(
-          `UPDATE entregas SET status = 'entregue', concluida_em = now() WHERE id = $1`,
-          [req.params.entregaId]
+          `UPDATE entregas
+           SET status = 'entregue', concluida_em = now(),
+               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60)
+           WHERE id = $1`,
+          [entregaId]
         );
-        emitirParaEmpresa(req.motoboy.empresaId, 'entrega.concluida', { entregaId: req.params.entregaId });
       }
 
-      res.json({ ok: true, todos_entregues: pendentes[0].qtd === 0 });
+      // 3. Responder IMEDIATAMENTE ao app — antes de processar fotos pesadas
+      res.json({ ok: true, todos_entregues: todosEntregues });
+
+      // 4. Processar fotos em background (não bloqueia a resposta)
+      if (Array.isArray(fotos_urls) && fotos_urls.length) {
+        setImmediate(async () => {
+          for (const url of fotos_urls) {
+            if (!url) continue;
+            try {
+              await query(
+                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
+                [pontoId, url]
+              );
+            } catch (err) {
+              console.error('[app:concluir] erro ao salvar foto em background:', err.message);
+            }
+          }
+        });
+      }
+
+      // 5. Emitir WS também em background
+      if (todosEntregues) {
+        emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
+      }
+
     } catch (e) { next(e); }
   });
 
-// POST /motoboys/app/entregas/:entregaId/concluir-sem-ponto — fallback quando não tem pontoId
+  // POST /motoboys/app/entregas/:entregaId/concluir-sem-ponto — fallback sem pontoId
+  // FIX 3: mesma estratégia — responde imediatamente, fotos em background
   router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
-  try {
-    const { recebedor, fotos_urls } = req.body;
-    // Pegar o primeiro ponto pendente da entrega
-    const { rows: pontos } = await query(
-      `SELECT id FROM entregas_pontos WHERE entrega_id = $1 AND status != 'entregue' ORDER BY ordem LIMIT 1`,
-      [req.params.entregaId]
-    );
-    const pontoId = pontos[0]?.id;
-    if (pontoId) {
-      await query(`UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now() WHERE id = $2`, [recebedor || null, pontoId]);
-      if (Array.isArray(fotos_urls) && fotos_urls.length) {
-        for (const url of fotos_urls) {
-          await query(`INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`, [pontoId, url]);
-        }
+    try {
+      const { recebedor, fotos_urls } = req.body;
+      const { entregaId } = req.params;
+      const empresaId = req.motoboy.empresaId;
+
+      // Pegar o primeiro ponto pendente
+      const { rows: pontos } = await query(
+        `SELECT id FROM entregas_pontos
+         WHERE entrega_id = $1 AND status != 'entregue'
+         ORDER BY ordem LIMIT 1`,
+        [entregaId]
+      );
+      const pontoId = pontos[0]?.id;
+
+      if (pontoId) {
+        await query(
+          `UPDATE entregas_pontos
+           SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
+           WHERE id = $2`,
+          [recebedor || null, pontoId]
+        );
       }
-    }
-    // Verificar se todos os pontos foram entregues
-    const { rows: pend } = await query(
-      `SELECT count(*)::int AS qtd FROM entregas_pontos WHERE entrega_id = $1 AND status != 'entregue'`,
-      [req.params.entregaId]
-    );
-    if (pend[0].qtd === 0) {
-      await query(`UPDATE entregas SET status = 'entregue', concluida_em = now() WHERE id = $1`, [req.params.entregaId]);
-    }
-    res.json({ ok: true, todos_entregues: pend[0].qtd === 0 });
-  } catch (e) { next(e); }
-});
+
+      // Verificar pendentes
+      const { rows: pend } = await query(
+        `SELECT count(*)::int AS qtd FROM entregas_pontos
+         WHERE entrega_id = $1 AND status != 'entregue'`,
+        [entregaId]
+      );
+      const todosEntregues = pend[0].qtd === 0;
+
+      if (todosEntregues) {
+        await query(
+          `UPDATE entregas
+           SET status = 'entregue', concluida_em = now(),
+               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60)
+           WHERE id = $1`,
+          [entregaId]
+        );
+      }
+
+      // Responder imediatamente
+      res.json({ ok: true, todos_entregues: todosEntregues });
+
+      // Fotos em background
+      if (pontoId && Array.isArray(fotos_urls) && fotos_urls.length) {
+        setImmediate(async () => {
+          for (const url of fotos_urls) {
+            if (!url) continue;
+            try {
+              await query(
+                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
+                [pontoId, url]
+              );
+            } catch (err) {
+              console.error('[app:concluir-sem-ponto] erro ao salvar foto em background:', err.message);
+            }
+          }
+        });
+      }
+
+      if (todosEntregues) {
+        emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
+      }
+
+    } catch (e) { next(e); }
+  });
 
   return router;
 };
