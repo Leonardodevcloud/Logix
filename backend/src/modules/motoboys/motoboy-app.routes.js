@@ -5,6 +5,37 @@ const { verificarTokenMotoboy } = require('../../middleware/auth');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 
+// Calcula distância total da entrega (coleta → pontos) usando haversine
+async function calcularKmEntrega(entregaId) {
+  try {
+    const { rows } = await query(
+      `SELECT e.coleta_lat, e.coleta_lng,
+              json_agg(json_build_object('lat', ep.lat, 'lng', ep.lng) ORDER BY ep.ordem) AS pontos
+       FROM entregas e
+       JOIN entregas_pontos ep ON ep.entrega_id = e.id
+       WHERE e.id = $1
+       GROUP BY e.id`,
+      [entregaId]
+    );
+    if (!rows[0]) return null;
+    const { coleta_lat, coleta_lng, pontos } = rows[0];
+    if (!coleta_lat || !coleta_lng || !pontos?.length) return null;
+    const pts = [{ lat: parseFloat(coleta_lat), lng: parseFloat(coleta_lng) },
+                 ...pontos.filter(p => p.lat && p.lng).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }))];
+    if (pts.length < 2) return null;
+    let km = 0;
+    const R = 6371, rad = x => x * Math.PI / 180;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i+1];
+      const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+      const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng/2)**2;
+      km += 2 * R * Math.asin(Math.sqrt(h));
+    }
+    return parseFloat(km.toFixed(2));
+  } catch { return null; }
+}
+
+
 module.exports = function motoboyAppRoutes() {
   const router = express.Router();
 
@@ -209,12 +240,15 @@ module.exports = function motoboyAppRoutes() {
       const todosEntregues = pend[0].qtd === 0;
 
       if (todosEntregues) {
+        // FIX 5: calcular km haversine se ainda não foi calculado pelo ORS
+        const kmHaversine = await calcularKmEntrega(entregaId);
         await query(
           `UPDATE entregas
            SET status = 'entregue', concluida_em = now(),
-               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60)
+               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60),
+               distancia_km = COALESCE(distancia_km, $2)
            WHERE id = $1`,
-          [entregaId]
+          [entregaId, kmHaversine]
         );
       }
 

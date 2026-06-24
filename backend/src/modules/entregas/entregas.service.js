@@ -250,3 +250,245 @@ async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
   registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'cancelar', detalhe: { id, motivo }, ip }).catch(() => {});
   return { ok: true };
 }
+
+// ── Protocolo HTML público ────────────────────────────────────────────────────
+// Gera uma página HTML standalone para impressão/PDF da entrega.
+async function gerarProtocoloHtml(id) {
+  // Buscar entrega sem filtro de empresa (é público, mas só expõe dados não sensíveis)
+  const { rows: ent } = await query(
+    `SELECT e.*,
+            m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
+            emp.razao_social, emp.nome_fantasia,
+            b.cor_primaria, b.logo_url, b.nome_exibicao
+     FROM entregas e
+     LEFT JOIN motoboys m       ON m.id = e.motoboy_id
+     LEFT JOIN empresas emp     ON emp.id = e.empresa_id
+     LEFT JOIN empresa_branding b ON b.empresa_id = e.empresa_id
+     WHERE e.id = $1`, [id]);
+  if (!ent[0]) throw require('../../shared/AppError').naoEncontrado('Entrega não encontrada');
+  const d = ent[0];
+
+  const { rows: pontos } = await query(
+    `SELECT ep.id, ep.ordem, ep.nome, ep.endereco, ep.status, ep.recebedor,
+            ep.entregue_em, ep.chegou_em, ep.finalizado_em,
+            ep.numero_nf, ep.nome_fantasia, ep.complemento, ep.telefone, ep.observacoes,
+            COALESCE(
+              json_agg(
+                json_build_object('url', pr.arquivo_url, 'tipo', pr.tipo)
+                ORDER BY pr.criado_em
+              ) FILTER (WHERE pr.id IS NOT NULL),
+              '[]'::json
+            ) AS fotos
+     FROM entregas_pontos ep
+     LEFT JOIN protocolos pr ON pr.entrega_ponto_id = ep.id
+     WHERE ep.entrega_id = $1
+     GROUP BY ep.id ORDER BY ep.ordem`, [id]);
+
+  const cor = d.cor_primaria || '#185FA5';
+  const nomeEmpresa = d.nome_exibicao || d.nome_fantasia || d.razao_social || 'Logix';
+
+  function fmtDataHtml(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+  function fmtHoraHtml(iso) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  // Detectar tipo real de base64
+  function normalizarBase64(raw) {
+    if (!raw) return null;
+    if (raw.startsWith('http') || raw.startsWith('data:')) return raw;
+    if (raw.startsWith('/9j/'))   return 'data:image/jpeg;base64,' + raw;
+    if (raw.startsWith('iVBOR')) return 'data:image/png;base64,'  + raw;
+    if (raw.startsWith('UklG'))   return 'data:image/webp;base64,' + raw;
+    return 'data:image/jpeg;base64,' + raw;
+  }
+
+  const pontosHtml = pontos.map((p, i) => {
+    const fotos = (() => {
+      try { return Array.isArray(p.fotos) ? p.fotos : JSON.parse(p.fotos || '[]'); } catch { return []; }
+    })().filter(f => { const r = typeof f === 'string' ? f : (f?.url || ''); return r && r.length > 4; });
+
+    const fotosHtml = fotos.length ? `
+      <div class="fotos-label">📷 Fotos de protocolo</div>
+      <div class="fotos-grid">
+        ${fotos.map(f => {
+          const raw = typeof f === 'string' ? f : (f?.url || '');
+          const url = normalizarBase64(raw);
+          return url ? `<img src="${url}" class="foto-thumb" onerror="this.style.display='none'" />` : '';
+        }).join('')}
+      </div>` : '';
+
+    const horarios = [
+      p.chegou_em   ? `<span class="hora chegou">⏱ Chegou: ${fmtHoraHtml(p.chegou_em)}</span>` : '',
+      (p.entregue_em || p.finalizado_em) ? `<span class="hora entregue">✓ Entregue: ${fmtHoraHtml(p.entregue_em || p.finalizado_em)}</span>` : '',
+    ].filter(Boolean).join('');
+
+    const extras = [
+      p.nome_fantasia ? `<span>${p.nome_fantasia}</span>` : '',
+      p.numero_nf     ? `<span>NF: ${p.numero_nf}</span>` : '',
+      p.complemento   ? `<span>${p.complemento}</span>`   : '',
+      p.telefone      ? `<span>📞 ${p.telefone}</span>`   : '',
+      p.recebedor     ? `<span>👤 Recebedor: ${p.recebedor}</span>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="ponto ${p.status === 'entregue' ? 'entregue' : ''}">
+        <div class="ponto-header">
+          <div class="ponto-num" style="background:${cor}">${i + 1}</div>
+          <div class="ponto-info">
+            <div class="ponto-label">ENTREGA ${i + 1}</div>
+            <div class="ponto-end">${p.endereco || '—'}</div>
+            ${extras ? `<div class="ponto-extras">${extras}</div>` : ''}
+          </div>
+          <div class="ponto-status ${p.status}">${p.status || '—'}</div>
+        </div>
+        ${horarios ? `<div class="horarios">${horarios}</div>` : ''}
+        ${fotosHtml}
+      </div>`;
+  }).join('');
+
+  const kmStr = d.distancia_km && parseFloat(d.distancia_km) > 0
+    ? parseFloat(d.distancia_km).toFixed(1) + ' km' : '—';
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Protocolo ${d.protocolo} — ${nomeEmpresa}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1a2433; background: #fff; }
+    .page { max-width: 680px; margin: 0 auto; padding: 24px 20px; }
+
+    /* Cabeçalho */
+    .cabecalho { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 2.5px solid ${cor}; margin-bottom: 20px; }
+    .logo-area { display: flex; align-items: center; gap: 10px; }
+    .logo-area img { height: 36px; object-fit: contain; }
+    .empresa-nome { font-size: 18px; font-weight: 800; color: ${cor}; }
+    .protocolo-badge { font-size: 15px; font-weight: 800; color: ${cor}; text-align: right; }
+    .protocolo-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #8AA2BE; }
+
+    /* Bloco de info geral */
+    .info-geral { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; background: #F5F8FC; border-radius: 10px; padding: 14px 16px; }
+    .info-item { display: flex; flex-direction: column; gap: 2px; }
+    .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: #8AA2BE; font-weight: 600; }
+    .info-val { font-size: 13px; font-weight: 600; color: #0F2740; }
+    .status-entregue { color: #1D9E75; } .status-cancelada { color: #D93025; }
+
+    /* Coleta */
+    .coleta-bloco { border: 1.5px solid #042C53; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: #EFF6FF; }
+    .coleta-label { font-size: 10px; font-weight: 700; color: #042C53; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+    .coleta-apelido { font-size: 13px; font-weight: 700; color: #042C53; }
+    .coleta-end { font-size: 12px; color: #486485; margin-top: 2px; }
+
+    /* Pontos */
+    .pontos-titulo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #8AA2BE; margin-bottom: 10px; }
+    .ponto { border: 1.5px solid #CBD8E8; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+    .ponto.entregue { border-color: #1D9E75; }
+    .ponto-header { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; }
+    .ponto-num { width: 26px; height: 26px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 11px; flex: none; margin-top: 1px; }
+    .ponto-info { flex: 1; min-width: 0; }
+    .ponto-label { font-size: 10px; font-weight: 700; color: ${cor}; text-transform: uppercase; letter-spacing: .06em; }
+    .ponto-end { font-size: 12.5px; color: #0F2740; margin-top: 2px; }
+    .ponto-extras { font-size: 11px; color: #6B7A8F; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .ponto-status { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; flex: none; margin-left: auto; }
+    .ponto-status.entregue { background: #E1F5EE; color: #1D9E75; }
+    .ponto-status.pendente { background: #F0F4F8; color: #6B7A8F; }
+    .ponto-status.falha { background: #FAECEA; color: #D93025; }
+    .horarios { display: flex; gap: 14px; padding: 6px 12px; border-top: 0.5px solid #E2EAF0; background: #FAFBFC; flex-wrap: wrap; }
+    .hora { font-size: 11px; font-weight: 600; }
+    .hora.chegou { color: #185FA5; }
+    .hora.entregue { color: #1D9E75; }
+    .fotos-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #8AA2BE; padding: 6px 12px 4px; border-top: 0.5px solid #E2EAF0; }
+    .fotos-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 12px; }
+    .foto-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 0.5px solid #CBD8E8; }
+
+    /* Rodapé */
+    .rodape { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E2EAF0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #8AA2BE; }
+
+    /* Impressão */
+    @media print {
+      body { font-size: 12px; }
+      .btn-imprimir { display: none !important; }
+      .page { padding: 8px; max-width: 100%; }
+      @page { margin: 1cm; }
+    }
+
+    .btn-imprimir {
+      position: fixed; bottom: 24px; right: 24px;
+      background: ${cor}; color: #fff; border: none; border-radius: 10px;
+      padding: 12px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="cabecalho">
+    <div class="logo-area">
+      ${d.logo_url ? `<img src="${d.logo_url}" alt="${nomeEmpresa}" />` : ''}
+      <span class="empresa-nome">${nomeEmpresa}</span>
+    </div>
+    <div>
+      <div class="protocolo-label">Protocolo</div>
+      <div class="protocolo-badge">${d.protocolo}</div>
+    </div>
+  </div>
+
+  <div class="info-geral">
+    <div class="info-item">
+      <span class="info-label">Status</span>
+      <span class="info-val status-${d.status}">${d.status === 'entregue' ? '✓ Entregue' : d.status === 'cancelada' ? '✗ Cancelada' : d.status}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Motoboy</span>
+      <span class="info-val">${d.motoboy_nome || '—'}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Criada em</span>
+      <span class="info-val">${fmtDataHtml(d.criado_em)}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Concluída em</span>
+      <span class="info-val">${fmtDataHtml(d.concluida_em)}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Distância</span>
+      <span class="info-val">${kmStr}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Telefone motoboy</span>
+      <span class="info-val">${d.motoboy_telefone || '—'}</span>
+    </div>
+  </div>
+
+  <div class="coleta-bloco">
+    <div class="coleta-label">📍 Coleta</div>
+    ${d.coleta_nome ? `<div class="coleta-apelido">${d.coleta_nome}</div>` : ''}
+    <div class="coleta-end">${d.coleta_endereco || '—'}</div>
+  </div>
+
+  <div class="pontos-titulo">Pontos de entrega (${pontos.length})</div>
+  ${pontosHtml}
+
+  <div class="rodape">
+    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+    <span>Logix · Gestão de Entregas</span>
+  </div>
+
+</div>
+
+<button class="btn-imprimir" onclick="window.print()">
+  🖨 Imprimir / Salvar PDF
+</button>
+
+</body>
+</html>`;
+}
+
+module.exports.gerarProtocoloHtml = gerarProtocoloHtml;

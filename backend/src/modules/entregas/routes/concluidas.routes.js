@@ -6,7 +6,7 @@ const service = require('../entregas.service');
 module.exports = function concluidasRoutes() {
   const router = express.Router();
 
-  // GET /entregas/concluidas?status=entregue|cancelada&de=&ate=&motoboy_id=
+  // GET /entregas/concluidas
   router.get('/concluidas', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       res.json(await service.listarConcluidas({
@@ -18,10 +18,20 @@ module.exports = function concluidasRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /entregas/:id/detalhe — pontos + fotos de protocolo
+  // GET /entregas/:id/detalhe
   router.get('/:id/detalhe', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       res.json(await service.detalharConcluida({ empresaId: req.empresaId, id: req.params.id }));
+    } catch (e) { next(e); }
+  });
+
+  // GET /entregas/:id/protocolo  — PÚBLICO, sem auth, gera HTML imprimível
+  // URL acessada diretamente no browser como nova aba
+  router.get('/:id/protocolo', async (req, res, next) => {
+    try {
+      const html = await service.gerarProtocoloHtml(req.params.id);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
     } catch (e) { next(e); }
   });
 
