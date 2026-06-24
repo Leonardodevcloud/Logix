@@ -97,6 +97,7 @@ export async function montar(container) {
         podeGerenciar
           ? el('div', { style: 'display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end' },
               el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => abrirEdicao(m) }, 'Editar'),
+              el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => definirPIN(m) }, 'Definir PIN'),
               el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: async () => {
                 try {
                   await patch('/motoboys/' + m.id + '/online', { online: !m.online });
@@ -143,6 +144,29 @@ export async function montar(container) {
           campo('Endereço', end)),
         campo('Observações', obs), msg),
       [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => overlay.remove() }, 'Cancelar'), btn]);
+  }
+
+  function definirPIN(m) {
+    const pinInp = el('input', { class: 'lx-input', type: 'password', placeholder: 'Ex: 123456 (mín. 4 dígitos)', maxlength: '8', style: 'letter-spacing:.2em;font-size:18px;text-align:center' });
+    const msg = el('div', { style: 'font-size:12px;min-height:16px;margin-top:4px' });
+    const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', onClick: async () => {
+      const pin = pinInp.value.trim();
+      if (pin.length < 4) { msg.style.color = 'var(--lx-erro)'; msg.textContent = 'PIN deve ter ao menos 4 dígitos.'; return; }
+      btnSalvar.disabled = true;
+      try {
+        await post('/motoboys/' + m.id + '/pin', { pin });
+        msg.style.color = 'var(--lx-ok)';
+        msg.textContent = 'PIN definido com sucesso!';
+        setTimeout(() => ov.remove(), 1200);
+      } catch (e) { msg.style.color = 'var(--lx-erro)'; msg.textContent = e.message; btnSalvar.disabled = false; }
+    }}, 'Salvar PIN');
+    const ov = modal('Definir PIN — ' + m.nome_completo,
+      el('div', {},
+        el('div', { style: 'font-size:13px;color:var(--lx-tinta-2);margin-bottom:12px' },
+          'O motoboy usará este PIN para entrar no app junto com o telefone cadastrado (' + (m.telefone_principal || '—') + ').'),
+        pinInp, msg),
+      [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btnSalvar]);
+    setTimeout(() => pinInp.focus(), 100);
   }
 
   function confirmarDesativar(m) {

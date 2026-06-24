@@ -36,3 +36,17 @@ const verificarAdmin = exigirPerfil(PERFIS.SUPER_ADMIN);
 const verificarAdminOuFinanceiro = exigirPerfil(PERFIS.SUPER_ADMIN, PERFIS.CLIENTE);
 
 module.exports = { verificarToken, exigirPerfil, verificarAdmin, verificarAdminOuFinanceiro };
+
+// Verifica token do app do motoboy (Bearer simples, sem cookie).
+function verificarTokenMotoboy(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return next(AppError.naoAutorizado('Token do motoboy não informado'));
+  try {
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    if (payload.perfil !== 'motoboy') return next(AppError.naoAutorizado('Acesso restrito a motoboys'));
+    req.motoboy = { id: payload.id, empresaId: payload.empresaId, nome: payload.nome };
+    next();
+  } catch { next(AppError.naoAutorizado('Token do motoboy inválido ou expirado')); }
+}
+
+module.exports.verificarTokenMotoboy = verificarTokenMotoboy;

@@ -24,4 +24,16 @@ async function initMotoboysTables() {
   await query(`CREATE INDEX IF NOT EXISTS idx_motoboys_empresa ON motoboys(empresa_id)`);
 }
 
-module.exports = { initMotoboysTables };
+async function migrarMotoboys() {
+  const cols = [
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS pin_hash TEXT",
+  ];
+  for (const sql of cols) { try { await query(sql); } catch {} }
+}
+
+async function initMotoboysTablesAll() {
+  await initMotoboysTables();
+  await migrarMotoboys();
+}
+
+module.exports = { initMotoboysTables: initMotoboysTablesAll };
