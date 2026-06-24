@@ -22,10 +22,10 @@ function abrirFotos(fotos, idx) {
     img.src = typeof f === 'string' ? f : (f?.url || f?.link || '');
     contador.textContent = `${atual + 1} / ${fotos.length}`;
   }
-  const btnPrev = el('button', { style: 'position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center', onClick: () => { if (atual > 0) { atual--; atualizar(); } }}, el('i', { class: 'ti ti-chevron-left' }));
-  const btnNext = el('button', { style: 'position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center', onClick: () => { if (atual < fotos.length - 1) { atual++; atualizar(); } }}, el('i', { class: 'ti ti-chevron-right' }));
+  const btnPrev = el('button', { style: 'position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center', onClick: () => { if (atual > 0) { atual--; atualizar(); } }}, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>' }));
+  const btnNext = el('button', { style: 'position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center', onClick: () => { if (atual < fotos.length - 1) { atual++; atualizar(); } }}, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' }));
   const ov = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:3000;display:flex;align-items:center;justify-content:center;flex-direction:column' },
-    el('button', { style: 'position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer', onClick: () => ov.remove() }, el('i', { class: 'ti ti-x' })),
+    el('button', { style: 'position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer', onClick: () => ov.remove() }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' })),
     btnPrev, img, contador, btnNext);
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.append(ov);
@@ -45,7 +45,7 @@ async function linhaDetalhe(e) {
     if (d.motoboy_foto) {
       header.append(el('img', { style: 'width:52px;height:52px;border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--lx-linha)', src: d.motoboy_foto }));
     } else {
-      header.append(el('div', { style: 'width:52px;height:52px;border-radius:50%;background:var(--lx-info-bg);display:grid;place-items:center;flex:none', html: '<i class="ti ti-motorbike" style="font-size:22px;color:var(--lx-azul-primario)"></i>' }));
+      header.append(el('div', { style: 'width:52px;height:52px;border-radius:50%;background:var(--lx-info-bg);display:grid;place-items:center;flex:none', html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' }));
     }
     const metas = [
       d.motoboy_nome || 'Sem motoboy',
@@ -59,7 +59,7 @@ async function linhaDetalhe(e) {
         ...metas.slice(1).map(m => el('span', { style: 'font-size:11.5px;color:var(--lx-tinta-2)' }, m)))));
     if (d.motivo_cancelamento) {
       header.append(el('div', { style: 'margin-left:auto;padding:6px 12px;background:var(--lx-erro-bg);color:var(--lx-erro);border-radius:7px;font-size:12px;font-weight:600' },
-        el('i', { class: 'ti ti-x', style: 'font-size:12px;margin-right:4px' }), d.motivo_cancelamento));
+        el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' }), d.motivo_cancelamento));
     }
 
     // Pontos
@@ -119,7 +119,7 @@ async function linhaDetalhe(e) {
 
         if (p.recebedor) {
           const r = el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--lx-tinta-2)' });
-          r.append(el('i', { class: 'ti ti-writing-sign', style: 'font-size:12px;color:var(--lx-tinta-3)' }), document.createTextNode('Recebedor: ' + p.recebedor));
+          r.append(el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-tinta-3);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l9-9m0 0 4 4L21 9m-9 5-4-4"/><path d="M3 19h4"/></svg>' }), document.createTextNode('Recebedor: ' + p.recebedor));
           body.append(r);
         }
 
@@ -128,7 +128,7 @@ async function linhaDetalhe(e) {
           const fotoSection = el('div', {});
           fotoSection.append(
             el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lx-tinta-3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em' },
-              el('i', { class: 'ti ti-camera', style: 'font-size:12px' }), 'Fotos de protocolo'));
+              el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' }), 'Fotos de protocolo'));
           const grid = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
           fotos.forEach((foto, fi) => {
             const url = typeof foto === 'string' ? foto : (foto?.url || foto?.link || '');
@@ -145,7 +145,7 @@ async function linhaDetalhe(e) {
           const hr = el('div', { style: 'display:flex;gap:14px;padding-top:6px;border-top:0.5px solid var(--lx-linha)' });
           horarios.forEach(([label, hora, cor]) => {
             hr.append(el('div', { style: `display:flex;align-items:center;gap:4px;font-size:11px;color:${cor}` },
-              el('i', { class: 'ti ti-clock', style: 'font-size:11px' }),
+              el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' }),
               document.createTextNode(label + ': ' + hora)));
           });
           body.append(hr);
@@ -197,7 +197,7 @@ export async function montarConcluidas(container, filtroInicial) {
     tabFiltros.append(t);
   });
   const btnAtualizar = el('button', { style: 'margin-left:auto;display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:0.5px solid var(--lx-linha);background:none;cursor:pointer;font-size:12px;color:var(--lx-tinta-2)', onClick: () => carregar() },
-    el('i', { class: 'ti ti-refresh', style: 'font-size:14px' }), 'Atualizar');
+    el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>' }), 'Atualizar');
   tabFiltros.append(btnAtualizar);
 
   // Tabela
@@ -247,12 +247,12 @@ export async function montarConcluidas(container, filtroInicial) {
 
       // Botão expandir
       const btnExp = el('div', { style: 'width:26px;height:26px;border-radius:7px;background:var(--lx-superficie-2);border:0.5px solid var(--lx-linha);display:grid;place-items:center;cursor:pointer;color:var(--lx-tinta-2);transition:all .15s' });
-      btnExp.innerHTML = '<i class="ti ti-plus" style="font-size:13px"></i>';
+      btnExp.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
       // Foto motoboy
       const foto = e.motoboy_foto
         ? el('img', { src: e.motoboy_foto, style: 'width:32px;height:32px;border-radius:50%;object-fit:cover;border:1.5px solid var(--lx-linha);display:block;margin:0 auto' })
-        : el('div', { style: 'width:32px;height:32px;border-radius:50%;background:var(--lx-info-bg);display:grid;place-items:center;margin:0 auto', html: '<i class="ti ti-motorbike" style="font-size:14px;color:var(--lx-azul-primario)"></i>' });
+        : el('div', { style: 'width:32px;height:32px;border-radius:50%;background:var(--lx-info-bg);display:grid;place-items:center;margin:0 auto', html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' });
 
       tr.append(
         el('td', { style: 'padding:10px 8px;text-align:center' }, btnExp),
@@ -260,7 +260,7 @@ export async function montarConcluidas(container, filtroInicial) {
         el('td', { style: 'padding:10px 12px;font-weight:700;color:var(--lx-tinta)' }, e.protocolo || '—'),
         el('td', { style: 'padding:10px 12px' },
           e.primeira_nf
-            ? el('span', { style: 'display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--lx-ok);font-weight:600' }, el('i', { class: 'ti ti-tag', style: 'font-size:12px' }), e.primeira_nf)
+            ? el('span', { style: 'display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--lx-ok);font-weight:600' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>' }), e.primeira_nf)
             : el('span', { style: 'color:var(--lx-tinta-3)' }, '—')),
         el('td', { style: 'padding:10px 12px' }, statusBadge(e.status)),
         el('td', { style: 'padding:10px 12px;color:var(--lx-tinta-2)' }, fmtData(e.criado_em)),
@@ -280,7 +280,7 @@ export async function montarConcluidas(container, filtroInicial) {
           _detalheEl = null;
           trDetalhe.style.display = 'none';
           tr.style.background = '';
-          btnExp.innerHTML = '<i class="ti ti-plus" style="font-size:13px"></i>';
+          btnExp.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
           btnExp.style.background = 'var(--lx-superficie-2)';
           btnExp.style.color = 'var(--lx-tinta-2)';
         } else {
@@ -289,7 +289,7 @@ export async function montarConcluidas(container, filtroInicial) {
           // Abrir este
           _expandida = e.id;
           tr.style.background = 'var(--lx-info-bg)';
-          btnExp.innerHTML = '<i class="ti ti-minus" style="font-size:13px"></i>';
+          btnExp.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>';
           btnExp.style.background = 'var(--lx-azul-primario)';
           btnExp.style.color = '#fff';
           trDetalhe.style.display = '';

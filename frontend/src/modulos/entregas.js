@@ -245,7 +245,7 @@ function PainelSalvos({ onSelecionar, onFechar }) {
         row.addEventListener('mouseleave', () => row.style.background = '');
         row.addEventListener('click', () => { onSelecionar(s); onFechar(); });
         row.append(
-          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};display:grid;place-items:center;flex:none;color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'}`, html: s.is_coleta_padrao ? '<i class="ti ti-home-check" style="font-size:17px"></i>' : '<i class="ti ti-bookmark" style="font-size:16px"></i>' }),
+          el('div', { style: `width:36px;height:36px;border-radius:9px;background:${s.is_coleta_padrao?'var(--lx-azul-profundo)':'var(--lx-info-bg)'};display:grid;place-items:center;flex:none;color:${s.is_coleta_padrao?'#fff':'var(--lx-azul-primario)'}`, html: s.is_coleta_padrao ? '<span style="display:inline-flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V9.41a2 2 0 0 1 .586-1.414l7-7a2 2 0 0 1 2.828 0l7 7A2 2 0 0 1 21 9.41V11"/><path d="M16 18l2 2 4-4"/></svg></span><x style="font-size:17px"></i>' : '<span style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><x style="font-size:16px"></i>' }),
           el('div', { style: 'flex:1;min-width:0' },
             el('b', { style: 'font-size:13px;font-weight:700;color:var(--lx-tinta);display:flex;align-items:center;gap:6px' },
               s.apelido,
@@ -322,9 +322,9 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     html: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`
   });
   const btnFav = el('button', {
-    style: 'width:30px;height:30px;border-radius:7px;background:var(--lx-info-bg);color:var(--lx-azul-primario);border:0.5px solid var(--lx-azul-claro);cursor:pointer;display:grid;place-items:center;flex:none;flex-shrink:0;font-size:15px',
+    style: 'width:30px;height:30px;border-radius:7px;background:var(--lx-info-bg);color:var(--lx-azul-primario);border:0.5px solid var(--lx-azul-claro);cursor:pointer;display:grid;place-items:center;flex:none;flex-shrink:0',
     title: 'Endereços salvos',
-    html: '<i class="ti ti-bookmark" style="font-size:14px"></i>'
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>'
   });
 
   const dropSalvos = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:200;max-height:240px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
@@ -356,7 +356,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
       const r = await get('/entregas/enderecos-salvos?q=' + encodeURIComponent(q));
       dropSalvos.innerHTML = '';
       if (!r.length) { dropSalvos.style.display = 'none'; return; }
-      r.forEach(s => dropSalvos.append(rowItem('<i class="ti ti-bookmark" style="font-size:13px"></i>', s.apelido, (s.endereco_completo||'').slice(0,50), () => confirmar(s))));
+      r.forEach(s => dropSalvos.append(rowItem('<span style="display:inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span><x style="font-size:13px"></i>', s.apelido, (s.endereco_completo||'').slice(0,50), () => confirmar(s))));
       dropGeo.style.display = 'none';
       dropSalvos.style.display = 'block';
     } catch {}
@@ -371,7 +371,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
       dropGeo.innerHTML = '';
       if (!resultados.length) { dropGeo.style.display = 'none'; btnBuscar.disabled = false; return; }
       resultados.forEach(r => {
-        dropGeo.append(rowItem('<i class="ti ti-map-pin" style="font-size:13px"></i>', r.label || r.endereco, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '), () => {
+        dropGeo.append(rowItem('<span style="display:inline-flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><x style="font-size:13px"></i>', r.label || r.endereco, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '), () => {
           fecharDrops();
           if (!r.tem_numero) {
             // Número obrigatório — pede antes de confirmar
@@ -399,7 +399,7 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     confirmadoWrap.innerHTML = '';
     confirmadoWrap.append(
       el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
-        el('i', { class: 'ti ti-map-pin', style: 'font-size:16px;flex:none;margin-top:1px;color:var(--lx-azul-primario)' }),
+        el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }),
         el('div', { style: 'flex:1;min-width:0' },
           el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
           r.numero ? el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600' }, 'Nº ' + r.numero) : el('span', {}),
@@ -605,7 +605,7 @@ export async function montar(container) {
       btnSalvarColeta.textContent = '✓ Padrão salvo'; btnSalvarColeta.style.color='var(--lx-ok)'; btnSalvarColeta.style.borderColor='var(--lx-ok)';
       setTimeout(() => { btnSalvarColeta.innerHTML = 'Salvar como padrão'; btnSalvarColeta.style.color='var(--lx-tinta-2)'; btnSalvarColeta.style.borderColor='var(--lx-linha)'; }, 2000);
     } catch (e) { toast(e.message, 'erro'); }
-  }}, el('i', { class: 'ti ti-bookmark', style: 'font-size:13px;margin-right:5px' }), 'Salvar como padrão');
+  }}, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>' }), 'Salvar como padrão');
 
   function reconstruirFormulario() {
     _pontos = []; pontosWrap.innerHTML = ''; novoPonto();
@@ -688,7 +688,7 @@ export async function montar(container) {
             detalhesWrap.innerHTML = '';
             // Coleta
             detalhesWrap.append(
-              el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('i', { class: 'ti ti-map-pin', style: 'font-size:12px;color:var(--lx-azul-profundo);flex:none' }), 'Coleta'),
+              el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-profundo);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }), 'Coleta'),
               el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px;margin-bottom:6px' }, r.coleta?.endereco || '—'));
             // Pontos
             (r.pontos || []).forEach((p, i) => {
@@ -700,7 +700,7 @@ export async function montar(container) {
                 p.telefone ? ['ti-phone', p.telefone] : null,
               ].filter(Boolean);
               detalhesWrap.append(
-                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('i', { class: 'ti ti-flag', style: 'font-size:12px;color:var(--lx-azul-primario);flex:none' }), `Destino ${i+1}`),
+                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' }), `Destino ${i+1}`),
                 el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px' }, p.endereco || '—'));
               infos.forEach(([ico, txt]) => {
                 const row = el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lx-tinta-2);padding:2px 0' });
@@ -712,7 +712,7 @@ export async function montar(container) {
             if (e.motivo_cancelamento) {
               detalhesWrap.append(
                 el('div', { style: 'height:1px;background:var(--lx-linha);margin:5px 0' }),
-                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--lx-erro);font-weight:600' }, el('i', { class: 'ti ti-x', style: 'font-size:12px;flex:none' }), 'Motivo: ' + e.motivo_cancelamento));
+                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--lx-erro);font-weight:600' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' }), 'Motivo: ' + e.motivo_cancelamento));
             }
           } catch { detalhesWrap.innerHTML = ''; detalhesWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Sem detalhes.')); }
         }
@@ -722,12 +722,12 @@ export async function montar(container) {
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:5px' },
           el('b', { style: 'font-size:13px;color:var(--lx-tinta)' }, e.protocolo||'—'),
           statusBadge(e.status)),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' }, el('i', { class: 'ti ti-map-pin', style: 'font-size:12px;margin-right:4px;color:var(--lx-azul-profundo)' }), (e.coleta_endereco?.split(',')[0]||'—')),
-        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' }, el('i', { class: 'ti ti-flag', style: 'font-size:12px;margin-right:4px;color:var(--lx-azul-primario)' }), (e.destino_endereco?.split(',')[0]||'—')),
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-profundo);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }), (e.coleta_endereco?.split(',')[0]||'—')),
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:5px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' }), (e.destino_endereco?.split(',')[0]||'—')),
         el('div', { style: 'display:flex;align-items:center;justify-content:space-between' },
           el('span', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, fmtData(e.criado_em)),
           el('div', { style: 'display:flex;gap:6px;align-items:center' },
-            e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, el('i', { class: 'ti ti-motorbike', style: 'font-size:12px;margin-right:3px' }), e.motoboy_nome.split(' ')[0]) : el('span', {}),
+            e.motoboy_nome ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' }), e.motoboy_nome.split(' ')[0]) : el('span', {}),
             auth.pode('entregas.criar') && !['entregue','cancelada'].includes(e.status)
               ? el('button', { style: 'font-size:11px;padding:3px 9px;border-radius:6px;background:var(--lx-erro-bg);color:var(--lx-erro);border:none;cursor:pointer;font-weight:700', onClick: ev => { ev.stopPropagation(); confirmarCancelar(e, () => carregar()); }}, 'Cancelar')
               : el('span', {}))),
@@ -736,9 +736,8 @@ export async function montar(container) {
     });
   }
 
-  // Containers para telas sem mapa
+  // Container para tela de concluídas (sem mapa)
   const concluidasContainer = el('div', { style: 'display:none;flex:1;overflow:hidden;flex-direction:column' });
-  const canceladasContainer = el('div', { style: 'display:none;flex:1;overflow:hidden;flex-direction:column' });
 
   function trocarAba(id) {
     abaAtiva.val = id;
@@ -746,15 +745,12 @@ export async function montar(container) {
     sideNova.style.display = id==='nova' ? 'flex' : 'none';
     sideHistorico.style.display = id==='ativas' ? 'block' : 'none';
     concluidasContainer.style.display = id==='concluidas' ? 'flex' : 'none';
-    canceladasContainer.style.display = id==='canceladas' ? 'flex' : 'none';
-    // Sem mapa nas abas de histórico completo
-    const semMapa = id==='concluidas' || id==='canceladas';
-    mapaWrap.style.display = semMapa ? 'none' : '';
-    body.style.gridTemplateColumns = semMapa ? '1fr' : '360px 1fr';
+    // Concluídas: sem mapa
+    mapaWrap.style.display = id==='concluidas' ? 'none' : '';
+    body.style.gridTemplateColumns = id==='concluidas' ? '1fr' : '360px 1fr';
     if (id==='nova' && _mapa) { _mapa.limpar(); statsPill.style.display='none'; setTimeout(() => _mapa.invalidar(), 50); }
     if (id==='ativas') renderHistorico();
     if (id==='concluidas') montarConcluidas(concluidasContainer);
-    if (id==='canceladas') montarConcluidas(canceladasContainer, 'cancelada');
   }
 
   async function atualizarMapa() {
@@ -773,7 +769,7 @@ export async function montar(container) {
     try { _entregas = await get('/entregas'); if (abaAtiva.val!=='nova') renderHistorico(); } catch {}
   }
 
-  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico, concluidasContainer, canceladasContainer), mapaWrap);
+  const body = el('div', { class: 'lx-ent-body' }, el('div', { class: 'lx-ent-side' }, sideNova, sideHistorico, concluidasContainer), mapaWrap);
   const shell = el('div', { class: 'lx-ent-shell' }, abasEl, body);
   container.append(casca('Entregas', shell, 'Coleta e destinos — rota otimizada automaticamente'));
 
