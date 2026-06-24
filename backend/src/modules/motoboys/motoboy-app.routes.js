@@ -133,7 +133,7 @@ module.exports = function motoboyAppRoutes() {
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
         for (const url of fotos_urls) {
           await query(
-            `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'foto', $2)`,
+            `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
             [req.params.pontoId, url]
           );
         }
