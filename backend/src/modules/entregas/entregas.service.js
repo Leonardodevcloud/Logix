@@ -123,7 +123,7 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
 // Detalhe de uma entrega concluída: pontos + protocolos (fotos)
 async function detalharConcluida({ empresaId, id }) {
   const { rows: ent } = await query(
-    `SELECT e.*, m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone AS motoboy_telefone
+    `SELECT e.*, m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone
      FROM entregas e LEFT JOIN motoboys m ON m.id = e.motoboy_id
      WHERE e.id = $1 AND e.empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
