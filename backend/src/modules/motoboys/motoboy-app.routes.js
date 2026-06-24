@@ -172,7 +172,7 @@ module.exports = function motoboyAppRoutes() {
       await query(`UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now() WHERE id = $2`, [recebedor || null, pontoId]);
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
         for (const url of fotos_urls) {
-          await query(`INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'foto', $2)`, [pontoId, url]);
+          await query(`INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`, [pontoId, url]);
         }
       }
     }
