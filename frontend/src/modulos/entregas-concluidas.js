@@ -266,7 +266,7 @@ export async function montarConcluidas(container, filtroInicial) {
         el('td', { style: 'padding:10px 12px;color:var(--lx-tinta-2)' }, fmtData(e.criado_em)),
         el('td', { style: 'padding:10px 12px;color:var(--lx-tinta)' }, e.motoboy_nome || el('span', { style: 'color:var(--lx-tinta-3)' }, '—')),
         el('td', { style: 'padding:10px 12px;text-align:center;color:var(--lx-tinta-2)' }, e.total_pontos || '—'),
-        el('td', { style: 'padding:10px 12px;color:var(--lx-tinta-2)' }, e.distancia_km ? Number(e.distancia_km).toFixed(1) + ' km' : '—'));
+        el('td', { style: 'padding:10px 12px;color:var(--lx-tinta-2)' }, e.distancia_km && !isNaN(e.distancia_km) ? Number(e.distancia_km).toFixed(1) + ' km' : '—'));
 
       // Linha de detalhe
       const trDetalhe = el('tr', { style: 'display:none' });
@@ -316,7 +316,7 @@ export async function montarConcluidas(container, filtroInicial) {
       // Atualizar KPIs
       const entregues = _lista.filter(e => e.status === 'entregue');
       const canceladas = _lista.filter(e => e.status === 'cancelada');
-      const km = entregues.reduce((s, e) => s + parseFloat(e.distancia_km || 0), 0);
+      const km = entregues.reduce((s, e) => s + (parseFloat(e.distancia_km) || 0), 0);
       kpiEntregues.textContent = entregues.length;
       kpiCanceladas.textContent = canceladas.length;
       kpiKm.textContent = km.toFixed(1) + ' km';
