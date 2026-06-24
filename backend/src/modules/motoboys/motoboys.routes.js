@@ -10,10 +10,13 @@ const appRoutes = require('./motoboy-app.routes');
 
 function initMotoboysRoutes() {
   const router = express.Router();
-  router.use('/', rastreioRoutes());
+  // Auth do motoboy (login/logout) não precisa de token de usuário — montar antes
   router.use('/', authRoutes());
+  // Demais rotas exigem token de usuário ou motoboy
+  router.use(verificarToken, resolverTenant);
+  router.use('/', rastreioRoutes());
   router.use('/', appRoutes());
-  router.use(verificarToken, resolverTenant, exigirTenant, exigirModulo('motoboys'));
+  router.use(exigirTenant, exigirModulo('motoboys'));
 
   // GET /motoboys?status=ativo&online=true
   router.get('/', exigirPermissao('motoboys.ver'), async (req, res, next) => {
