@@ -108,7 +108,7 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.motoboy_id, e.distancia_km,
             e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
-            m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone AS motoboy_telefone,
+            m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone,
             (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos,
             (SELECT ep.numero_nf FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf IS NOT NULL ORDER BY ep.ordem LIMIT 1) AS primeira_nf,
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
