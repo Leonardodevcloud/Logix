@@ -158,5 +158,35 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
+// POST /motoboys/app/entregas/:entregaId/concluir-sem-ponto — fallback quando não tem pontoId
+  router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
+  try {
+    const { recebedor, fotos_urls } = req.body;
+    // Pegar o primeiro ponto pendente da entrega
+    const { rows: pontos } = await query(
+      `SELECT id FROM entregas_pontos WHERE entrega_id = $1 AND status != 'entregue' ORDER BY ordem LIMIT 1`,
+      [req.params.entregaId]
+    );
+    const pontoId = pontos[0]?.id;
+    if (pontoId) {
+      await query(`UPDATE entregas_pontos SET status = 'entregue', recebedor = $1, entregue_em = now() WHERE id = $2`, [recebedor || null, pontoId]);
+      if (Array.isArray(fotos_urls) && fotos_urls.length) {
+        for (const url of fotos_urls) {
+          await query(`INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'foto', $2)`, [pontoId, url]);
+        }
+      }
+    }
+    // Verificar se todos os pontos foram entregues
+    const { rows: pend } = await query(
+      `SELECT count(*)::int AS qtd FROM entregas_pontos WHERE entrega_id = $1 AND status != 'entregue'`,
+      [req.params.entregaId]
+    );
+    if (pend[0].qtd === 0) {
+      await query(`UPDATE entregas SET status = 'entregue', concluida_em = now() WHERE id = $1`, [req.params.entregaId]);
+    }
+    res.json({ ok: true, todos_entregues: pend[0].qtd === 0 });
+  } catch (e) { next(e); }
+});
+
   return router;
 };
