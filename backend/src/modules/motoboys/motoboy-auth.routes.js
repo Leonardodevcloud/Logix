@@ -2,6 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const AppError = require('../../shared/AppError');
+const { verificarToken } = require('../../middleware/auth');
+const { resolverTenant } = require('../../middleware/tenant');
 const { query } = require('../../shared/db');
 const { limiteLogin } = require('../../middleware/rateLimit');
 
@@ -76,14 +78,22 @@ module.exports = function motoboyAuthRoutes() {
   });
 
   // POST /motoboys/:id/pin — admin define/redefine o PIN do motoboy
-  router.post('/:id/pin', async (req, res, next) => {
+  router.post('/:id/pin', verificarToken, resolverTenant, async (req, res, next) => {
     try {
       const { pin } = req.body;
       if (!pin || String(pin).length < 4) throw AppError.validacao('PIN deve ter ao menos 4 dígitos');
       const hash = await bcrypt.hash(String(pin), 10);
+      // Super_admin pode definir PIN de qualquer motoboy; cliente só da própria empresa
+      const empresaFiltro = req.empresaId;
+      const sqlWhere = empresaFiltro
+        ? `WHERE id = $2 AND empresa_id = $3`
+        : `WHERE id = $2`;
+      const params = empresaFiltro
+        ? [hash, req.params.id, empresaFiltro]
+        : [hash, req.params.id];
       const { rows } = await query(
-        `UPDATE motoboys SET pin_hash = $1 WHERE id = $2 AND empresa_id = $3 RETURNING id, nome_completo`,
-        [hash, req.params.id, req.empresaId]
+        `UPDATE motoboys SET pin_hash = $1 ${sqlWhere} RETURNING id, nome_completo`,
+        params
       );
       if (!rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
       res.json({ ok: true, nome: rows[0].nome_completo });
