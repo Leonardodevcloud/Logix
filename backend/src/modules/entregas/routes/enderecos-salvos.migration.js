@@ -23,4 +23,22 @@ async function initEnderecosSalvosTables() {
   await query(`CREATE INDEX IF NOT EXISTS idx_end_salvos_empresa ON enderecos_salvos(empresa_id)`);
 }
 
-module.exports = { initEnderecosSalvosTables };
+async function initGeocodeCacheTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS geocode_cache (
+      chave         TEXT PRIMARY KEY,
+      resultado     JSONB NOT NULL,
+      criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ultimo_acesso TIMESTAMPTZ NOT NULL DEFAULT now(),
+      hit_count     INT NOT NULL DEFAULT 0
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_geocode_cache_ultimo_acesso ON geocode_cache(ultimo_acesso DESC)`);
+}
+
+async function initTodas() {
+  await initEnderecosSalvosTables();
+  await initGeocodeCacheTables();
+}
+
+module.exports = { initEnderecosSalvosTables: initTodas };
