@@ -644,7 +644,10 @@ export async function montar(container) {
     btnCriar.disabled = true; btnCriar.childNodes[1].textContent = ' Criando…';
     msgCriar.style.color = 'var(--lx-tinta-2)'; msgCriar.textContent = '';
     try {
-      const r = await post('/entregas', { coleta: { endereco: coleta.label || coleta.apelido || coleta.endereco_completo, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
+      // Separar apelido (nome legível) do endereço real para exibição no protocolo
+      const coletaNome     = coleta.apelido || null;
+      const coletaEndereco = coleta.endereco_completo || coleta.label || coleta.apelido || coleta.endereco || '';
+      const r = await post('/entregas', { coleta: { nome: coletaNome, endereco: coletaEndereco, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
       toast('✓ ' + r.protocolo + ' criada!', 'ok');
       msgCriar.style.color = 'var(--lx-ok)'; msgCriar.textContent = '✓ ' + r.protocolo + ' criada!';
       setTimeout(() => { msgCriar.textContent = ''; }, 3000);

@@ -317,7 +317,7 @@ async function gerarProtocoloHtml(id) {
         ${fotos.map(f => {
           const raw = typeof f === 'string' ? f : (f?.url || '');
           const url = normalizarBase64(raw);
-          return url ? `<img src="${url}" class="foto-thumb" onerror="this.style.display='none'" />` : '';
+          return url ? `<a href="${url}" target="_blank" style="display:block"><img src="${url}" class="foto-thumb" onerror="this.parentElement.style.display='none'" /></a>` : '';
         }).join('')}
       </div>` : '';
 
@@ -404,8 +404,8 @@ async function gerarProtocoloHtml(id) {
     .hora.chegou { color: #185FA5; }
     .hora.entregue { color: #1D9E75; }
     .fotos-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #8AA2BE; padding: 6px 12px 4px; border-top: 0.5px solid #E2EAF0; }
-    .fotos-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 12px; }
-    .foto-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 0.5px solid #CBD8E8; }
+    .fotos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; padding: 8px 12px 14px; }
+    .foto-thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; border: 0.5px solid #CBD8E8; cursor: pointer; display: block; }
 
     /* Rodapé */
     .rodape { margin-top: 28px; padding-top: 14px; border-top: 1px solid #E2EAF0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #8AA2BE; }

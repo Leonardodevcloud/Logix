@@ -5,7 +5,8 @@ const { verificarTokenMotoboy } = require('../../middleware/auth');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 
-// Calcula distância total da entrega (coleta → pontos) usando haversine
+// Calcula distância total da entrega (coleta → pontos) via haversine
+// Usado quando ORS não calculou a distância na criação
 async function calcularKmEntrega(entregaId) {
   try {
     const { rows } = await query(
@@ -20,26 +21,29 @@ async function calcularKmEntrega(entregaId) {
     if (!rows[0]) return null;
     const { coleta_lat, coleta_lng, pontos } = rows[0];
     if (!coleta_lat || !coleta_lng || !pontos?.length) return null;
-    const pts = [{ lat: parseFloat(coleta_lat), lng: parseFloat(coleta_lng) },
-                 ...pontos.filter(p => p.lat && p.lng).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }))];
+    const pts = [
+      { lat: parseFloat(coleta_lat), lng: parseFloat(coleta_lng) },
+      ...pontos.filter(p => p.lat && p.lng).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) })),
+    ];
     if (pts.length < 2) return null;
     let km = 0;
     const R = 6371, rad = x => x * Math.PI / 180;
     for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i+1];
+      const a = pts[i], b = pts[i + 1];
       const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-      const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng/2)**2;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
       km += 2 * R * Math.asin(Math.sqrt(h));
     }
     return parseFloat(km.toFixed(2));
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
-
 
 module.exports = function motoboyAppRoutes() {
   const router = express.Router();
 
-  // GET /motoboys/app/eu — perfil + status atual
+  // GET /motoboys/app/eu
   router.get('/app/eu', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
@@ -57,12 +61,12 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /motoboys/app/fila — entregas atribuídas a este motoboy
+  // GET /motoboys/app/fila
   router.get('/app/fila', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
         `SELECT e.id, e.protocolo, e.status, e.criado_em,
-                e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km,
+                e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km,
                 COALESCE(
                   json_agg(
                     json_build_object(
@@ -88,7 +92,7 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // PATCH /motoboys/app/status — motoboy atualiza próprio status (online/offline)
+  // PATCH /motoboys/app/status
   router.patch('/app/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { online } = req.body;
@@ -98,7 +102,7 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // POST /motoboys/app/posicao — reportar GPS
+  // POST /motoboys/app/posicao
   router.post('/app/posicao', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { lat, lng, entrega_id } = req.body;
@@ -114,7 +118,7 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // PATCH /motoboys/app/entregas/:id/status — motoboy avança o status da entrega
+  // PATCH /motoboys/app/entregas/:id/status
   router.patch('/app/entregas/:id/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { status } = req.body;
@@ -137,21 +141,19 @@ module.exports = function motoboyAppRoutes() {
       emitirParaEmpresa(req.motoboy.empresaId, 'entrega.status', {
         entregaId: req.params.id, status, motoboyId: req.motoboy.id,
       });
-
       res.json({ ok: true, status });
     } catch (e) { next(e); }
   });
 
   // POST /motoboys/app/entregas/:entregaId/pontos/:pontoId/concluir
-  // FIX 3: responde imediatamente ao app e processa fotos em background
-  // Fotos grandes (base64) causavam timeout no app antes da resposta
+  // Responde imediatamente e processa fotos em background (evita timeout no app)
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { recebedor, fotos_urls } = req.body;
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
-      // 1. Atualizar ponto como entregue — operação rápida
+      // 1. Atualizar ponto
       await query(
         `UPDATE entregas_pontos
          SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
@@ -159,7 +161,7 @@ module.exports = function motoboyAppRoutes() {
         [recebedor || null, pontoId, entregaId]
       );
 
-      // 2. Verificar se todos os pontos foram entregues — rápido
+      // 2. Verificar se todos pontos foram entregues
       const { rows: pendentes } = await query(
         `SELECT count(*)::int AS qtd FROM entregas_pontos
          WHERE entrega_id = $1 AND status != 'entregue'`,
@@ -168,19 +170,22 @@ module.exports = function motoboyAppRoutes() {
       const todosEntregues = pendentes[0].qtd === 0;
 
       if (todosEntregues) {
+        // Calcular km via haversine se ORS não calculou (distancia_km null ou zero)
+        const kmHaversine = await calcularKmEntrega(entregaId);
         await query(
           `UPDATE entregas
            SET status = 'entregue', concluida_em = now(),
-               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60)
+               tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60),
+               distancia_km = COALESCE(NULLIF(distancia_km, 0), $2)
            WHERE id = $1`,
-          [entregaId]
+          [entregaId, kmHaversine]
         );
       }
 
-      // 3. Responder IMEDIATAMENTE ao app — antes de processar fotos pesadas
+      // 3. Responder IMEDIATAMENTE ao app
       res.json({ ok: true, todos_entregues: todosEntregues });
 
-      // 4. Processar fotos em background (não bloqueia a resposta)
+      // 4. Fotos em background
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
         setImmediate(async () => {
           for (const url of fotos_urls) {
@@ -191,13 +196,12 @@ module.exports = function motoboyAppRoutes() {
                 [pontoId, url]
               );
             } catch (err) {
-              console.error('[app:concluir] erro ao salvar foto em background:', err.message);
+              console.error('[app:concluir] foto background:', err.message);
             }
           }
         });
       }
 
-      // 5. Emitir WS também em background
       if (todosEntregues) {
         emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
       }
@@ -205,8 +209,8 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // POST /motoboys/app/entregas/:entregaId/concluir-sem-ponto — fallback sem pontoId
-  // FIX 3: mesma estratégia — responde imediatamente, fotos em background
+  // POST /motoboys/app/entregas/:entregaId/concluir-sem-ponto
+  // Fallback: pega automaticamente o primeiro ponto pendente
   router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { recebedor, fotos_urls } = req.body;
@@ -240,13 +244,13 @@ module.exports = function motoboyAppRoutes() {
       const todosEntregues = pend[0].qtd === 0;
 
       if (todosEntregues) {
-        // FIX 5: calcular km haversine se ainda não foi calculado pelo ORS
+        // Calcular km via haversine se ORS não calculou
         const kmHaversine = await calcularKmEntrega(entregaId);
         await query(
           `UPDATE entregas
            SET status = 'entregue', concluida_em = now(),
                tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60),
-               distancia_km = COALESCE(distancia_km, $2)
+               distancia_km = COALESCE(NULLIF(distancia_km, 0), $2)
            WHERE id = $1`,
           [entregaId, kmHaversine]
         );
@@ -266,7 +270,7 @@ module.exports = function motoboyAppRoutes() {
                 [pontoId, url]
               );
             } catch (err) {
-              console.error('[app:concluir-sem-ponto] erro ao salvar foto em background:', err.message);
+              console.error('[app:concluir-sem-ponto] foto background:', err.message);
             }
           }
         });
