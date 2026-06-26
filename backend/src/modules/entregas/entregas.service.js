@@ -409,7 +409,86 @@ async function trajetoEntrega({ empresaId, id }) {
 // Pega as entregas selecionadas, usa a coleta como origem e otimiza a ordem dos destinos.
 // retornar=true considera o motoboy voltando à coleta no fim.
 // Retorna a sequência sugerida + a geometria da rota pelas ruas.
-async function rotaLote({ empresaId, ids, retornar = false }) {
+// Distância aproximada em km entre dois pontos (haversine).
+function _distKm(latA, lngA, latB, lngB) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(latB - latA), dLng = toRad(lngB - lngA);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(latA)) * Math.cos(toRad(latB)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Agrupa destinos por DIREÇÃO (rumo a partir da coleta) + DISTÂNCIA entre eles.
+// Entregas em direções muito diferentes (> JANELA_ANG) viram grupos separados;
+// dentro da mesma direção, pontos muito distantes entre si (> RAIO_KM) também separam.
+// Retorna [[idx,idx...], ...] (índices de destinos por grupo).
+function agruparDestinos(coleta, destinos) {
+  const JANELA_ANG = 75;   // graus: destinos com rumos a até 75° entram no mesmo "leque"
+  const RAIO_KM = 6;       // km: dentro do leque, separa se ficarem muito longe entre si
+
+  if (!coleta || destinos.length <= 1) return [destinos.map((_, i) => i)];
+
+  // ordena por rumo (varredura tipo radar)
+  const comRumo = destinos.map((d, i) => ({ i, rumo: _rumo(coleta.lat, coleta.lng, d.lat, d.lng), lat: d.lat, lng: d.lng }));
+  comRumo.sort((a, b) => a.rumo - b.rumo);
+
+  const grupos = [];
+  let atual = [comRumo[0]];
+  for (let k = 1; k < comRumo.length; k++) {
+    const ant = atual[atual.length - 1];
+    const cur = comRumo[k];
+    const difRumo = _difAng(ant.rumo, cur.rumo);
+    const dist = _distKm(ant.lat, ant.lng, cur.lat, cur.lng);
+    // mesmo grupo se a direção é próxima E não está geograficamente longe
+    if (difRumo <= JANELA_ANG && dist <= RAIO_KM) {
+      atual.push(cur);
+    } else {
+      grupos.push(atual); atual = [cur];
+    }
+  }
+  grupos.push(atual);
+
+  // junta o último com o primeiro se "fecharem o círculo" na mesma direção (ex: rumos 350° e 10°)
+  if (grupos.length >= 2) {
+    const primeiro = grupos[0], ultimo = grupos[grupos.length - 1];
+    if (_difAng(primeiro[0].rumo, ultimo[ultimo.length - 1].rumo) <= JANELA_ANG &&
+        _distKm(primeiro[0].lat, primeiro[0].lng, ultimo[ultimo.length - 1].lat, ultimo[ultimo.length - 1].lng) <= RAIO_KM) {
+      grupos[0] = ultimo.concat(primeiro); grupos.pop();
+    }
+  }
+  return grupos.map(g => g.map(x => x.i));
+}
+
+// Otimiza um único grupo (sequência interna) e traça a geometria pelas ruas.
+async function montarRotaGrupo(coleta, destinosGrupo, retornar) {
+  let ordem = destinosGrupo.map((_, i) => i);
+  let distanciaKm = 0, duracaoMin = 0;
+  if (coleta && destinosGrupo.length >= 2) {
+    try {
+      const r = await otimizarRota({ coleta, pontos: destinosGrupo, retornar });
+      if (Array.isArray(r.ordem) && r.ordem.length) ordem = r.ordem;
+      distanciaKm = r.distanciaKm || 0; duracaoMin = r.duracaoMin || 0;
+    } catch { /* ordem original */ }
+    ordem = corrigirDirecaoOposta(coleta, destinosGrupo, ordem);
+  }
+  const ordenados = ordem.map((idx, pos) => ({ ...destinosGrupo[idx], sequencia: pos + 1 }));
+  let rotaGeo = { coordenadas: [], distanciaKm, duracaoMin };
+  if (coleta && ordenados.length >= 1) {
+    try {
+      const seq = [coleta, ...ordenados];
+      if (retornar) seq.push(coleta);
+      if (seq.length >= 2) {
+        const g = await tracarRota(seq);
+        rotaGeo = { coordenadas: g.coordenadas, distanciaKm: g.distanciaKm || distanciaKm, duracaoMin: g.duracaoMin || duracaoMin };
+      }
+    } catch { /* sem geometria */ }
+  }
+  return { destinos: ordenados, rota: rotaGeo };
+}
+
+// Rota em lote AGRUPADA: separa as entregas em grupos coerentes (direção + distância),
+// cada grupo vira uma rota própria. O operador pode forçar grupos via `gruposManual`
+// (array de arrays de IDs) — nesse caso usamos exatamente esses grupos.
+async function rotaLote({ empresaId, ids, retornar = false, gruposManual = null }) {
   if (!Array.isArray(ids) || !ids.length) throw AppError.validacao('Nenhuma entrega informada');
 
   const { rows } = await query(
@@ -431,39 +510,33 @@ async function rotaLote({ empresaId, ids, retornar = false }) {
     lat: Number(r.destino_lat), lng: Number(r.destino_lng),
   }));
 
-  let ordemSugerida = destinos.map((_, i) => i);
-  let distanciaKm = 0, duracaoMin = 0;
-  if (coleta && destinos.length >= 2) {
-    try {
-      const r = await otimizarRota({ coleta, pontos: destinos, retornar });
-      if (Array.isArray(r.ordem) && r.ordem.length) ordemSugerida = r.ordem;
-      distanciaKm = r.distanciaKm || 0; duracaoMin = r.duracaoMin || 0;
-    } catch { /* mantém ordem original */ }
-
-    // Coerência direcional: se a rota do ORS "voltar" para direções opostas
-    // (reversão de rumo > 120°), comparamos com uma varredura angular (radar) a
-    // partir da coleta e escolhemos a sequência mais coerente.
-    ordemSugerida = corrigirDirecaoOposta(coleta, destinos, ordemSugerida);
+  // Define os grupos (índices em `destinos`).
+  let gruposIdx;
+  if (Array.isArray(gruposManual) && gruposManual.length) {
+    // operador definiu os grupos manualmente (por ID) — converte para índices
+    const idxPorId = new Map(destinos.map((d, i) => [d.id, i]));
+    gruposIdx = gruposManual.map(g => g.map(id => idxPorId.get(id)).filter(i => i != null)).filter(g => g.length);
+  } else {
+    gruposIdx = agruparDestinos(coleta, destinos);
   }
 
-  const destinosOrdenados = ordemSugerida.map((idx, pos) => ({ ...destinos[idx], sequencia: pos + 1 }));
-
-  let rotaGeo = { coordenadas: [], distanciaKm, duracaoMin };
-  if (coleta && destinosOrdenados.length >= 1) {
-    try {
-      const seq = [coleta, ...destinosOrdenados];
-      if (retornar) seq.push(coleta);
-      if (seq.length >= 2) {
-        const g = await tracarRota(seq);
-        rotaGeo = { coordenadas: g.coordenadas, distanciaKm: g.distanciaKm || distanciaKm, duracaoMin: g.duracaoMin || duracaoMin };
-      }
-    } catch { /* sem geometria */ }
+  // Monta cada grupo como uma rota própria.
+  const cores = ['#185FA5', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2', '#be185d', '#65a30d'];
+  const grupos = [];
+  for (let gi = 0; gi < gruposIdx.length; gi++) {
+    const destinosGrupo = gruposIdx[gi].map(i => destinos[i]);
+    const r = await montarRotaGrupo(coleta, destinosGrupo, retornar);
+    grupos.push({
+      indice: gi,
+      cor: cores[gi % cores.length],
+      destinos: r.destinos,
+      rota: r.rota,
+    });
   }
 
   return {
     coleta,
-    destinos: destinosOrdenados,
-    rota: rotaGeo,
+    grupos,
     retornar,
     semCoordenada: rows.filter(r => r.destino_lat == null).map(r => ({ id: r.id, protocolo: r.protocolo })),
   };

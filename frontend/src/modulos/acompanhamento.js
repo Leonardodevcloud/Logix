@@ -551,109 +551,147 @@ export async function montar(container) {
   const btnLimparSel = el('button', { class: 'lx-btn', style: 'background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:6px 12px;font-size:13px', onClick: () => { _sel.clear(); renderTabela(); atualizarBarraSel(); } }, 'Limpar');
   barraSel.append(barraSelTxt, el('div', { style: 'flex:1' }), btnVerRotaLote, btnLimparSel);
 
-  // Modal: mapa com a rota otimizada de todas as selecionadas + agrupamento e despacho.
+  // Modal: mapa com rotas AGRUPADAS (cada grupo = uma cor) + despacho por grupo.
   async function abrirRotaLote() {
     const ids = [..._sel];
     if (!ids.length) return;
-    let retornar = false; // motoboy volta à coleta no fim?
+    let retornar = false;
     let mapa = null;
+    let dados = null;
+    // override manual de grupos: { entregaId -> indiceGrupo }. null = automático.
+    let override = null;
 
-    const mapaDiv = el('div', { style: 'height:44vh;min-height:280px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
-    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Otimizando rota…');
-    const listaGrupo = el('div', { style: 'display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto' });
-    const selDespacho = new Set(); // corridas marcadas para o despacho
+    const mapaDiv = el('div', { style: 'height:42vh;min-height:260px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
+    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Agrupando rotas…');
+    const gruposWrap = el('div', { style: 'display:flex;flex-direction:column;gap:12px;max-height:340px;overflow:auto' });
 
-    // Toggle "voltar à coleta"
     const chkRetorno = el('input', { type: 'checkbox', style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
     const lblRetorno = el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--lx-tinta);cursor:pointer;user-select:none' }, chkRetorno, el('span', {}, 'Motoboy volta ao ponto de coleta no fim'));
-    chkRetorno.onchange = () => { retornar = chkRetorno.checked; recarregarRota(); };
+    chkRetorno.onchange = () => { retornar = chkRetorno.checked; recarregar(); };
+
+    const btnAuto = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px;padding:5px 10px', onClick: () => { override = null; recarregar(); } }, 'Reagrupar automático');
 
     const corpo = el('div', {},
-      el('div', { style: 'margin-bottom:10px' }, lblRetorno),
+      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap' }, lblRetorno, btnAuto),
       mapaDiv, info,
-      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:8px 0 4px' }, 'Sequência sugerida'), listaGrupo);
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:10px 0 6px' }, 'Grupos de rota'), gruposWrap);
     const ov = modal(`Rota otimizada — ${ids.length} corridas`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
-    const box = ov.querySelector('div'); if (box) box.style.width = '820px';
+    const box = ov.querySelector('div'); if (box) box.style.width = '860px';
 
     try { await garantirLeaflet(); } catch { info.textContent = 'Não foi possível carregar o mapa.'; return; }
+    await carregarMotoboys();
     const L = window.L;
 
-    async function recarregarRota() {
-      info.textContent = 'Otimizando rota…';
-      let dados;
-      try { dados = await post('/entregas/acompanhamento/rota-lote', { ids, retornar }); } catch { info.textContent = 'Erro ao otimizar a rota.'; return; }
+    // monta o corpo da requisição com grupos manuais (se houver override)
+    function gruposManualPayload() {
+      if (!override || !dados) return null;
+      const mapaGrupos = {};
+      Object.entries(override).forEach(([entregaId, gi]) => { (mapaGrupos[gi] = mapaGrupos[gi] || []).push(entregaId); });
+      return Object.values(mapaGrupos);
+    }
 
-      // (re)cria o mapa
+    async function recarregar() {
+      info.textContent = 'Otimizando…';
+      const body = { ids, retornar };
+      const gm = gruposManualPayload();
+      if (gm) body.grupos_manual = gm;
+      try { dados = await post('/entregas/acompanhamento/rota-lote', body); } catch { info.textContent = 'Erro ao otimizar.'; return; }
+      desenhar();
+    }
+
+    function desenhar() {
+      // mapa
       if (mapa) { mapa.remove(); mapa = null; }
-      const centro = dados.coleta || dados.destinos[0];
+      const centro = dados.coleta || (dados.grupos[0] && dados.grupos[0].destinos[0]);
       if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
-      mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 13, scrollWheelZoom: true });
+      mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 12, scrollWheelZoom: true });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
       setTimeout(() => mapa && mapa.invalidateSize(), 120);
       const bounds = [];
-      if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .9, weight: 2 }).addTo(mapa).bindPopup('Coleta: ' + (dados.coleta.endereco || '')); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
-      dados.destinos.forEach((d) => {
-        const m = L.marker([d.lat, d.lng]).addTo(mapa).bindPopup(`${d.sequencia}º — ${d.protocolo}<br>${d.endereco || ''}`);
-        m.bindTooltip(String(d.sequencia), { permanent: true, direction: 'center', className: 'lx-seq-tip' });
-        bounds.push([d.lat, d.lng]);
+      if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .95, weight: 2 }).addTo(mapa).bindPopup('Coleta'); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
+      dados.grupos.forEach((g, gi) => {
+        if (g.rota && g.rota.coordenadas && g.rota.coordenadas.length >= 2) {
+          L.polyline(g.rota.coordenadas, { color: g.cor, weight: 4, opacity: .75 }).addTo(mapa);
+          g.rota.coordenadas.forEach(p => bounds.push(p));
+        }
+        g.destinos.forEach(d => {
+          const ico = L.divIcon({ className: '', html: `<div style="background:${g.cor};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">${d.sequencia}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+          L.marker([d.lat, d.lng], { icon: ico }).addTo(mapa).bindPopup(`<b style="color:${g.cor}">Rota ${gi + 1}</b> · ${d.sequencia}º<br>${d.protocolo}<br>${d.endereco || ''}`);
+          bounds.push([d.lat, d.lng]);
+        });
       });
-      if (dados.rota && dados.rota.coordenadas && dados.rota.coordenadas.length >= 2) {
-        L.polyline(dados.rota.coordenadas, { color: '#185FA5', weight: 4, opacity: .7 }).addTo(mapa);
-        dados.rota.coordenadas.forEach(p => bounds.push(p));
-      }
-      if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-      info.innerHTML = `<b style="color:var(--lx-azul-primario)">Rota otimizada</b> — ${dados.destinos.length} paradas${dados.rota.distanciaKm ? ' · ' + dados.rota.distanciaKm + ' km' : ''}${dados.rota.duracaoMin ? ' · ~' + dados.rota.duracaoMin + ' min' : ''}${retornar ? ' · com retorno' : ''}`;
+      if (bounds.length) mapa.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
+      const totalKm = dados.grupos.reduce((s, g) => s + (g.rota.distanciaKm || 0), 0);
+      info.innerHTML = `<b style="color:var(--lx-azul-primario)">${dados.grupos.length} rota(s)</b> · ${dados.grupos.reduce((s,g)=>s+g.destinos.length,0)} paradas · ${totalKm.toFixed(1)} km${retornar ? ' · com retorno' : ''}`;
 
-      // Lista da sequência com checkbox (dividir o lote no despacho)
-      listaGrupo.innerHTML = '';
-      selDespacho.clear();
-      dados.destinos.forEach(d => {
-        selDespacho.add(d.id);
-        const chk = el('input', { type: 'checkbox', checked: true, style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
-        chk.onchange = () => { if (chk.checked) selDespacho.add(d.id); else selDespacho.delete(d.id); };
-        listaGrupo.append(el('div', { style: 'display:flex;align-items:center;gap:10px;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio)' },
-          chk,
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);min-width:24px' }, d.sequencia + 'º'),
-          el('span', { style: 'font-weight:700;font-size:12px;min-width:80px' }, d.protocolo),
-          el('span', { style: 'flex:1;font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || '')));
-      });
+      // grupos (lista) com seletor de motoboy e mover-entre-grupos
+      gruposWrap.innerHTML = '';
+      dados.grupos.forEach((g, gi) => gruposWrap.append(cartaoGrupo(g, gi)));
       if (dados.semCoordenada && dados.semCoordenada.length) {
-        listaGrupo.append(el('div', { style: 'font-size:11px;color:var(--lx-erro);padding:6px 10px' }, `${dados.semCoordenada.length} corrida(s) sem coordenada não entraram na rota: ${dados.semCoordenada.map(s => s.protocolo).join(', ')}`));
+        gruposWrap.append(el('div', { style: 'font-size:11px;color:var(--lx-erro);padding:6px 10px' }, `${dados.semCoordenada.length} corrida(s) sem coordenada ficaram de fora: ${dados.semCoordenada.map(s => s.protocolo).join(', ')}`));
       }
     }
 
-    await recarregarRota();
+    function cartaoGrupo(g, gi) {
+      const card = el('div', { style: `border:1px solid ${g.cor}40;border-left:4px solid ${g.cor};border-radius:var(--lx-raio);padding:10px 12px;background:var(--lx-superficie)` });
+      const titulo = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px' },
+        el('div', { style: 'display:flex;align-items:center;gap:8px' },
+          el('span', { style: `width:11px;height:11px;border-radius:50%;background:${g.cor}` }),
+          el('b', { style: 'font-size:13px' }, `Rota ${gi + 1}`),
+          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${g.destinos.length} parada(s) · ${(g.rota.distanciaKm || 0).toFixed(1)} km`)));
+      card.append(titulo);
 
-    // Rodapé: despachar as marcadas para um motoboy.
-    await carregarMotoboys();
-    const buscaMb = el('input', { class: 'lx-input', placeholder: 'Buscar motoboy por nº ou nome…', style: 'flex:1' });
-    const listaMb = el('div', { style: 'display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;z-index:70;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio);max-height:180px;overflow:auto;box-shadow:0 -8px 24px -8px rgba(4,44,83,.25)' });
-    let mbEscolhido = null;
-    function renderMb(f) {
-      f = (f || '').toLowerCase().replace('#', '').trim();
-      listaMb.innerHTML = '';
-      if (!f) { listaMb.style.display = 'none'; return; }
-      const vis = _motoboys.filter(m => { const cod = String(m.codigo || '').padStart(3, '0'); return cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
-      if (!vis.length) { listaMb.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--lx-tinta-2)">Nenhum motoboy</div>'; listaMb.style.display = 'block'; return; }
-      vis.forEach(m => {
-        const it = el('div', { style: 'display:flex;align-items:center;gap:8px;padding:8px 11px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `#${String(m.codigo||0).padStart(3,'0')} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario)' }, '#' + String(m.codigo||0).padStart(3,'0')),
-          el('span', { style: 'flex:1;font-size:13px' }, m.nome_completo),
-          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, m.online ? '🟢' : '⚪'));
-        listaMb.append(it);
+      // paradas do grupo, com botão de mover para outro grupo
+      g.destinos.forEach(d => {
+        const mover = el('select', { class: 'lx-input', style: 'font-size:11px;padding:2px 6px;width:auto;height:auto' });
+        mover.append(el('option', { value: '' }, 'mover…'));
+        dados.grupos.forEach((_, gj) => { if (gj !== gi) mover.append(el('option', { value: String(gj) }, `→ Rota ${gj + 1}`)); });
+        mover.append(el('option', { value: 'novo' }, '→ Nova rota'));
+        mover.onchange = () => {
+          if (!mover.value) return;
+          // inicializa override com o agrupamento atual
+          if (!override) { override = {}; dados.grupos.forEach((gg, idx) => gg.destinos.forEach(dd => { override[dd.id] = idx; })); }
+          override[d.id] = mover.value === 'novo' ? dados.grupos.length : Number(mover.value);
+          recarregar();
+        };
+        card.append(el('div', { style: 'display:flex;align-items:center;gap:8px;padding:5px 0;border-top:0.5px solid var(--lx-linha)' },
+          el('span', { style: `font-weight:800;color:${g.cor};min-width:22px` }, d.sequencia + 'º'),
+          el('span', { style: 'font-weight:700;font-size:12px;min-width:78px' }, d.protocolo),
+          el('span', { style: 'flex:1;font-size:11.5px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || ''),
+          mover));
       });
-      listaMb.style.display = 'block';
+
+      // despacho do grupo
+      const buscaMb = el('input', { class: 'lx-input', placeholder: 'Motoboy (nº ou nome)…', style: 'flex:1;font-size:12px' });
+      const listaMb = el('div', { style: 'display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:70;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio);max-height:150px;overflow:auto;box-shadow:0 8px 24px -8px rgba(4,44,83,.25)' });
+      let mbEscolhido = null;
+      buscaMb.addEventListener('input', () => {
+        mbEscolhido = null;
+        const f = buscaMb.value.toLowerCase().replace('#', '').trim();
+        listaMb.innerHTML = '';
+        if (!f) { listaMb.style.display = 'none'; return; }
+        const vis = _motoboys.filter(m => { const cod = String(m.codigo || '').padStart(3, '0'); return cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
+        if (!vis.length) { listaMb.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--lx-tinta-2)">Nenhum motoboy</div>'; listaMb.style.display = 'block'; return; }
+        vis.forEach(m => listaMb.append(el('div', { style: 'display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `#${String(m.codigo||0).padStart(3,'0')} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, '#' + String(m.codigo||0).padStart(3,'0')),
+          el('span', { style: 'flex:1;font-size:12px' }, m.nome_completo),
+          el('span', { style: 'font-size:11px' }, m.online ? '🟢' : '⚪'))));
+        listaMb.style.display = 'block';
+      });
+      const btnDesp = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12px;padding:7px 12px', onClick: async () => {
+        if (!mbEscolhido) { toast('Escolha um motoboy', 'erro'); return; }
+        const lote = g.destinos.map(d => d.id);
+        try { btnDesp.disabled = true; const r = await post('/filas/atribuir-lote', { motoboy_id: mbEscolhido.id, entrega_ids: lote }); toast(`Rota ${gi + 1}: ${r.atribuidas} corrida(s) → ${r.motoboy_nome}`); lote.forEach(id => _sel.delete(id)); 
+          // remove o grupo despachado e redesenha (ou fecha se acabou)
+          if (_sel.size === 0) { ov.remove(); carregar(); } else { override = null; await recarregar(); carregar(); }
+        } catch (e) { toast(e.message || 'Erro', 'erro'); btnDesp.disabled = false; }
+      } }, `Despachar Rota ${gi + 1}`);
+      card.append(el('div', { style: 'display:flex;gap:8px;align-items:stretch;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--lx-linha)' },
+        el('div', { style: 'position:relative;flex:1' }, buscaMb, listaMb), btnDesp));
+      return card;
     }
-    buscaMb.addEventListener('input', () => { mbEscolhido = null; renderMb(buscaMb.value); });
-    const btnDespachar = el('button', { class: 'lx-btn lx-btn-primario', onClick: async () => {
-      if (!mbEscolhido) { toast('Escolha um motoboy', 'erro'); return; }
-      const lote = [...selDespacho];
-      if (!lote.length) { toast('Nenhuma corrida marcada', 'erro'); return; }
-      try { btnDespachar.disabled = true; const r = await post('/filas/atribuir-lote', { motoboy_id: mbEscolhido.id, entrega_ids: lote }); ov.remove(); toast(`${r.atribuidas} corrida(s) despachada(s) para ${r.motoboy_nome}`); _sel.clear(); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btnDespachar.disabled = false; }
-    } }, 'Despachar marcadas');
-    corpo.append(el('div', { style: 'margin-top:14px;padding-top:14px;border-top:0.5px solid var(--lx-linha)' },
-      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:6px' }, 'Despachar'),
-      el('div', { style: 'display:flex;gap:8px;align-items:stretch' }, el('div', { style: 'position:relative;flex:1' }, buscaMb, listaMb), btnDespachar)));
+
+    await recarregar();
   }
 
   function renderTabela() {
