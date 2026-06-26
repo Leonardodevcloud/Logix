@@ -33,7 +33,7 @@ module.exports = function acompanhamentoRoutes() {
   // POST /entregas/acompanhamento/rota-lote — rota otimizada de várias entregas (despacho em lote).
   // Estática: registrada ANTES de /:id/* para não colidir.
   router.post('/acompanhamento/rota-lote', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
-    try { res.json(await service.rotaLote({ empresaId: req.empresaId, ids: req.body.ids })); }
+    try { res.json(await service.rotaLote({ empresaId: req.empresaId, ids: req.body.ids, retornar: !!req.body.retornar })); }
     catch (e) { next(e); }
   });
 

@@ -555,51 +555,74 @@ export async function montar(container) {
   async function abrirRotaLote() {
     const ids = [..._sel];
     if (!ids.length) return;
-    const mapaDiv = el('div', { style: 'height:46vh;min-height:300px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
+    let retornar = false; // motoboy volta à coleta no fim?
+    let mapa = null;
+
+    const mapaDiv = el('div', { style: 'height:44vh;min-height:280px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
     const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Otimizando rota…');
-    const listaGrupo = el('div', { style: 'display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto' });
-    const corpo = el('div', {}, mapaDiv, info, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:8px 0 4px' }, 'Sequência sugerida'), listaGrupo);
+    const listaGrupo = el('div', { style: 'display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto' });
+    const selDespacho = new Set(); // corridas marcadas para o despacho
+
+    // Toggle "voltar à coleta"
+    const chkRetorno = el('input', { type: 'checkbox', style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
+    const lblRetorno = el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--lx-tinta);cursor:pointer;user-select:none' }, chkRetorno, el('span', {}, 'Motoboy volta ao ponto de coleta no fim'));
+    chkRetorno.onchange = () => { retornar = chkRetorno.checked; recarregarRota(); };
+
+    const corpo = el('div', {},
+      el('div', { style: 'margin-bottom:10px' }, lblRetorno),
+      mapaDiv, info,
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:8px 0 4px' }, 'Sequência sugerida'), listaGrupo);
     const ov = modal(`Rota otimizada — ${ids.length} corridas`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
     const box = ov.querySelector('div'); if (box) box.style.width = '820px';
 
-    let dados;
-    try { dados = await post('/entregas/acompanhamento/rota-lote', { ids }); } catch { info.textContent = 'Erro ao otimizar a rota.'; return; }
     try { await garantirLeaflet(); } catch { info.textContent = 'Não foi possível carregar o mapa.'; return; }
     const L = window.L;
-    const centro = dados.coleta || (dados.destinos[0]);
-    if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
-    const mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 13, scrollWheelZoom: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
-    setTimeout(() => mapa.invalidateSize(), 120);
-    const bounds = [];
-    if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .9, weight: 2 }).addTo(mapa).bindPopup('Coleta: ' + (dados.coleta.endereco || '')); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
-    dados.destinos.forEach((d) => {
-      const m = L.marker([d.lat, d.lng]).addTo(mapa).bindPopup(`${d.sequencia}º — ${d.protocolo}<br>${d.endereco || ''}`);
-      // número da sequência como tooltip permanente
-      m.bindTooltip(String(d.sequencia), { permanent: true, direction: 'center', className: 'lx-seq-tip' });
-      bounds.push([d.lat, d.lng]);
-    });
-    if (dados.rota && dados.rota.coordenadas && dados.rota.coordenadas.length >= 2) {
-      L.polyline(dados.rota.coordenadas, { color: '#185FA5', weight: 4, opacity: .7 }).addTo(mapa);
-      dados.rota.coordenadas.forEach(p => bounds.push(p));
-    }
-    if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-    info.innerHTML = `<b style="color:var(--lx-azul-primario)">Rota otimizada</b> — ${dados.destinos.length} paradas${dados.rota.distanciaKm ? ' · ' + dados.rota.distanciaKm + ' km' : ''}${dados.rota.duracaoMin ? ' · ~' + dados.rota.duracaoMin + ' min' : ''}`;
 
-    // Lista da sequência com checkbox por corrida (pra dividir o lote no despacho).
-    const selDespacho = new Set(dados.destinos.map(d => d.id)); // por padrão, todas vão juntas
-    dados.destinos.forEach(d => {
-      const chk = el('input', { type: 'checkbox', checked: true, style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
-      chk.onchange = () => { if (chk.checked) selDespacho.add(d.id); else selDespacho.delete(d.id); };
-      listaGrupo.append(el('div', { style: 'display:flex;align-items:center;gap:10px;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio)' },
-        chk,
-        el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);min-width:24px' }, d.sequencia + 'º'),
-        el('span', { style: 'font-weight:700;font-size:12px;min-width:80px' }, d.protocolo),
-        el('span', { style: 'flex:1;font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || '')));
-    });
-    if (dados.semCoordenada && dados.semCoordenada.length) {
-      listaGrupo.append(el('div', { style: 'font-size:11px;color:var(--lx-erro);padding:6px 10px' }, `${dados.semCoordenada.length} corrida(s) sem coordenada não entraram na rota: ${dados.semCoordenada.map(s => s.protocolo).join(', ')}`));
+    async function recarregarRota() {
+      info.textContent = 'Otimizando rota…';
+      let dados;
+      try { dados = await post('/entregas/acompanhamento/rota-lote', { ids, retornar }); } catch { info.textContent = 'Erro ao otimizar a rota.'; return; }
+
+      // (re)cria o mapa
+      if (mapa) { mapa.remove(); mapa = null; }
+      const centro = dados.coleta || dados.destinos[0];
+      if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
+      mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 13, scrollWheelZoom: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+      setTimeout(() => mapa && mapa.invalidateSize(), 120);
+      const bounds = [];
+      if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .9, weight: 2 }).addTo(mapa).bindPopup('Coleta: ' + (dados.coleta.endereco || '')); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
+      dados.destinos.forEach((d) => {
+        const m = L.marker([d.lat, d.lng]).addTo(mapa).bindPopup(`${d.sequencia}º — ${d.protocolo}<br>${d.endereco || ''}`);
+        m.bindTooltip(String(d.sequencia), { permanent: true, direction: 'center', className: 'lx-seq-tip' });
+        bounds.push([d.lat, d.lng]);
+      });
+      if (dados.rota && dados.rota.coordenadas && dados.rota.coordenadas.length >= 2) {
+        L.polyline(dados.rota.coordenadas, { color: '#185FA5', weight: 4, opacity: .7 }).addTo(mapa);
+        dados.rota.coordenadas.forEach(p => bounds.push(p));
+      }
+      if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      info.innerHTML = `<b style="color:var(--lx-azul-primario)">Rota otimizada</b> — ${dados.destinos.length} paradas${dados.rota.distanciaKm ? ' · ' + dados.rota.distanciaKm + ' km' : ''}${dados.rota.duracaoMin ? ' · ~' + dados.rota.duracaoMin + ' min' : ''}${retornar ? ' · com retorno' : ''}`;
+
+      // Lista da sequência com checkbox (dividir o lote no despacho)
+      listaGrupo.innerHTML = '';
+      selDespacho.clear();
+      dados.destinos.forEach(d => {
+        selDespacho.add(d.id);
+        const chk = el('input', { type: 'checkbox', checked: true, style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
+        chk.onchange = () => { if (chk.checked) selDespacho.add(d.id); else selDespacho.delete(d.id); };
+        listaGrupo.append(el('div', { style: 'display:flex;align-items:center;gap:10px;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio)' },
+          chk,
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);min-width:24px' }, d.sequencia + 'º'),
+          el('span', { style: 'font-weight:700;font-size:12px;min-width:80px' }, d.protocolo),
+          el('span', { style: 'flex:1;font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || '')));
+      });
+      if (dados.semCoordenada && dados.semCoordenada.length) {
+        listaGrupo.append(el('div', { style: 'font-size:11px;color:var(--lx-erro);padding:6px 10px' }, `${dados.semCoordenada.length} corrida(s) sem coordenada não entraram na rota: ${dados.semCoordenada.map(s => s.protocolo).join(', ')}`));
+      }
     }
+
+    await recarregarRota();
 
     // Rodapé: despachar as marcadas para um motoboy.
     await carregarMotoboys();

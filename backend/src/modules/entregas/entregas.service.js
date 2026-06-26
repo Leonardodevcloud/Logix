@@ -407,8 +407,9 @@ async function trajetoEntrega({ empresaId, id }) {
 
 // Rota otimizada para um conjunto de entregas (despacho em lote).
 // Pega as entregas selecionadas, usa a coleta como origem e otimiza a ordem dos destinos.
+// retornar=true considera o motoboy voltando à coleta no fim.
 // Retorna a sequência sugerida + a geometria da rota pelas ruas.
-async function rotaLote({ empresaId, ids }) {
+async function rotaLote({ empresaId, ids, retornar = false }) {
   if (!Array.isArray(ids) || !ids.length) throw AppError.validacao('Nenhuma entrega informada');
 
   const { rows } = await query(
@@ -422,34 +423,36 @@ async function rotaLote({ empresaId, ids }) {
   );
   if (!rows.length) throw AppError.naoEncontrado('Entregas não encontradas');
 
-  // Coleta de referência: a primeira que tiver coordenada.
   const comColeta = rows.find(r => r.coleta_lat != null);
   const coleta = comColeta ? { lat: Number(comColeta.coleta_lat), lng: Number(comColeta.coleta_lng), endereco: comColeta.coleta_endereco } : null;
 
-  // Destinos com coordenada.
   const destinos = rows.filter(r => r.destino_lat != null).map(r => ({
     id: r.id, protocolo: r.protocolo, endereco: r.destino_endereco,
     lat: Number(r.destino_lat), lng: Number(r.destino_lng),
   }));
 
-  let ordemSugerida = destinos.map((_, i) => i); // fallback: ordem original
+  let ordemSugerida = destinos.map((_, i) => i);
   let distanciaKm = 0, duracaoMin = 0;
   if (coleta && destinos.length >= 2) {
     try {
-      const r = await otimizarRota({ coleta, pontos: destinos });
+      const r = await otimizarRota({ coleta, pontos: destinos, retornar });
       if (Array.isArray(r.ordem) && r.ordem.length) ordemSugerida = r.ordem;
       distanciaKm = r.distanciaKm || 0; duracaoMin = r.duracaoMin || 0;
     } catch { /* mantém ordem original */ }
+
+    // Coerência direcional: se a rota do ORS "voltar" para direções opostas
+    // (reversão de rumo > 120°), comparamos com uma varredura angular (radar) a
+    // partir da coleta e escolhemos a sequência mais coerente.
+    ordemSugerida = corrigirDirecaoOposta(coleta, destinos, ordemSugerida);
   }
 
-  // Reordena os destinos pela sequência sugerida.
   const destinosOrdenados = ordemSugerida.map((idx, pos) => ({ ...destinos[idx], sequencia: pos + 1 }));
 
-  // Geometria da rota pelas ruas (coleta -> destinos na ordem ótima).
   let rotaGeo = { coordenadas: [], distanciaKm, duracaoMin };
   if (coleta && destinosOrdenados.length >= 1) {
     try {
       const seq = [coleta, ...destinosOrdenados];
+      if (retornar) seq.push(coleta);
       if (seq.length >= 2) {
         const g = await tracarRota(seq);
         rotaGeo = { coordenadas: g.coordenadas, distanciaKm: g.distanciaKm || distanciaKm, duracaoMin: g.duracaoMin || duracaoMin };
@@ -461,8 +464,47 @@ async function rotaLote({ empresaId, ids }) {
     coleta,
     destinos: destinosOrdenados,
     rota: rotaGeo,
+    retornar,
     semCoordenada: rows.filter(r => r.destino_lat == null).map(r => ({ id: r.id, protocolo: r.protocolo })),
   };
+}
+
+// Rumo (bearing) de A->B em graus 0..360.
+function _rumo(latA, lngA, latB, lngB) {
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const dLng = toRad(lngB - lngA);
+  const y = Math.sin(dLng) * Math.cos(toRad(latB));
+  const x = Math.cos(toRad(latA)) * Math.sin(toRad(latB)) - Math.sin(toRad(latA)) * Math.cos(toRad(latB)) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+// Diferença angular mínima entre dois rumos (0..180).
+function _difAng(a, b) { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+
+// Ordena destinos por varredura angular a partir da coleta (vizinho mais coerente
+// em direção), evitando saltos para lados opostos. Heurística "radar + vizinho próximo".
+function _ordemAngular(coleta, destinos) {
+  // rumo de cada destino em relação à coleta
+  const comRumo = destinos.map((d, i) => ({ i, rumo: _rumo(coleta.lat, coleta.lng, d.lat, d.lng) }));
+  // começa pelo destino mais próximo angularmente de "norte" e segue varrendo no sentido
+  comRumo.sort((a, b) => a.rumo - b.rumo);
+  return comRumo.map(x => x.i);
+}
+
+// Se a sequência do ORS tiver reversões bruscas de direção (mandar para lados
+// opostos), troca pela ordenação angular, que mantém o motoboy "ganhando direção".
+function corrigirDirecaoOposta(coleta, destinos, ordemORS) {
+  if (destinos.length < 3) return ordemORS;
+  // mede a pior reversão de rumo entre passos consecutivos da rota do ORS
+  let piorReversao = 0;
+  const pts = [coleta, ...ordemORS.map(i => destinos[i])];
+  for (let k = 1; k < pts.length - 1; k++) {
+    const r1 = _rumo(pts[k - 1].lat, pts[k - 1].lng, pts[k].lat, pts[k].lng);
+    const r2 = _rumo(pts[k].lat, pts[k].lng, pts[k + 1].lat, pts[k + 1].lng);
+    piorReversao = Math.max(piorReversao, _difAng(r1, r2));
+  }
+  // se houver uma guinada > 120° (vai para um lado e volta para o oposto), usa a angular
+  if (piorReversao > 120) return _ordemAngular(coleta, destinos);
+  return ordemORS;
 }
 
 // Cidades distintas das lojas da empresa — alimenta o filtro de "região" (checkbox).

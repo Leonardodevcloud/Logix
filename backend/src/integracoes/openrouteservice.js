@@ -16,11 +16,14 @@ async function geocodificar(endereco) {
 }
 
 // Calcula a sequência ótima de paradas a partir da coleta (endpoint /optimization, base VROOM).
+// retornar=true fecha o ciclo (veículo volta à coleta), o que evita rotas que terminam longe.
 // Retorna { ordem: [indices], distanciaKm, duracaoMin }.
-async function otimizarRota({ coleta, pontos }) {
+async function otimizarRota({ coleta, pontos, retornar = false }) {
+  const vehicle = { id: 1, profile: 'driving-car', start: [coleta.lng, coleta.lat] };
+  if (retornar) vehicle.end = [coleta.lng, coleta.lat];
   const corpo = {
     jobs: pontos.map((p, i) => ({ id: i + 1, location: [p.lng, p.lat] })),
-    vehicles: [{ id: 1, profile: 'driving-car', start: [coleta.lng, coleta.lat] }],
+    vehicles: [vehicle],
   };
   const { ok, dados } = await httpRequest(`${BASE}/optimization`, {
     metodo: 'POST',
