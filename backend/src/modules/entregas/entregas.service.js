@@ -107,10 +107,10 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.motoboy_id,
-            -- Usa distancia_km do banco; se null/zero e existem coordenadas de coleta e destino,
+            -- Usa distancia_km do banco; se null/zero/NaN e existem coordenadas de coleta e destino,
             -- calcula haversine entre ponto de coleta e primeiro destino
             COALESCE(
-              NULLIF(e.distancia_km, 0),
+              CASE WHEN e.distancia_km = 0 OR e.distancia_km = 'NaN'::numeric THEN NULL ELSE e.distancia_km END,
               CASE WHEN e.coleta_lat IS NOT NULL AND e.coleta_lng IS NOT NULL THEN
                 (SELECT ROUND((6371 * 2 * ASIN(SQRT(
                   POWER(SIN(RADIANS(ep.lat - e.coleta_lat) / 2), 2) +
@@ -166,7 +166,8 @@ async function detalharConcluida({ empresaId, id }) {
   // Se a coleta não tem coordenada mas tem endereço, geocodifica e persiste —
   // assim entregas de ponto único (sem coleta_lat) passam a exibir km.
   let distanciaKm = e.distancia_km;
-  if (!distanciaKm || parseFloat(distanciaKm) === 0) {
+  const kmInvalido = distanciaKm == null || Number.isNaN(Number(distanciaKm)) || parseFloat(distanciaKm) === 0;
+  if (kmInvalido) {
     try {
       let coletaLat = e.coleta_lat, coletaLng = e.coleta_lng;
       if ((!coletaLat || !coletaLng) && e.coleta_endereco) {
@@ -201,10 +202,13 @@ async function detalharConcluida({ empresaId, id }) {
           km += 2 * R * Math.asin(Math.sqrt(h));
         }
         distanciaKm = parseFloat(km.toFixed(2));
-        query(`UPDATE entregas SET distancia_km = $1 WHERE id = $2 AND (distancia_km IS NULL OR distancia_km = 0)`, [distanciaKm, id]).catch(() => {});
+        query(`UPDATE entregas SET distancia_km = $1 WHERE id = $2 AND (distancia_km IS NULL OR distancia_km = 0 OR distancia_km = 'NaN'::numeric)`, [distanciaKm, id]).catch(() => {});
       }
     } catch {}
   }
+
+  // Garante que NaN nunca vaze para o front (renderiza como '—' corretamente).
+  if (distanciaKm != null && Number.isNaN(Number(distanciaKm))) distanciaKm = null;
 
   return { ...e, distancia_km: distanciaKm, pontos };
 }

@@ -217,7 +217,7 @@ module.exports = function motoboyAppRoutes() {
           `UPDATE entregas
            SET status = 'entregue', concluida_em = now(),
                tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60),
-               distancia_km = COALESCE(NULLIF(distancia_km, 0), $2)
+               distancia_km = CASE WHEN distancia_km IS NULL OR distancia_km = 0 OR distancia_km = 'NaN'::numeric THEN $2 ELSE distancia_km END
            WHERE id = $1`,
           [entregaId, kmHaversine]
         );
@@ -293,7 +293,7 @@ module.exports = function motoboyAppRoutes() {
           `UPDATE entregas
            SET status = 'entregue', concluida_em = now(),
                tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60),
-               distancia_km = COALESCE(NULLIF(distancia_km, 0), $2)
+               distancia_km = CASE WHEN distancia_km IS NULL OR distancia_km = 0 OR distancia_km = 'NaN'::numeric THEN $2 ELSE distancia_km END
            WHERE id = $1`,
           [entregaId, kmHaversine]
         );
