@@ -106,7 +106,19 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   const { rows } = await query(
-    `SELECT e.id, e.protocolo, e.status, e.motoboy_id, e.distancia_km,
+    `SELECT e.id, e.protocolo, e.status, e.motoboy_id,
+            -- Usa distancia_km do banco; se null/zero, calcula haversine entre coleta e 1º ponto
+            COALESCE(
+              NULLIF(e.distancia_km, 0),
+              (SELECT ROUND((6371 * 2 * ASIN(SQRT(
+                POWER(SIN(RADIANS(ep.lat - COALESCE(e.coleta_lat, ep.lat)) / 2), 2) +
+                COS(RADIANS(COALESCE(e.coleta_lat, ep.lat))) * COS(RADIANS(ep.lat)) *
+                POWER(SIN(RADIANS(ep.lng - COALESCE(e.coleta_lng, ep.lng)) / 2), 2)
+              )))::numeric, 2)
+              FROM entregas_pontos ep
+              WHERE ep.entrega_id = e.id AND ep.lat IS NOT NULL AND ep.lng IS NOT NULL
+              ORDER BY ep.ordem LIMIT 1)
+            ) AS distancia_km,
             e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
             m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone,
             (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos,
@@ -147,14 +159,19 @@ async function detalharConcluida({ empresaId, id }) {
 
   const e = ent[0];
 
-  // FIX KM: calcular haversine on-the-fly se distancia_km for null ou zero
+  // FIX KM: calcular haversine se distancia_km for null ou zero
+  // Se coleta_lat for null, usa o 1º ponto como âncora de origem
   let distanciaKm = e.distancia_km;
   if (!distanciaKm || parseFloat(distanciaKm) === 0) {
     try {
-      const pts = [
-        e.coleta_lat && e.coleta_lng ? { lat: parseFloat(e.coleta_lat), lng: parseFloat(e.coleta_lng) } : null,
-        ...pontos.filter(p => p.lat && p.lng).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) })),
-      ].filter(Boolean);
+      const pontosComCoord = pontos.filter(p => p.lat && p.lng)
+        .map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }));
+      const coleta = (e.coleta_lat && e.coleta_lng)
+        ? { lat: parseFloat(e.coleta_lat), lng: parseFloat(e.coleta_lng) }
+        : (pontosComCoord[0] || null); // fallback: usa 1º ponto como origem
+      const pts = coleta
+        ? [coleta, ...pontosComCoord.slice(coleta === pontosComCoord[0] ? 1 : 0)]
+        : pontosComCoord;
       if (pts.length >= 2) {
         let km = 0;
         const R = 6371, rad = x => x * Math.PI / 180;
@@ -165,8 +182,7 @@ async function detalharConcluida({ empresaId, id }) {
           km += 2 * R * Math.asin(Math.sqrt(h));
         }
         distanciaKm = parseFloat(km.toFixed(2));
-        // Persistir para futuras consultas (sem await para não bloquear a resposta)
-        query(`UPDATE entregas SET distancia_km = $1 WHERE id = $2 AND distancia_km IS NULL`, [distanciaKm, id]).catch(() => {});
+        query(`UPDATE entregas SET distancia_km = $1 WHERE id = $2 AND (distancia_km IS NULL OR distancia_km = 0)`, [distanciaKm, id]).catch(() => {});
       }
     } catch {}
   }
@@ -340,12 +356,12 @@ async function gerarProtocoloHtml(id) {
     })().filter(f => { const r = typeof f === 'string' ? f : (f?.url || ''); return r && r.length > 4; });
 
     const fotosHtml = fotos.length ? `
-      <div class="fotos-label">📷 Fotos de protocolo</div>
-      <div class="fotos-grid">
+      <div class="fotos-label">📷 Fotos de protocolo (${fotos.length})</div>
+      <div class="fotos-section">
         ${fotos.map(f => {
           const raw = typeof f === 'string' ? f : (f?.url || '');
           const url = normalizarBase64(raw);
-          return url ? `<img src="${url}" class="foto-thumb" onclick="abrirFoto(this.src)" onerror="this.style.display='none'" />` : '';
+          return url ? `<img src="${url}" class="foto-full" onerror="this.style.display='none'" />` : '';
         }).join('')}
       </div>` : '';
 
@@ -435,14 +451,8 @@ async function gerarProtocoloHtml(id) {
     .hora.chegou { color: #185FA5; }
     .hora.entregue { color: #1D9E75; }
     .fotos-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #8AA2BE; padding: 6px 12px 4px; border-top: 0.5px solid #E2EAF0; }
-    .fotos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 8px 12px 16px; }
-    .foto-thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; border: 1px solid #CBD8E8; cursor: zoom-in; display: block; transition: opacity .15s; }
-    .foto-thumb:hover { opacity: .85; }
-    /* Lightbox inline */
-    #lx-lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
-    #lx-lightbox.open { display:flex; }
-    #lx-lightbox img { max-height:90vh; max-width:94vw; object-fit:contain; border-radius:10px; box-shadow:0 8px 40px rgba(0,0,0,.5); }
-    #lx-close { position:absolute; top:16px; right:20px; background:rgba(255,255,255,.15); border:none; color:#fff; width:40px; height:40px; border-radius:50%; font-size:22px; cursor:pointer; display:grid; place-items:center; }
+    .fotos-section { padding: 8px 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+    .foto-full { width: 100%; border-radius: 10px; border: 1px solid #CBD8E8; display: block; page-break-inside: avoid; }
     /* Observação motoboy */
     .obs-motoboy { background:#FFFBEB; border-left:3px solid #F59E0B; border-radius:0 6px 6px 0; padding:6px 10px; font-size:11.5px; color:#92400E; margin-top:4px; }
 
@@ -525,24 +535,6 @@ async function gerarProtocoloHtml(id) {
 <button class="btn-imprimir" onclick="window.print()">
   🖨 Imprimir / Salvar PDF
 </button>
-
-<!-- Lightbox inline -->
-<div id="lx-lightbox" onclick="fecharFoto()">
-  <button id="lx-close" onclick="fecharFoto()">✕</button>
-  <img id="lx-img" src="" />
-</div>
-
-<script>
-function abrirFoto(src) {
-  document.getElementById('lx-img').src = src;
-  document.getElementById('lx-lightbox').classList.add('open');
-}
-function fecharFoto() {
-  document.getElementById('lx-lightbox').classList.remove('open');
-  document.getElementById('lx-img').src = '';
-}
-document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFoto(); });
-</script>
 
 </body>
 </html>`;
