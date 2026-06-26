@@ -155,7 +155,9 @@ async function permissoesEfetivas(usuario) {
     const codigo = p.split('.')[0];
     return !CODIGOS_MODULO.has(codigo) || ativos.has(codigo);
   });
-  return { perfil: 'cliente', modulos: [...ativos], permissoes };
+  // Retorna o perfil REAL (central_admin / loja / cliente legado), não um valor fixo —
+  // o frontend usa o perfil para decidir o menu (ex.: 'Lojas' só para central_admin).
+  return { perfil: usuario.perfil || 'loja', modulos: [...ativos], permissoes, lojaId: usuario.lojaId || null };
 }
 
 module.exports = {
