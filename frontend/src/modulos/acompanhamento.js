@@ -55,11 +55,58 @@ function carregarFiltros() {
 }
 function salvarFiltros(f) { try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {} }
 
+// Dropdown multi-select com busca interna. Escala para muitos itens.
+// itens: [{ valor, rotulo }]. selecionados: array de valores. onMudar(novoArray).
+function dropMulti(titulo, itens, selecionados, onMudar) {
+  let abertos = false;
+  const sel = new Set(selecionados);
+
+  const rotuloBtn = el('span', { style: 'flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
+  const seta = el('span', { style: 'display:inline-flex;color:var(--lx-tinta-3)' });
+  seta.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  const btn = el('button', { class: 'lx-btn lx-btn-secundario', style: 'height:36px;width:100%;display:flex;align-items:center;gap:8px;font-size:13px;justify-content:space-between' }, rotuloBtn, seta);
+
+  const lista = el('div', { style: 'max-height:200px;overflow:auto;padding:4px' });
+  const busca = el('input', { class: 'lx-input', placeholder: 'Filtrar…', style: 'height:32px;font-size:12px;margin-bottom:6px' });
+  const painelDrop = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:50;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio);box-shadow:0 12px 32px -8px rgba(4,44,83,.25);padding:8px' }, busca, lista);
+  const wrap = el('div', { style: 'position:relative;min-width:0' }, btn, painelDrop);
+
+  function atualizarRotulo() {
+    if (sel.size === 0) rotuloBtn.textContent = titulo;
+    else if (sel.size === 1) { const it = itens.find(i => i.valor === [...sel][0]); rotuloBtn.textContent = it ? it.rotulo : `1 selecionado`; }
+    else rotuloBtn.textContent = `${sel.size} selecionados`;
+    rotuloBtn.style.color = sel.size ? 'var(--lx-tinta)' : 'var(--lx-tinta-3)';
+    rotuloBtn.style.fontWeight = sel.size ? '600' : '400';
+  }
+  function renderLista(filtro = '') {
+    lista.innerHTML = '';
+    const f = filtro.toLowerCase();
+    const vis = itens.filter(i => i.rotulo.toLowerCase().includes(f));
+    if (!vis.length) { lista.append(el('div', { style: 'padding:10px;text-align:center;font-size:12px;color:var(--lx-tinta-2)' }, 'Nada encontrado.')); return; }
+    vis.forEach(it => {
+      const cb = el('input', { type: 'checkbox' }); cb.checked = sel.has(it.valor);
+      const row = el('label', { style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px' }, cb, el('span', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, it.rotulo));
+      row.onmouseenter = () => row.style.background = 'var(--lx-superficie-2)';
+      row.onmouseleave = () => row.style.background = 'transparent';
+      cb.onchange = () => { if (cb.checked) sel.add(it.valor); else sel.delete(it.valor); atualizarRotulo(); onMudar([...sel]); };
+      lista.append(row);
+    });
+  }
+  busca.addEventListener('input', () => renderLista(busca.value));
+  btn.onclick = (e) => { e.stopPropagation(); abertos = !abertos; painelDrop.style.display = abertos ? 'block' : 'none'; if (abertos) { busca.value = ''; renderLista(); busca.focus(); } };
+  document.addEventListener('click', (e) => { if (abertos && !wrap.contains(e.target)) { abertos = false; painelDrop.style.display = 'none'; } });
+
+  atualizarRotulo(); renderLista();
+  wrap._setItens = (novos) => { itens = novos; renderLista(busca.value); atualizarRotulo(); };
+  wrap._setSel = (arr) => { sel.clear(); arr.forEach(v => sel.add(v)); atualizarRotulo(); renderLista(busca.value); };
+  return wrap;
+}
+
 export async function montar(container) {
   const podeGerenciar = auth.pode('filas.gerenciar');
   const podeEditar = auth.pode('entregas.editar');
 
-  let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], totais: {}, buscando: false };
+  let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], canceladas: [], totais: {}, buscando: false };
   let _lojas = [], _cidades = [], _motoboys = [];
   let _aba = 'sem';
   let _busca = '';
@@ -99,17 +146,9 @@ export async function montar(container) {
     el('span', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'até'), inpAte);
   selPeriodo.onchange = () => { customWrap.style.display = selPeriodo.value === 'custom' ? 'flex' : 'none'; };
 
-  // Checkboxes de loja e cidade (preenchidos após carregar)
-  const boxLojas = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' });
-  const boxCidades = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' });
-
-  function chip(label, marcado, onToggle) {
-    const cb = el('input', { type: 'checkbox' });
-    cb.checked = marcado;
-    const c = el('label', { style: `display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;border:0.5px solid ${marcado ? 'var(--lx-azul-vivo)' : 'var(--lx-linha)'};border-radius:20px;cursor:pointer;background:${marcado ? 'var(--lx-superficie-2)' : 'var(--lx-superficie)'}` }, cb, label);
-    cb.onchange = () => { onToggle(cb.checked); c.style.borderColor = cb.checked ? 'var(--lx-azul-vivo)' : 'var(--lx-linha)'; c.style.background = cb.checked ? 'var(--lx-superficie-2)' : 'var(--lx-superficie)'; };
-    return c;
-  }
+  // Dropdowns multi-select de loja e cidade (escaláveis).
+  const dropLojas = dropMulti('Todas as lojas', [], filtros.lojas, arr => { filtros.lojas = arr; });
+  const dropCidades = dropMulti('Todas as regiões', [], filtros.cidades, arr => { filtros.cidades = arr; });
 
   function aplicarFiltros() {
     filtros.periodo = selPeriodo.value;
@@ -121,30 +160,24 @@ export async function montar(container) {
   function limparFiltros() {
     filtros.periodo = 'hoje'; filtros.de = ''; filtros.ate = ''; filtros.lojas = []; filtros.cidades = [];
     selPeriodo.value = 'hoje'; inpDe.value = ''; inpAte.value = ''; customWrap.style.display = 'none';
-    renderChips(); salvarFiltros(filtros); atualizarBadge(); carregar();
+    dropLojas._setSel([]); dropCidades._setSel([]);
+    salvarFiltros(filtros); atualizarBadge(); carregar();
   }
   const btnAplicar = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: () => { aplicarFiltros(); _aberto = false; painel.style.display = 'none'; } }, 'Aplicar');
   const btnLimpar = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:13px', onClick: limparFiltros }, 'Limpar');
 
+  const colPeriodo = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Período'), selPeriodo, customWrap);
+  const colLojas = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Lojas'), dropLojas);
+  const colCidades = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Regiões'), dropCidades);
+
   painel.append(
-    el('div', { style: 'margin-bottom:14px' }, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Período'), selPeriodo, customWrap),
-    el('div', { style: 'margin-bottom:14px' }, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Lojas'), boxLojas),
-    el('div', { style: 'margin-bottom:16px' }, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Regiões (cidade da loja)'), boxCidades),
+    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:start;margin-bottom:16px' }, colPeriodo, colLojas, colCidades),
     el('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, btnLimpar, btnAplicar));
 
-  function renderChips() {
-    boxLojas.innerHTML = '';
-    if (!_lojas.length) boxLojas.append(el('span', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Nenhuma loja.'));
-    _lojas.forEach(l => boxLojas.append(chip(l.nome_fantasia, filtros.lojas.includes(l.id), on => {
-      if (on) { if (!filtros.lojas.includes(l.id)) filtros.lojas.push(l.id); }
-      else filtros.lojas = filtros.lojas.filter(x => x !== l.id);
-    })));
-    boxCidades.innerHTML = '';
-    if (!_cidades.length) boxCidades.append(el('span', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Nenhuma cidade cadastrada.'));
-    _cidades.forEach(c => { const nome = c.estado ? `${c.cidade}/${c.estado}` : c.cidade; boxCidades.append(chip(nome, filtros.cidades.includes(c.cidade), on => {
-      if (on) { if (!filtros.cidades.includes(c.cidade)) filtros.cidades.push(c.cidade); }
-      else filtros.cidades = filtros.cidades.filter(x => x !== c.cidade);
-    })); });
+  function preencherDrops() {
+    dropLojas._setItens(_lojas.map(l => ({ valor: l.id, rotulo: l.nome_fantasia })));
+    dropCidades._setItens(_cidades.map(c => ({ valor: c.cidade, rotulo: c.estado ? `${c.cidade}/${c.estado}` : c.cidade })));
+    dropLojas._setSel(filtros.lojas); dropCidades._setSel(filtros.cidades);
   }
   function atualizarBadge() {
     let n = 0;
@@ -169,7 +202,8 @@ export async function montar(container) {
   // ── Abas ────────────────────────────────────────────────────────
   const cnt = { sem: el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-erro-bg);color:var(--lx-erro)' }, '0'),
                 and: el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0'),
-                con: el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0') };
+                con: el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0'),
+                can: el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0') };
   function abaEl(id, pIcon, rotulo, cor) {
     const a = el('button', { style: 'display:flex;align-items:center;gap:7px;padding:9px 16px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;color:var(--lx-tinta-2);white-space:nowrap', onClick: () => setAba(id) }, svgIcone(pIcon, 16), rotulo, cnt[id]);
     a._cor = cor; a._id = id; return a;
@@ -177,10 +211,11 @@ export async function montar(container) {
   const abaSem = abaEl('sem', P.alerta, 'Sem associação', 'var(--lx-erro)');
   const abaAnd = abaEl('and', P.moto, 'Em andamento', 'var(--lx-azul-primario)');
   const abaCon = abaEl('con', P.checkCirc, 'Concluídas', 'var(--lx-ok)');
-  const abas = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha)' }, abaSem, abaAnd, abaCon);
+  const abaCan = abaEl('can', P.x2, 'Canceladas', 'var(--lx-tinta-2)');
+  const abas = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);flex-wrap:wrap' }, abaSem, abaAnd, abaCon, abaCan);
   function setAba(id) {
     _aba = id;
-    [abaSem, abaAnd, abaCon].forEach(a => { const at = a._id === id; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
+    [abaSem, abaAnd, abaCon, abaCan].forEach(a => { const at = a._id === id; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
     renderTabela();
   }
   const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow:hidden' });
@@ -234,31 +269,38 @@ export async function montar(container) {
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
-    } else {
+    } else if (_aba === 'con') {
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
+    } else {
+      w.append(botaoIcone(P.file, 'Ver detalhes', () => abrirProtocolo(c)));
     }
     return w;
   }
   function linha(c) {
-    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : '92px 1.2fr 90px 60px 120px';
+    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
     const meio = _aba === 'sem'
       ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.coleta_endereco || '—')),
          el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.destino_endereco || '—')]
       : _aba === 'and'
       ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome ? '🏍 ' + c.motoboy_nome : 'sem motoboy')), statusBadge(c.status)]
-      : [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || '—')), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.concluida_em))];
+      : _aba === 'con'
+      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || '—')), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.concluida_em))]
+      : [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || 'sem motoboy')),
+         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.coleta_endereco || '—')];
     const fim = _aba === 'con'
       ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.distancia_km && parseFloat(c.distancia_km) > 0 ? parseFloat(c.distancia_km).toFixed(1) : '—')
+      : _aba === 'can'
+      ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.criado_em))
       : el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHaQuanto(c.criado_em));
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:8px;padding:10px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);background:var(--lx-superficie)` },
       el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo), ...meio, fim, acoes(c));
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : '92px 1.2fr 90px 60px 120px';
-    const labels = _aba === 'sem' ? ['Protocolo', 'Loja / coleta', 'Destino', 'Criada', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'];
+    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
+    const labels = _aba === 'sem' ? ['Protocolo', 'Loja / coleta', 'Destino', 'Criada', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Criada', 'Ações'];
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:8px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` }, ...labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l)));
   }
-  function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _dados.concluidas; }
+  function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }
   function renderTabela() {
     tabelaWrap.innerHTML = ''; tabelaWrap.append(cabecalho());
     const lista = listaDaAba();
@@ -269,6 +311,7 @@ export async function montar(container) {
     cnt.sem.textContent = String(_dados.totais.semAssociacao || 0);
     cnt.and.textContent = String(_dados.totais.emAndamento || 0);
     cnt.con.textContent = String(_dados.totais.concluidas || 0);
+    cnt.can.textContent = String(_dados.totais.canceladas || 0);
     renderTabela();
   }
 
@@ -299,7 +342,7 @@ export async function montar(container) {
   // Carrega lojas e cidades para os checkboxes.
   try { _lojas = await get('/lojas?ativo=true'); } catch { _lojas = []; }
   try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
-  renderChips(); atualizarBadge();
+  preencherDrops(); atualizarBadge();
 
   const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, tabelaWrap);
   container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas'));

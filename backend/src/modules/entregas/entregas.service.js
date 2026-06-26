@@ -350,14 +350,15 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
     params
   );
 
-  const semAssociacao = [], emAndamento = [], concluidas = [];
+  const semAssociacao = [], emAndamento = [], concluidas = [], canceladas = [];
   for (const r of rows) {
     if (r.status === 'aguardando_atribuicao') semAssociacao.push(r);
     else if (['aguardando_coleta', 'em_coleta', 'em_rota'].includes(r.status)) emAndamento.push(r);
-    else concluidas.push(r); // entregue | cancelada
+    else if (r.status === 'cancelada') canceladas.push(r);
+    else concluidas.push(r); // entregue
   }
-  return { semAssociacao, emAndamento, concluidas, buscando: !!buscando,
-    totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length } };
+  return { semAssociacao, emAndamento, concluidas, canceladas, buscando: !!buscando,
+    totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length, canceladas: canceladas.length } };
 }
 
 // Cidades distintas das lojas da empresa — alimenta o filtro de "região" (checkbox).
