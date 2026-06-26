@@ -199,6 +199,11 @@ async function linhaDetalhe(e, protocolo) {
             el('span', { html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' }),
             document.createTextNode('Recebedor: ' + p.recebedor)));
         }
+        if (p.observacao_motoboy) {
+          body.append(el('div', { style: 'display:flex;align-items:flex-start;gap:6px;padding:6px 10px;background:#FFFBEB;border-left:3px solid #F59E0B;border-radius:0 6px 6px 0;font-size:11.5px;color:#92400E' },
+            el('span', { style: 'flex:none;margin-top:1px', html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' }),
+            el('span', {}, el('b', {}, 'Obs. motoboy: '), document.createTextNode(p.observacao_motoboy))));
+        }
 
         // Fotos — FIX 4 aplicado no normalizarFotoUrl com detecção de tipo
         if (fotos.length) {

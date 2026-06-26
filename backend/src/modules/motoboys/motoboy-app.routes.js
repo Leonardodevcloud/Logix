@@ -149,16 +149,17 @@ module.exports = function motoboyAppRoutes() {
   // Responde imediatamente e processa fotos em background (evita timeout no app)
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls } = req.body;
+      const { recebedor, fotos_urls, observacao } = req.body;
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
       // 1. Atualizar ponto
       await query(
         `UPDATE entregas_pontos
-         SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
+         SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now(),
+             observacao_motoboy = $4
          WHERE id = $2 AND entrega_id = $3`,
-        [recebedor || null, pontoId, entregaId]
+        [recebedor || null, pontoId, entregaId, observacao || null]
       );
 
       // 2. Verificar se todos pontos foram entregues
@@ -213,7 +214,7 @@ module.exports = function motoboyAppRoutes() {
   // Fallback: pega automaticamente o primeiro ponto pendente
   router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls } = req.body;
+      const { recebedor, fotos_urls, observacao } = req.body;
       const { entregaId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
@@ -229,9 +230,10 @@ module.exports = function motoboyAppRoutes() {
       if (pontoId) {
         await query(
           `UPDATE entregas_pontos
-           SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now()
+           SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now(),
+               observacao_motoboy = $3
            WHERE id = $2`,
-          [recebedor || null, pontoId]
+          [recebedor || null, pontoId, observacao || null]
         );
       }
 

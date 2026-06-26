@@ -69,6 +69,7 @@ async function migrarColunasExtras() {
     "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS nome_fantasia TEXT",
     "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS complemento TEXT",
     "ALTER TABLE enderecos_salvos ADD COLUMN IF NOT EXISTS is_coleta_padrao BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS observacao_motoboy TEXT",
   ];
   for (const sql of cols) {
     try { await query(sql); } catch {}
