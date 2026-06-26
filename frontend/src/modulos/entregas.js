@@ -553,6 +553,31 @@ export async function montar(container) {
   const mapaDiv = el('div', { style: 'width:100%;height:100%' });
   const mapaWrap = el('div', { class: 'lx-ent-mapa' }, mapaDiv, statsPill);
 
+  // Seletor de loja (apenas central com >1 loja escolhe o destino do pedido).
+  // Usuário de loja já vem travado pelo backend (loja_id do token).
+  const _acesso = auth.acessoAtual();
+  const _ehCentral = _acesso.perfil === 'super_admin' || _acesso.perfil === 'central_admin';
+  let _lojas = [];
+  const lojaSel = el('select', { class: 'lx-input' });
+  const lojaWrap = el('div', { style: 'padding:12px 14px 0;display:none' },
+    el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' }, 'Loja'),
+    lojaSel);
+  if (_ehCentral && auth.temModulo('lojas')) {
+    get('/lojas?ativo=true').then(ls => {
+      _lojas = ls || [];
+      if (_lojas.length > 1) {
+        lojaSel.innerHTML = '';
+        _lojas.forEach(l => lojaSel.append(el('option', { value: l.id }, l.nome_fantasia)));
+        lojaWrap.style.display = '';
+      }
+    }).catch(() => {});
+  }
+  function lojaSelecionada() {
+    if (_ehCentral && _lojas.length > 1) return lojaSel.value || null;
+    if (_ehCentral && _lojas.length === 1) return _lojas[0].id;
+    return null; // usuário de loja: backend resolve pelo token
+  }
+
   // Coleta
   const buscaColeta = CampoBusca({
     onConfirmar: () => atualizarMapa(),
@@ -647,7 +672,7 @@ export async function montar(container) {
       // Separar apelido (nome legível) do endereço real para exibição no protocolo
       const coletaNome     = coleta.apelido || null;
       const coletaEndereco = coleta.endereco_completo || coleta.label || coleta.apelido || coleta.endereco || '';
-      const r = await post('/entregas', { coleta: { nome: coletaNome, endereco: coletaEndereco, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
+      const r = await post('/entregas', { loja_id: lojaSelecionada(), coleta: { nome: coletaNome, endereco: coletaEndereco, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
       toast('✓ ' + r.protocolo + ' criada!', 'ok');
       msgCriar.style.color = 'var(--lx-ok)'; msgCriar.textContent = '✓ ' + r.protocolo + ' criada!';
       setTimeout(() => { msgCriar.textContent = ''; }, 3000);
@@ -659,6 +684,7 @@ export async function montar(container) {
   }
 
   const sideNova = el('div', { style: 'display:flex;flex-direction:column;gap:0;flex:1' },
+    lojaWrap,
     el('div', { style: 'padding:14px;border-bottom:0.5px solid var(--lx-linha)' },
       el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:9px' },
         el('div', { style: 'display:flex;align-items:center;gap:8px' },

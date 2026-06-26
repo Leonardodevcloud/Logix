@@ -27,6 +27,9 @@ function gruposNav() {
   const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
+  // Lojas: só para a administração da central (central_admin), não para usuários de loja.
+  if (auth.temModulo('lojas') && a.perfil === 'central_admin')
+    operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
   if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
@@ -53,7 +56,7 @@ function iniciais(nome) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'U';
 }
 function perfilRotulo(p) {
-  return { super_admin: 'Administrador master', cliente: 'Cliente', motoboy: 'Motoboy' }[p] || '';
+  return { super_admin: 'Administrador master', central_admin: 'Administrador da central', loja: 'Loja', cliente: 'Cliente', motoboy: 'Motoboy' }[p] || '';
 }
 
 // Banner de impersonação — aparece quando o master está dentro de um cliente
