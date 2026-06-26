@@ -1,6 +1,6 @@
 import { casca } from '../core/layout.js';
-import { el, icones, statusBadge, estadoVazio, campo } from '../core/ui.js';
-import { get, post, put, patch, del } from '../core/api.js';
+import { el, icones, statusBadge, campo } from '../core/ui.js';
+import { get, post, put, patch } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
 function toast(msg, tipo) {
@@ -28,232 +28,228 @@ const fmtHaQuanto = iso => {
   if (!iso) return '—';
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (min < 1) return 'agora';
-  if (min < 60) return `há ${min} min`;
+  if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
-  return `há ${h}h${min % 60 ? ' ' + (min % 60) + 'min' : ''}`;
+  return `${h}h${min % 60 ? ' ' + (min % 60) + 'm' : ''}`;
 };
+
+const ICO = {
+  filtro: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
+  busca: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  alerta: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  moto: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 17.5h-5l-2-5h9l-2 5z"/><path d="M5.5 17.5 9 9h3"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+};
+function ic(svg) { const s = el('span', { style: 'display:inline-flex;vertical-align:-3px' }); s.innerHTML = svg; return s; }
 
 export async function montar(container) {
   const podeGerenciar = auth.pode('filas.gerenciar');
   const podeEditar = auth.pode('entregas.editar');
 
   let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], totais: {} };
-  let _lojas = [];
-  let _motoboys = [];
+  let _lojas = [], _motoboys = [];
+  let _aba = 'sem';
   const filtros = { loja_id: '', q: '', regiao: '', periodo: 'hoje' };
 
-  // ── Filtros ─────────────────────────────────────────────────────
-  const selLoja = el('select', { class: 'lx-input', style: 'min-width:150px', onChange: () => { filtros.loja_id = selLoja.value; carregar(); } });
-  const selPeriodo = el('select', { class: 'lx-input', style: 'min-width:120px', onChange: () => { filtros.periodo = selPeriodo.value; carregar(); } },
+  // ── Filtros (recolhíveis) ───────────────────────────────────────
+  const selLoja = el('select', { class: 'lx-input', style: 'height:34px;min-width:150px', onChange: () => { filtros.loja_id = selLoja.value; carregar(); } });
+  const selPeriodo = el('select', { class: 'lx-input', style: 'height:34px;min-width:120px', onChange: () => { filtros.periodo = selPeriodo.value; carregar(); } },
     el('option', { value: 'hoje' }, 'Hoje'),
     el('option', { value: '7d' }, 'Últimos 7 dias'),
     el('option', { value: '30d' }, 'Últimos 30 dias'),
     el('option', { value: 'tudo' }, 'Tudo'));
-  const inpRegiao = el('input', { class: 'lx-input', placeholder: 'Região / bairro', style: 'min-width:130px' });
-  const inpBusca = el('input', { class: 'lx-input', placeholder: 'Protocolo, NF…', style: 'min-width:150px' });
+  const inpRegiao = el('input', { class: 'lx-input', placeholder: 'Região / bairro', style: 'height:34px;width:150px' });
+  const inpBusca = el('input', { class: 'lx-input', placeholder: 'Pesquisar protocolo, NF, endereço…', style: 'height:34px;width:100%;padding-left:34px' });
   let _debounce;
   const debounced = () => { clearTimeout(_debounce); _debounce = setTimeout(() => { filtros.q = inpBusca.value.trim(); filtros.regiao = inpRegiao.value.trim(); carregar(); }, 400); };
   inpBusca.addEventListener('input', debounced);
   inpRegiao.addEventListener('input', debounced);
 
-  const barraFiltros = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--lx-superficie);border-radius:var(--lx-raio-lg);padding:10px 12px;margin-bottom:14px' },
-    selPeriodo,
-    el('span', { style: 'display:flex;align-items:center;gap:5px' }, inpRegiao),
-    selLoja,
-    el('span', { style: 'flex:1' }),
-    inpBusca);
+  const filtrosExtra = el('div', { style: 'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px' },
+    selPeriodo, selLoja, inpRegiao);
 
-  // ── KPIs ────────────────────────────────────────────────────────
-  const kpiSem = el('div', { style: 'font-size:24px;font-weight:700;color:var(--lx-erro)' }, '0');
-  const kpiAnd = el('div', { style: 'font-size:24px;font-weight:700;color:var(--lx-azul-primario)' }, '0');
-  const kpiCon = el('div', { style: 'font-size:24px;font-weight:700;color:var(--lx-ok)' }, '0');
-  function kpiCard(label, valEl) {
-    return el('div', { style: 'background:var(--lx-superficie);border-radius:var(--lx-raio);padding:12px 14px;flex:1;min-width:130px' },
-      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, label), valEl);
+  let _filtrosAbertos = false;
+  const btnFiltros = el('button', { class: 'lx-btn lx-btn-secundario', style: 'height:34px;display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap', onClick: () => {
+    _filtrosAbertos = !_filtrosAbertos;
+    filtrosExtra.style.display = _filtrosAbertos ? 'flex' : 'none';
+    btnFiltros.style.background = _filtrosAbertos ? 'var(--lx-azul-suave, var(--lx-superficie-2))' : '';
+  } }, ic(ICO.filtro), 'Filtros');
+
+  const buscaWrap = el('span', { style: 'position:relative;display:flex;align-items:center;flex:1;min-width:180px' });
+  const buscaIcone = el('span', { style: 'position:absolute;left:11px;display:inline-flex;color:var(--lx-tinta-3)' }); buscaIcone.innerHTML = ICO.busca;
+  buscaWrap.append(buscaIcone, inpBusca);
+
+  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, buscaWrap, btnFiltros);
+  const barraFiltros = el('div', {}, barraTopo, filtrosExtra);
+
+  // ── Abas ────────────────────────────────────────────────────────
+  const cntSem = el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-erro-bg);color:var(--lx-erro)' }, '0');
+  const cntAnd = el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0');
+  const cntCon = el('span', { style: 'font-size:11px;padding:1px 7px;border-radius:9px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '0');
+
+  function abaEl(id, iconeSvg, rotulo, cnt, cor) {
+    const a = el('button', { style: 'display:flex;align-items:center;gap:7px;padding:9px 16px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;color:var(--lx-tinta-2);white-space:nowrap', onClick: () => setAba(id) },
+      ic(iconeSvg), rotulo, cnt);
+    a._cor = cor; a._id = id;
+    return a;
   }
-  const kpis = el('div', { style: 'display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px' },
-    kpiCard('Sem associação', kpiSem), kpiCard('Em andamento', kpiAnd), kpiCard('Concluídas', kpiCon));
+  const abaSem = abaEl('sem', ICO.alerta, 'Sem associação', cntSem, 'var(--lx-erro)');
+  const abaAnd = abaEl('and', ICO.moto, 'Em andamento', cntAnd, 'var(--lx-azul-primario)');
+  const abaCon = abaEl('con', ICO.check, 'Concluídas', cntCon, 'var(--lx-ok)');
+  const abas = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha)' }, abaSem, abaAnd, abaCon);
 
-  // ── Containers das seções ───────────────────────────────────────
-  const secSem = el('div', {});
-  const secAnd = el('div', {});
-  const secCon = el('div', {});
+  function setAba(id) {
+    _aba = id;
+    [abaSem, abaAnd, abaCon].forEach(a => {
+      const ativo = a._id === id;
+      a.style.color = ativo ? a._cor : 'var(--lx-tinta-2)';
+      a.style.borderBottomColor = ativo ? a._cor : 'transparent';
+    });
+    renderTabela();
+  }
+
+  const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow:hidden' });
 
   // ── Ações ───────────────────────────────────────────────────────
-  async function abrirAtribuir(corrida, troca = false) {
-    if (!_motoboys.length) {
-      try { _motoboys = await get('/filas/motoboys-ativos'); } catch { toast('Erro ao carregar motoboys', 'erro'); return; }
-    }
-    const sel = el('select', { class: 'lx-input' },
-      ..._motoboys.map(m => el('option', { value: m.id }, `${m.nome_completo} ${m.online ? '🟢' : '⚪'} (${m.carga} ativas)`)));
-    const corpo = el('div', {}, campo(troca ? 'Novo motoboy' : 'Motoboy', sel),
-      el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0 0' }, '🟢 online · ⚪ offline'));
+  async function carregarMotoboys() {
+    if (_motoboys.length) return;
+    try { _motoboys = await get('/filas/motoboys-ativos'); } catch { toast('Erro ao carregar motoboys', 'erro'); }
+  }
+  async function abrirAtribuir(c, troca = false) {
+    await carregarMotoboys();
+    const sel = el('select', { class: 'lx-input' }, ..._motoboys.map(m => el('option', { value: m.id }, `${m.nome_completo} ${m.online ? '🟢' : '⚪'} (${m.carga} ativas)`)));
+    const corpo = el('div', {}, campo(troca ? 'Novo motoboy' : 'Motoboy', sel), el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0 0' }, '🟢 online · ⚪ offline'));
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, troca ? 'Trocar' : 'Atribuir');
-    const ov = modal(troca ? `Trocar motoboy — ${corrida.protocolo}` : `Atribuir — ${corrida.protocolo}`, corpo, [
-      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+    const ov = modal(troca ? `Trocar motoboy — ${c.protocolo}` : `Atribuir — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
     btn.onclick = async () => {
-      try {
-        btn.disabled = true;
-        const rota = troca ? `/filas/${corrida.id}/reatribuir` : `/filas/${corrida.id}/atribuir`;
-        await post(rota, { motoboy_id: sel.value });
-        ov.remove(); toast(troca ? 'Motoboy trocado' : 'Motoboy atribuído'); carregar();
-      } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
+      try { btn.disabled = true; await post(`/filas/${c.id}/${troca ? 'reatribuir' : 'atribuir'}`, { motoboy_id: sel.value }); ov.remove(); toast(troca ? 'Motoboy trocado' : 'Motoboy atribuído'); carregar(); }
+      catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
   }
-
-  async function atribuirAuto(corrida) {
-    try { await post(`/filas/${corrida.id}/atribuir-auto`, {}); toast('Atribuído automaticamente'); carregar(); }
+  async function atribuirAuto(c) {
+    try { await post(`/filas/${c.id}/atribuir-auto`, {}); toast('Atribuído automaticamente'); carregar(); }
     catch (e) { toast(e.message || 'Sem motoboy disponível', 'erro'); }
   }
-
-  function abrirCancelar(corrida) {
-    const motivo = el('textarea', { class: 'lx-input', rows: 3, placeholder: 'Motivo do cancelamento (opcional)' });
-    const corpo = el('div', {}, campo('Motivo', motivo));
+  function abrirCancelar(c) {
+    const motivo = el('textarea', { class: 'lx-input', rows: 3, placeholder: 'Motivo (opcional)' });
     const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'background:var(--lx-erro)' }, 'Cancelar corrida');
-    const ov = modal(`Cancelar — ${corrida.protocolo}`, corpo, [
-      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
-    btn.onclick = async () => {
-      try { btn.disabled = true; await patch(`/entregas/${corrida.id}/cancelar`, { motivo: motivo.value.trim() || null }); ov.remove(); toast('Corrida cancelada'); carregar(); }
-      catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
-    };
+    const ov = modal(`Cancelar — ${c.protocolo}`, el('div', {}, campo('Motivo', motivo)), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
+    btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/cancelar`, { motivo: motivo.value.trim() || null }); ov.remove(); toast('Cancelada'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
-
-  function abrirFinalizar(corrida) {
-    const corpo = el('div', {}, el('p', { style: 'font-size:14px;color:var(--lx-tinta)' }, `Finalizar a corrida ${corrida.protocolo} manualmente? Todos os pontos serão marcados como entregues.`));
+  function abrirFinalizar(c) {
     const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'background:var(--lx-ok)' }, 'Finalizar');
-    const ov = modal('Finalizar corrida', corpo, [
-      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
-    btn.onclick = async () => {
-      try { btn.disabled = true; await patch(`/entregas/${corrida.id}/finalizar`, {}); ov.remove(); toast('Corrida finalizada'); carregar(); }
-      catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
-    };
+    const ov = modal('Finalizar corrida', el('p', { style: 'font-size:14px' }, `Finalizar ${c.protocolo} manualmente? Todos os pontos serão marcados como entregues.`), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
+    btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/finalizar`, {}); ov.remove(); toast('Finalizada'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
-
-  async function abrirEditar(corrida) {
-    let detalhe;
-    try { detalhe = await get('/entregas/' + corrida.id + '/detalhe'); }
-    catch { toast('Erro ao carregar a corrida', 'erro'); return; }
-    const inpColeta = el('input', { class: 'lx-input', value: detalhe.coleta_endereco || '' });
-    const pontoInputs = (detalhe.pontos || []).map(p => ({ id: p.id, input: el('input', { class: 'lx-input', value: p.endereco || '' }) }));
-    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
-      campo('Endereço de coleta', inpColeta),
-      ...pontoInputs.map((pi, i) => campo(`Destino ${i + 1}`, pi.input)),
-      el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'Os endereços alterados serão re-geocodificados automaticamente.'));
+  async function abrirEditar(c) {
+    let d; try { d = await get('/entregas/' + c.id + '/detalhe'); } catch { toast('Erro ao carregar', 'erro'); return; }
+    const inpColeta = el('input', { class: 'lx-input', value: d.coleta_endereco || '' });
+    const pIn = (d.pontos || []).map(p => ({ id: p.id, input: el('input', { class: 'lx-input', value: p.endereco || '' }) }));
+    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:12px' }, campo('Endereço de coleta', inpColeta), ...pIn.map((pi, i) => campo(`Destino ${i + 1}`, pi.input)), el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'Endereços alterados são re-geocodificados.'));
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar');
-    const ov = modal(`Editar endereços — ${corrida.protocolo}`, corpo, [
-      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
-    btn.onclick = async () => {
-      try {
-        btn.disabled = true;
-        await put(`/entregas/${corrida.id}/enderecos`, {
-          coleta: { endereco: inpColeta.value.trim() },
-          pontos: pontoInputs.map(pi => ({ id: pi.id, endereco: pi.input.value.trim() })),
-        });
-        ov.remove(); toast('Endereços atualizados'); carregar();
-      } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
-    };
+    const ov = modal(`Editar — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+    btn.onclick = async () => { try { btn.disabled = true; await put(`/entregas/${c.id}/enderecos`, { coleta: { endereco: inpColeta.value.trim() }, pontos: pIn.map(pi => ({ id: pi.id, endereco: pi.input.value.trim() })) }); ov.remove(); toast('Atualizado'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
+  function abrirProtocolo(c) { const base = window.LOGIX_API || '/api/v1'; window.open(`${base}/entregas/${c.id}/protocolo`, '_blank'); }
 
-  function abrirProtocolo(corrida) {
-    const base = window.LOGIX_API || '/api/v1';
-    window.open(`${base}/entregas/${corrida.id}/protocolo`, '_blank');
+  function botaoIcone(svg, titulo, onClick, cor) {
+    const b = el('button', { class: 'lx-btn lx-btn-secundario', style: `padding:5px 7px;${cor ? 'color:' + cor : ''}`, title: titulo, 'aria-label': titulo, onClick });
+    b.innerHTML = svg; return b;
   }
-  function rastrear(corrida) {
-    location.hash = '/rastreio';
-  }
+  const SVG = {
+    bolt: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    edit: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    x: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    mapa: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+    troca: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+    check: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    file: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    add: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
+  };
 
-  // Menu de ações (dropdown simples via modal de opções)
-  function menuAcoes(corrida, seq) {
-    const opcoes = [];
-    if (seq === 'sem' && podeGerenciar) {
-      opcoes.push(['Atribuir motoboy', 'user-plus', () => abrirAtribuir(corrida)]);
-      opcoes.push(['Atribuição automática', 'bolt', () => atribuirAuto(corrida)]);
+  function acoes(c) {
+    const w = el('div', { style: 'display:flex;gap:4px;justify-content:flex-end;align-items:center;flex-wrap:wrap' });
+    if (_aba === 'sem') {
+      if (podeGerenciar) {
+        const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;gap:4px', onClick: () => abrirAtribuir(c) });
+        bAtr.innerHTML = SVG.add + '<span>atribuir</span>'; w.append(bAtr);
+        w.append(botaoIcone(SVG.bolt, 'Atribuição automática', () => atribuirAuto(c)));
+      }
+      if (podeEditar) w.append(botaoIcone(SVG.edit, 'Editar endereços', () => abrirEditar(c)));
+      w.append(botaoIcone(SVG.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
+    } else if (_aba === 'and') {
+      w.append(botaoIcone(SVG.mapa, 'Rastrear', () => { location.hash = '/rastreio'; }));
+      if (podeGerenciar) w.append(botaoIcone(SVG.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
+      if (podeEditar) {
+        w.append(botaoIcone(SVG.edit, 'Editar endereços', () => abrirEditar(c)));
+        w.append(botaoIcone(SVG.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)'));
+      }
+      w.append(botaoIcone(SVG.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
+    } else {
+      w.append(botaoIcone(SVG.file, 'Ver protocolo', () => abrirProtocolo(c)));
     }
-    if (seq === 'and' && podeGerenciar) {
-      opcoes.push(['Trocar motoboy', 'switch', () => abrirAtribuir(corrida, true)]);
-    }
-    if (seq !== 'con' && podeEditar) {
-      opcoes.push(['Editar endereços', 'edit', () => abrirEditar(corrida)]);
-      opcoes.push(['Finalizar manualmente', 'check', () => abrirFinalizar(corrida)]);
-    }
-    opcoes.push(['Imprimir protocolo', 'file', () => abrirProtocolo(corrida)]);
-    if (seq !== 'con') opcoes.push(['Cancelar corrida', 'x', () => abrirCancelar(corrida), true]);
-
-    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:6px' },
-      ...opcoes.map(([rotulo, , fn, perigo]) =>
-        el('button', { class: 'lx-btn lx-btn-secundario', style: `justify-content:flex-start;${perigo ? 'color:var(--lx-erro)' : ''}`, onClick: () => { ov.remove(); fn(); } }, rotulo)));
-    const ov = modal(corrida.protocolo, corpo, []);
+    return w;
   }
 
-  // ── Render de linha ─────────────────────────────────────────────
-  function linha(c, seq) {
-    const cols = seq === 'sem'
-      ? '90px 1fr 1fr 110px 130px'
-      : seq === 'and' ? '90px 1fr 110px 90px 110px' : '90px 1fr 90px 70px 110px';
-
-    const acoesEl = el('div', { style: 'display:flex;gap:5px;justify-content:flex-end' });
-    if (seq === 'sem' && podeGerenciar)
-      acoesEl.append(el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario)', onClick: () => abrirAtribuir(c) }, 'atribuir'));
-    if (seq === 'and')
-      acoesEl.append(el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 8px;font-size:12px', onClick: () => rastrear(c), title: 'Rastrear' }, '📍'));
-    if (seq === 'con')
-      acoesEl.append(el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 8px;font-size:12px', onClick: () => abrirProtocolo(c), title: 'Protocolo' }, '📄'));
-    acoesEl.append(el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 8px;font-size:12px', onClick: () => menuAcoes(c, seq), title: 'Mais ações' }, '⋯'));
-
-    const colMeio = seq === 'sem'
-      ? [el('div', {}, el('div', { style: 'font-size:13px;font-weight:700' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.coleta_endereco || '—')),
-         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.destino_endereco || '—')]
-      : [el('div', {}, el('div', { style: 'font-size:13px;font-weight:700' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.motoboy_nome ? '🏍 ' + c.motoboy_nome : 'sem motoboy')),
-         seq === 'and' ? statusBadge(c.status) : el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.concluida_em))];
-
-    const colFim = seq === 'sem'
-      ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHaQuanto(c.criado_em))
-      : seq === 'and' ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHaQuanto(c.criado_em))
-      : el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.distancia_km && parseFloat(c.distancia_km) > 0 ? parseFloat(c.distancia_km).toFixed(1) : '—');
-
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha)` },
-      el('div', { style: 'font-weight:700;font-size:13px' }, c.protocolo),
-      ...colMeio, colFim, acoesEl);
+  function linha(c) {
+    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px'
+      : _aba === 'and' ? '92px 1.2fr 120px 80px 230px'
+      : '92px 1.2fr 90px 60px 120px';
+    const meio = _aba === 'sem'
+      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.coleta_endereco || '—')),
+         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.destino_endereco || '—')]
+      : _aba === 'and'
+      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome ? '🏍 ' + c.motoboy_nome : 'sem motoboy')),
+         statusBadge(c.status)]
+      : [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || '—')),
+         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.concluida_em))];
+    const fim = _aba === 'con'
+      ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.distancia_km && parseFloat(c.distancia_km) > 0 ? parseFloat(c.distancia_km).toFixed(1) : '—')
+      : el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHaQuanto(c.criado_em));
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:8px;padding:10px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);background:var(--lx-superficie)` },
+      el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo),
+      ...meio, fim, acoes(c));
   }
 
-  function renderSecao(container, lista, seq, titulo, cor, iconeChar) {
-    container.innerHTML = '';
-    const head = el('div', { style: 'display:flex;align-items:center;gap:8px;margin:0 0 10px' },
-      el('span', { style: `font-size:18px` }, iconeChar),
-      el('b', { style: 'font-size:15px' }, titulo),
-      el('span', { style: `font-size:12px;color:${cor};background:var(--lx-superficie-2);padding:2px 8px;border-radius:10px` }, String(lista.length)));
-    container.append(head);
+  function cabecalho() {
+    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px'
+      : _aba === 'and' ? '92px 1.2fr 120px 80px 230px'
+      : '92px 1.2fr 90px 60px 120px';
+    const labels = _aba === 'sem' ? ['Protocolo', 'Loja / coleta', 'Destino', 'Criada', 'Ações']
+      : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações']
+      : ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'];
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:8px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` },
+      ...labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l)));
+  }
+
+  function listaDaAba() {
+    return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _dados.concluidas;
+  }
+  function renderTabela() {
+    tabelaWrap.innerHTML = '';
+    tabelaWrap.append(cabecalho());
+    const lista = listaDaAba();
     if (!lista.length) {
-      container.append(el('div', { style: 'background:var(--lx-superficie);border-radius:var(--lx-raio-lg);padding:30px;text-align:center;color:var(--lx-tinta-2);font-size:13px;margin-bottom:20px' }, 'Nenhuma corrida nesta seção.'));
+      tabelaWrap.append(el('div', { style: 'padding:36px;text-align:center;color:var(--lx-tinta-2);font-size:13px;background:var(--lx-superficie)' }, 'Nenhuma corrida nesta seção.'));
       return;
     }
-    const tabela = el('div', { style: `background:var(--lx-superficie);border:0.5px solid ${seq === 'sem' ? 'var(--lx-erro)' : 'var(--lx-linha)'};border-radius:var(--lx-raio-lg);overflow:hidden;margin-bottom:20px` });
-    lista.forEach(c => tabela.append(linha(c, seq)));
-    container.append(tabela);
+    lista.forEach(c => tabelaWrap.append(linha(c)));
   }
 
   function render() {
-    kpiSem.textContent = String(_dados.totais.semAssociacao || 0);
-    kpiAnd.textContent = String(_dados.totais.emAndamento || 0);
-    kpiCon.textContent = String(_dados.totais.concluidas || 0);
-    renderSecao(secSem, _dados.semAssociacao, 'sem', 'Sem associação', 'var(--lx-erro)', '⚠️');
-    renderSecao(secAnd, _dados.emAndamento, 'and', 'Em andamento', 'var(--lx-azul-primario)', '🏍');
-    renderSecao(secCon, _dados.concluidas, 'con', 'Concluídas', 'var(--lx-ok)', '✓');
+    cntSem.textContent = String(_dados.totais.semAssociacao || 0);
+    cntAnd.textContent = String(_dados.totais.emAndamento || 0);
+    cntCon.textContent = String(_dados.totais.concluidas || 0);
+    renderTabela();
   }
 
-  // ── Carregamento ────────────────────────────────────────────────
   function periodoParaDatas() {
     const agora = new Date();
     if (filtros.periodo === 'tudo') return {};
-    if (filtros.periodo === 'hoje') {
-      const de = new Date(agora); de.setHours(0, 0, 0, 0);
-      return { de: de.toISOString() };
-    }
+    if (filtros.periodo === 'hoje') { const de = new Date(agora); de.setHours(0, 0, 0, 0); return { de: de.toISOString() }; }
     const dias = filtros.periodo === '7d' ? 7 : 30;
-    const de = new Date(agora.getTime() - dias * 86400000);
-    return { de: de.toISOString() };
+    return { de: new Date(agora.getTime() - dias * 86400000).toISOString() };
   }
-
   async function carregar() {
     const params = new URLSearchParams();
     const { de, ate } = periodoParaDatas();
@@ -262,26 +258,22 @@ export async function montar(container) {
     if (filtros.loja_id) params.set('loja_id', filtros.loja_id);
     if (filtros.q) params.set('q', filtros.q);
     if (filtros.regiao) params.set('regiao', filtros.regiao);
-    try {
-      _dados = await get('/entregas/acompanhamento?' + params.toString());
-      render();
-    } catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
+    try { _dados = await get('/entregas/acompanhamento?' + params.toString()); render(); }
+    catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
   }
 
-  // Carrega lojas para o filtro (só central enxerga várias).
   try {
     _lojas = await get('/lojas?ativo=true');
     selLoja.append(el('option', { value: '' }, 'Todas as lojas'));
     _lojas.forEach(l => selLoja.append(el('option', { value: l.id }, l.nome_fantasia)));
   } catch { selLoja.append(el('option', { value: '' }, 'Todas as lojas')); }
 
-  const conteudo = el('div', {}, barraFiltros, kpis, secSem, secAnd, secCon);
-  container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas — em tempo real'));
+  const conteudo = el('div', {}, barraFiltros, abas, tabelaWrap);
+  container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas'));
+  setAba('sem');
   carregar();
 
-  // Auto-refresh a cada 30s
   const timer = setInterval(carregar, 30000);
-  // Limpa o timer quando o container sai do DOM (troca de rota)
   const obs = new MutationObserver(() => { if (!document.body.contains(container)) { clearInterval(timer); obs.disconnect(); } });
   obs.observe(document.body, { childList: true, subtree: true });
 }
