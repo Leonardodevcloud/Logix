@@ -339,6 +339,7 @@ async function gerarProtocoloHtml(id) {
     `SELECT ep.id, ep.ordem, ep.nome, ep.endereco, ep.status, ep.recebedor,
             ep.entregue_em, ep.chegou_em, ep.finalizado_em,
             ep.numero_nf, ep.nome_fantasia, ep.complemento, ep.telefone, ep.observacoes,
+            ep.observacao_motoboy,
             COALESCE(
               json_agg(
                 json_build_object('url', pr.arquivo_url, 'tipo', pr.tipo)
