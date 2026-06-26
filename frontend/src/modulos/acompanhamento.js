@@ -42,6 +42,34 @@ function modal(titulo, corpo, acoes) {
   return overlay;
 }
 const fmtHora = iso => iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }) : '—';
+
+// Calcula o rumo (bearing) de A para B em graus (0=N, 90=L, 180=S, 270=O).
+function calcularRumo(latA, lngA, latB, lngB) {
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const dLng = toRad(lngB - lngA);
+  const y = Math.sin(dLng) * Math.cos(toRad(latB));
+  const x = Math.cos(toRad(latA)) * Math.sin(toRad(latB)) - Math.sin(toRad(latA)) * Math.cos(toRad(latB)) * Math.cos(dLng);
+  let g = toDeg(Math.atan2(y, x));
+  return (g + 360) % 360;
+}
+function rumoCardeal(g) {
+  const dirs = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+  return dirs[Math.round(g / 45) % 8];
+}
+// Mini-bússola: seta apontando para o grau + rótulo (ex: "NE 47°").
+function bussola(latA, lngA, latB, lngB) {
+  if (latA == null || latB == null) return el('span', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, '—');
+  const g = calcularRumo(Number(latA), Number(lngA), Number(latB), Number(lngB));
+  const card = rumoCardeal(g);
+  const wrap = el('div', { style: 'display:flex;align-items:center;gap:6px' });
+  const circ = el('span', { style: 'position:relative;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--lx-linha);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0' });
+  const seta = el('span', { style: `position:absolute;transform:rotate(${g}deg);transition:transform .3s` });
+  seta.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--lx-azul-primario)" stroke="var(--lx-azul-primario)" stroke-width="1"><path d="M12 2 L7 13 L12 10 L17 13 Z"/></svg>';
+  circ.append(seta);
+  wrap.append(circ, el('span', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);white-space:nowrap' }, `${card} ${Math.round(g)}°`));
+  return wrap;
+}
+
 const fmtHaQuanto = iso => {
   if (!iso) return '—';
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -244,10 +272,41 @@ export async function montar(container) {
   async function carregarMotoboys() { if (_motoboys.length) return; try { _motoboys = await get('/filas/motoboys-ativos'); } catch { toast('Erro ao carregar motoboys', 'erro'); } }
   async function abrirAtribuir(c, troca = false) {
     await carregarMotoboys();
-    const sel = el('select', { class: 'lx-input' }, ..._motoboys.map(m => el('option', { value: m.id }, `${m.nome_completo} ${m.online ? '🟢' : '⚪'} (${m.carga} ativas)`)));
+    const fmtCod = m => '#' + String(m.codigo || 0).padStart(3, '0');
+    let escolhido = null;
+
+    const busca = el('input', { class: 'lx-input', placeholder: 'Buscar por nº (#001) ou nome…', style: 'margin-bottom:8px' });
+    const lista = el('div', { style: 'max-height:260px;overflow:auto;border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio)' });
+
+    function renderLista(filtro = '') {
+      lista.innerHTML = '';
+      const f = filtro.toLowerCase().replace('#', '').trim();
+      const vis = _motoboys.filter(m => {
+        if (!f) return true;
+        const cod = String(m.codigo || '').padStart(3, '0');
+        return cod.includes(f) || String(m.codigo || '') === f || (m.nome_completo || '').toLowerCase().includes(f);
+      });
+      if (!vis.length) { lista.append(el('div', { style: 'padding:16px;text-align:center;font-size:12px;color:var(--lx-tinta-2)' }, 'Nenhum motoboy encontrado.')); return; }
+      vis.forEach(m => {
+        const sel = escolhido === m.id;
+        const item = el('div', { style: `display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha);${sel ? 'background:var(--lx-superficie-2)' : ''}`, onClick: () => { escolhido = m.id; renderLista(busca.value); } },
+          el('span', { style: 'font-size:12px;font-weight:800;color:var(--lx-azul-primario);min-width:42px' }, fmtCod(m)),
+          el('span', { style: 'flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.nome_completo),
+          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${m.online ? '🟢' : '⚪'} ${m.carga} ativas`),
+          sel ? el('span', { style: 'color:var(--lx-ok);font-weight:800' }, '✓') : el('span', {}));
+        lista.append(item);
+      });
+    }
+    busca.addEventListener('input', () => renderLista(busca.value));
+    renderLista();
+
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, troca ? 'Trocar' : 'Atribuir');
-    const ov = modal(troca ? `Trocar motoboy — ${c.protocolo}` : `Atribuir — ${c.protocolo}`, el('div', {}, campo(troca ? 'Novo motoboy' : 'Motoboy', sel), el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0 0' }, '🟢 online · ⚪ offline')), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
-    btn.onclick = async () => { try { btn.disabled = true; await post(`/filas/${c.id}/${troca ? 'reatribuir' : 'atribuir'}`, { motoboy_id: sel.value }); ov.remove(); toast(troca ? 'Motoboy trocado' : 'Atribuído'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
+    const corpo = el('div', {}, el('label', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;display:block;margin-bottom:6px' }, troca ? 'Novo motoboy' : 'Motoboy'), busca, lista, el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0 0' }, '🟢 online · ⚪ offline · busca por nº ou nome'));
+    const ov = modal(troca ? `Trocar motoboy — ${c.protocolo}` : `Atribuir — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+    btn.onclick = async () => {
+      if (!escolhido) { toast('Selecione um motoboy', 'erro'); return; }
+      try { btn.disabled = true; await post(`/filas/${c.id}/${troca ? 'reatribuir' : 'atribuir'}`, { motoboy_id: escolhido }); ov.remove(); toast(troca ? 'Motoboy trocado' : 'Atribuído'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
+    };
   }
   async function atribuirAuto(c) { try { await post(`/filas/${c.id}/atribuir-auto`, {}); toast('Atribuído'); carregar(); } catch (e) { toast(e.message || 'Sem motoboy', 'erro'); } }
   function abrirCancelar(c) {
@@ -289,16 +348,30 @@ export async function montar(container) {
     const pin = (lat, lng, cor, titulo) => { const m = L.circleMarker([lat, lng], { radius: 8, color: cor, fillColor: cor, fillOpacity: 0.9, weight: 2 }).addTo(mapa); if (titulo) m.bindPopup(titulo); bounds.push([lat, lng]); };
     if (dados.coleta) pin(dados.coleta.lat, dados.coleta.lng, '#7c3aed', 'Coleta: ' + (dados.coleta.endereco || ''));
     dados.destinos.forEach((d, i) => pin(d.lat, d.lng, '#0ea5e9', `Destino ${i + 1}: ${d.endereco || ''}`));
-    if (dados.trajeto.length >= 2) {
-      const linha = dados.trajeto.map(t => [t.lat, t.lng]);
-      L.polyline(linha, { color: '#16a34a', weight: 4, opacity: 0.7 }).addTo(mapa);
-      linha.forEach(p => bounds.push(p));
-      info.innerHTML = `<b style="color:var(--lx-ok)">Trajeto GPS registrado</b> — ${dados.trajeto.length} pontos${dados.entrega.motoboy_nome ? ' · ' + dados.entrega.motoboy_nome : ''}`;
-    } else if (dados.entrega.status === 'entregue') {
-      info.innerHTML = 'Esta corrida não tem trajeto GPS registrado (o app pode não ter enviado posições).';
-    } else {
-      info.innerHTML = 'Mostrando coleta e destinos. O trajeto do motoboy aparece conforme o GPS envia posições.';
+
+    // Rota planejada pelas ruas (coleta -> destinos), em azul tracejado.
+    const temRota = dados.rota && Array.isArray(dados.rota.coordenadas) && dados.rota.coordenadas.length >= 2;
+    if (temRota) {
+      L.polyline(dados.rota.coordenadas, { color: '#185FA5', weight: 4, opacity: 0.65, dashArray: '6 6' }).addTo(mapa);
+      dados.rota.coordenadas.forEach(p => bounds.push(p));
     }
+
+    // Trajeto real do GPS (verde), por cima, quando existir.
+    const temGps = dados.trajeto.length >= 2;
+    if (temGps) {
+      const linhaGps = dados.trajeto.map(t => [t.lat, t.lng]);
+      L.polyline(linhaGps, { color: '#16a34a', weight: 4, opacity: 0.85 }).addTo(mapa);
+      linhaGps.forEach(p => bounds.push(p));
+    }
+
+    // Legenda/info conforme o que foi desenhado.
+    const partes = [];
+    if (temRota) partes.push(`<span style="color:#185FA5">━ rota planejada${dados.rota.distanciaKm ? ' (' + dados.rota.distanciaKm + ' km)' : ''}</span>`);
+    if (temGps) partes.push(`<span style="color:#16a34a">━ trajeto GPS (${dados.trajeto.length} pts)</span>`);
+    if (partes.length) info.innerHTML = partes.join(' &nbsp;·&nbsp; ') + (dados.entrega.motoboy_nome ? ' · ' + dados.entrega.motoboy_nome : '');
+    else if (dados.entrega.status === 'entregue') info.innerHTML = 'Sem trajeto registrado para esta corrida.';
+    else info.innerHTML = 'Mostrando coleta e destinos. A rota e o trajeto aparecem conforme disponíveis.';
+
     if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
   }
   function botaoIcone(pIcon, titulo, onClick, cor) {
@@ -330,13 +403,30 @@ export async function montar(container) {
     }
     return w;
   }
+  // Coleta e destino empilhados (um abaixo do outro), endereço curto.
+  function enderecoEmpilhado(c) {
+    const curto = (e) => {
+      if (!e) return '—';
+      // pega "rua, número - bairro" (corta cidade/estado/cep/país)
+      const partes = e.split(' - ');
+      return partes.length >= 2 ? `${partes[0]} - ${partes[1].split(',')[0]}` : e.split(',').slice(0, 2).join(',');
+    };
+    const ponto = (cor, rotulo, texto) => el('div', { style: 'display:flex;align-items:center;gap:6px;min-width:0' },
+      el('span', { style: `width:7px;height:7px;border-radius:2px;background:${cor};flex-shrink:0` }),
+      el('span', { style: 'font-size:11px;color:var(--lx-tinta-3);font-weight:700;flex-shrink:0;width:14px' }, rotulo),
+      el('span', { style: 'font-size:12px;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, texto));
+    return el('div', { style: 'display:flex;flex-direction:column;gap:3px;min-width:0' },
+      el('div', { style: 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px' }, c.loja_nome || '—'),
+      ponto('var(--lx-azul-primario)', 'C', curto(c.coleta_endereco)),
+      ponto('var(--lx-ok)', 'E', curto(c.destino_endereco)));
+  }
+
   function linha(c) {
-    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
+    const cols = _aba === 'sem' ? '92px 1.6fr 110px 80px 200px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
     const meio = _aba === 'sem'
-      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.coleta_endereco || '—')),
-         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.destino_endereco || '—')]
+      ? [enderecoEmpilhado(c), bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)]
       : _aba === 'and'
-      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome ? '🏍 ' + c.motoboy_nome : 'sem motoboy')), statusBadge(c.status)]
+      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome ? '🏍 ' + (c.motoboy_codigo ? '#' + String(c.motoboy_codigo).padStart(3,'0') + ' ' : '') + c.motoboy_nome : 'sem motoboy')), statusBadge(c.status)]
       : _aba === 'con'
       ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || '—')), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, fmtHora(c.concluida_em))]
       : [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || 'sem motoboy')),
@@ -350,8 +440,8 @@ export async function montar(container) {
       el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo), ...meio, fim, acoes(c));
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '92px 1.2fr 1.3fr 80px 230px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
-    const labels = _aba === 'sem' ? ['Protocolo', 'Loja / coleta', 'Destino', 'Criada', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Criada', 'Ações'];
+    const cols = _aba === 'sem' ? '92px 1.6fr 110px 80px 200px' : _aba === 'and' ? '92px 1.2fr 120px 80px 230px' : _aba === 'con' ? '92px 1.2fr 90px 60px 120px' : '92px 1.2fr 1.2fr 90px 90px';
+    const labels = _aba === 'sem' ? ['Protocolo', 'Trajeto', 'Direção', 'Criada', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Criada', 'Ações'];
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:8px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` }, ...labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l)));
   }
   function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }

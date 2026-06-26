@@ -2,7 +2,7 @@ const { pool, query } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, ERRO_MSGS, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
-const { geocodificar, otimizarRota } = require('../../integracoes/openrouteservice');
+const { geocodificar, otimizarRota, tracarRota } = require('../../integracoes/openrouteservice');
 const { emitirParaEmpresa } = require('../../realtime/ws');
 const sh = require('./entregas.shared');
 
@@ -336,10 +336,12 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
 
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em,
-            e.coleta_nome, e.coleta_endereco, e.loja_id,
+            e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.loja_id,
             l.nome_fantasia AS loja_nome, l.cidade AS loja_cidade, l.estado AS loja_uf,
-            m.id AS motoboy_id, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
+            m.id AS motoboy_id, m.codigo AS motoboy_codigo, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco,
+            (SELECT ep.lat FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lat,
+            (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lng,
             (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS total_pontos
        FROM entregas e
        LEFT JOIN lojas l    ON l.id = e.loja_id
@@ -382,11 +384,24 @@ async function trajetoEntrega({ empresaId, id }) {
     [id]
   );
 
+  const coleta = ent.rows[0].coleta_lat != null ? { lat: Number(ent.rows[0].coleta_lat), lng: Number(ent.rows[0].coleta_lng), endereco: ent.rows[0].coleta_endereco } : null;
+  const destinos = pontos.rows.filter(p => p.lat != null).map(p => ({ lat: Number(p.lat), lng: Number(p.lng), endereco: p.endereco, ordem: p.ordem, status: p.status }));
+
+  // Rota traçada pelas ruas (coleta -> destinos). Se o ORS falhar, segue sem ela.
+  let rota = { coordenadas: [], distanciaKm: 0, duracaoMin: 0 };
+  try {
+    const seq = [];
+    if (coleta) seq.push(coleta);
+    destinos.forEach(d => seq.push(d));
+    if (seq.length >= 2) rota = await tracarRota(seq);
+  } catch { /* sem rota traçada */ }
+
   return {
     entrega: ent.rows[0],
-    coleta: ent.rows[0].coleta_lat != null ? { lat: Number(ent.rows[0].coleta_lat), lng: Number(ent.rows[0].coleta_lng), endereco: ent.rows[0].coleta_endereco } : null,
-    destinos: pontos.rows.filter(p => p.lat != null).map(p => ({ lat: Number(p.lat), lng: Number(p.lng), endereco: p.endereco, ordem: p.ordem, status: p.status })),
+    coleta,
+    destinos,
     trajeto: trajeto.rows.map(t => ({ lat: Number(t.lat), lng: Number(t.lng), em: t.capturado_em })),
+    rota, // { coordenadas: [[lat,lng],...], distanciaKm, duracaoMin }
   };
 }
 

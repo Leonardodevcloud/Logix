@@ -130,14 +130,14 @@ async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
 // Lista TODOS os motoboys ativos da empresa (não só online), para o seletor de troca.
 async function listarTodosAtivos(empresaId) {
   const { rows } = await query(
-    `SELECT m.id, m.nome_completo, m.online, COALESCE(c.carga, 0) AS carga
+    `SELECT m.id, m.codigo, m.nome_completo, m.online, COALESCE(c.carga, 0) AS carga
        FROM motoboys m
        LEFT JOIN (
          SELECT motoboy_id, count(*)::int AS carga FROM entregas
           WHERE empresa_id = $1 AND status = ANY($2) GROUP BY motoboy_id
        ) c ON c.motoboy_id = m.id
       WHERE m.empresa_id = $1 AND m.status = 'ativo'
-      ORDER BY m.online DESC, carga ASC, m.nome_completo`,
+      ORDER BY m.online DESC, carga ASC, m.codigo`,
     [empresaId, STATUS_ATIVOS]
   );
   return rows;

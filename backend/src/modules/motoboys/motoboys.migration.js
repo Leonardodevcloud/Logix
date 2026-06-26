@@ -27,8 +27,24 @@ async function initMotoboysTables() {
 async function migrarMotoboys() {
   const cols = [
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS pin_hash TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS codigo INTEGER",
   ];
   for (const sql of cols) { try { await query(sql); } catch {} }
+
+  // Backfill: numera sequencialmente (por empresa) os motoboys que ainda não têm código.
+  try {
+    await query(`
+      WITH numerados AS (
+        SELECT id, row_number() OVER (PARTITION BY empresa_id ORDER BY criado_em, id) AS seq
+          FROM motoboys WHERE codigo IS NULL
+      )
+      UPDATE motoboys m SET codigo = n.seq + COALESCE(
+        (SELECT max(codigo) FROM motoboys x WHERE x.empresa_id = m.empresa_id), 0)
+      FROM numerados n WHERE n.id = m.id
+    `);
+  } catch {}
+  // Índice único do código por empresa.
+  try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_motoboys_codigo ON motoboys(empresa_id, codigo)`); } catch {}
 }
 
 async function initMotoboysTablesAll() {

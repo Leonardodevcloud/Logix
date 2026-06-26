@@ -39,4 +39,28 @@ async function otimizarRota({ coleta, pontos }) {
   };
 }
 
-module.exports = { geocodificar, otimizarRota };
+// Traça a rota real pelas ruas entre uma sequência de pontos [{lat,lng}, ...].
+// Retorna a geometria como lista de [lat, lng] para desenhar no mapa, + distância/duração.
+async function tracarRota(pontos) {
+  if (!Array.isArray(pontos) || pontos.length < 2) return { coordenadas: [], distanciaKm: 0, duracaoMin: 0 };
+  const corpo = { coordinates: pontos.map((p) => [p.lng, p.lat]) };
+  const { ok, dados } = await httpRequest(`${BASE}/v2/directions/driving-car/geojson`, {
+    metodo: 'POST',
+    headers: { Authorization: process.env.ORS_API_KEY, 'Content-Type': 'application/json' },
+    corpo,
+  });
+  if (!ok || !dados || !dados.features || !dados.features.length) {
+    return { coordenadas: [], distanciaKm: 0, duracaoMin: 0 };
+  }
+  const feat = dados.features[0];
+  // GeoJSON vem em [lng, lat]; convertemos para [lat, lng] (formato do Leaflet).
+  const coordenadas = (feat.geometry.coordinates || []).map(([lng, lat]) => [lat, lng]);
+  const resumo = feat.properties && feat.properties.summary ? feat.properties.summary : {};
+  return {
+    coordenadas,
+    distanciaKm: resumo.distance ? Number((resumo.distance / 1000).toFixed(2)) : 0,
+    duracaoMin: resumo.duration ? Math.round(resumo.duration / 60) : 0,
+  };
+}
+
+module.exports = { geocodificar, otimizarRota, tracarRota };
