@@ -405,6 +405,66 @@ async function trajetoEntrega({ empresaId, id }) {
   };
 }
 
+// Rota otimizada para um conjunto de entregas (despacho em lote).
+// Pega as entregas selecionadas, usa a coleta como origem e otimiza a ordem dos destinos.
+// Retorna a sequência sugerida + a geometria da rota pelas ruas.
+async function rotaLote({ empresaId, ids }) {
+  if (!Array.isArray(ids) || !ids.length) throw AppError.validacao('Nenhuma entrega informada');
+
+  const { rows } = await query(
+    `SELECT e.id, e.protocolo, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+            (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco,
+            (SELECT ep.lat FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lat,
+            (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lng
+       FROM entregas e
+      WHERE e.empresa_id = $1 AND e.id = ANY($2::uuid[])`,
+    [empresaId, ids]
+  );
+  if (!rows.length) throw AppError.naoEncontrado('Entregas não encontradas');
+
+  // Coleta de referência: a primeira que tiver coordenada.
+  const comColeta = rows.find(r => r.coleta_lat != null);
+  const coleta = comColeta ? { lat: Number(comColeta.coleta_lat), lng: Number(comColeta.coleta_lng), endereco: comColeta.coleta_endereco } : null;
+
+  // Destinos com coordenada.
+  const destinos = rows.filter(r => r.destino_lat != null).map(r => ({
+    id: r.id, protocolo: r.protocolo, endereco: r.destino_endereco,
+    lat: Number(r.destino_lat), lng: Number(r.destino_lng),
+  }));
+
+  let ordemSugerida = destinos.map((_, i) => i); // fallback: ordem original
+  let distanciaKm = 0, duracaoMin = 0;
+  if (coleta && destinos.length >= 2) {
+    try {
+      const r = await otimizarRota({ coleta, pontos: destinos });
+      if (Array.isArray(r.ordem) && r.ordem.length) ordemSugerida = r.ordem;
+      distanciaKm = r.distanciaKm || 0; duracaoMin = r.duracaoMin || 0;
+    } catch { /* mantém ordem original */ }
+  }
+
+  // Reordena os destinos pela sequência sugerida.
+  const destinosOrdenados = ordemSugerida.map((idx, pos) => ({ ...destinos[idx], sequencia: pos + 1 }));
+
+  // Geometria da rota pelas ruas (coleta -> destinos na ordem ótima).
+  let rotaGeo = { coordenadas: [], distanciaKm, duracaoMin };
+  if (coleta && destinosOrdenados.length >= 1) {
+    try {
+      const seq = [coleta, ...destinosOrdenados];
+      if (seq.length >= 2) {
+        const g = await tracarRota(seq);
+        rotaGeo = { coordenadas: g.coordenadas, distanciaKm: g.distanciaKm || distanciaKm, duracaoMin: g.duracaoMin || duracaoMin };
+      }
+    } catch { /* sem geometria */ }
+  }
+
+  return {
+    coleta,
+    destinos: destinosOrdenados,
+    rota: rotaGeo,
+    semCoordenada: rows.filter(r => r.destino_lat == null).map(r => ({ id: r.id, protocolo: r.protocolo })),
+  };
+}
+
 // Cidades distintas das lojas da empresa — alimenta o filtro de "região" (checkbox).
 async function listarCidadesLojas(empresaId) {
   const { rows } = await query(
@@ -478,7 +538,7 @@ async function finalizarManual({ empresaId, id, usuarioId, ip }) {
 
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, editarEnderecos, finalizarManual,
+  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

@@ -78,7 +78,28 @@ async function atribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
   return { ...rows[0], motoboy_nome: mb.rows[0].nome_completo };
 }
 
-// Atribuição automática de uma entrega.
+// Atribui várias entregas a um mesmo motoboy de uma vez (despacho em lote).
+async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip }) {
+  if (!Array.isArray(entregaIds) || !entregaIds.length) throw AppError.validacao('Nenhuma entrega selecionada');
+
+  const mb = await query(`SELECT id, nome_completo FROM motoboys WHERE id = $1 AND empresa_id = $2 AND online = TRUE AND status = 'ativo'`, [motoboyId, empresaId]);
+  if (!mb.rows[0]) throw AppError.validacao('Motoboy indisponível (offline ou inativo)');
+
+  // Só atribui as que estão realmente na fila de atribuição (evita pegar já despachadas).
+  const { rows } = await query(
+    `UPDATE entregas SET motoboy_id = $1, status = $2
+       WHERE empresa_id = $3 AND id = ANY($4::uuid[]) AND status = $5
+       RETURNING id, protocolo`,
+    [motoboyId, STATUS_ENTREGA.AGUARDANDO_COLETA, empresaId, entregaIds, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
+  );
+  if (!rows.length) throw AppError.validacao('Nenhuma das entregas selecionadas está disponível para atribuição');
+
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir-lote', detalhe: { motoboyId, ids: rows.map(r => r.id) }, ip });
+  rows.forEach(r => emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: r.id, motoboyId, protocolo: r.protocolo }));
+  return { atribuidas: rows.length, protocolos: rows.map(r => r.protocolo), motoboy_nome: mb.rows[0].nome_completo };
+}
+
+
 async function atribuirAutomatica({ empresaId, entregaId, usuarioId, ip }) {
   const ent = await query(
     `SELECT id, status, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]
@@ -143,4 +164,4 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };

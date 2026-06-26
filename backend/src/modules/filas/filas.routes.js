@@ -21,6 +21,17 @@ function initFilasRoutes() {
     try { res.json(await service.listarTodosAtivos(req.empresaId)); } catch (e) { next(e); }
   });
 
+  // Atribui várias entregas a um motoboy de uma vez (despacho em lote).
+  // Estática: registrada ANTES de /:entregaId/* para não colidir.
+  router.post('/atribuir-lote', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
+    try {
+      res.json(await service.atribuirLote({
+        empresaId: req.empresaId, entregaIds: req.body.entrega_ids,
+        motoboyId: req.body.motoboy_id, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   // Troca o motoboy de uma entrega já atribuída/em rota.
   router.post('/:entregaId/reatribuir', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
     try {

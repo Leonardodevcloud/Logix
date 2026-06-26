@@ -13,14 +13,11 @@ async function garantirLeaflet() {
     l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
     document.head.append(l);
   }
-  if (!document.getElementById('lx-leaflet-js')) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.id = 'lx-leaflet-js';
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.append(s);
-    });
+  if (!document.getElementById('lx-seq-css')) {
+    const st = document.createElement('style');
+    st.id = 'lx-seq-css';
+    st.textContent = '.lx-seq-tip{background:#185FA5;color:#fff;border:none;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center;font-weight:800;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);padding:0}.lx-seq-tip::before{display:none}';
+    document.head.append(st);
   }
 }
 
@@ -161,6 +158,7 @@ export async function montar(container) {
   let _lojas = [], _cidades = [], _motoboys = [];
   let _aba = 'sem';
   let _busca = '';
+  let _sel = new Set(); // IDs das corridas selecionadas (lote)
   const filtros = carregarFiltros();
 
   // ── Busca (sempre visível) ──────────────────────────────────────
@@ -266,8 +264,10 @@ export async function montar(container) {
   const abas = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);flex-wrap:wrap' }, abaSem, abaAnd, abaCon, abaCan);
   function setAba(id) {
     _aba = id;
+    _sel.clear(); // troca de aba zera a seleção em lote
     [abaSem, abaAnd, abaCon, abaCan].forEach(a => { const at = a._id === id; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
     renderTabela();
+    atualizarBarraSel();
   }
   const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow:hidden' });
 
@@ -480,7 +480,7 @@ export async function montar(container) {
   }
 
   function linha(c) {
-    const cols = _aba === 'sem' ? '88px 1.5fr 130px 130px 168px' : _aba === 'and' ? '88px 1.2fr 120px 80px 200px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
+    const cols = _aba === 'sem' ? '34px 80px 1.5fr 124px 124px 168px' : _aba === 'and' ? '88px 1.2fr 120px 80px 200px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
     const dataHora = iso => { if (!iso) return '—'; const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
     const meio = _aba === 'sem'
       ? [enderecoEmpilhado(c), bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng), dataHora(c.criado_em)]
@@ -496,17 +496,130 @@ export async function montar(container) {
       ? dataHora(c.criado_em)
       : _aba === 'sem' ? null  // 'sem' já tem dataHora no meio
       : dataHora(c.criado_em);
-    const celulas = [el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo), ...meio];
+    const celulas = [];
+    if (_aba === 'sem') {
+      const chk = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
+      chk.checked = _sel.has(c.id);
+      chk.onchange = () => { if (chk.checked) _sel.add(c.id); else _sel.delete(c.id); atualizarBarraSel(); };
+      celulas.push(el('div', { style: 'display:flex;justify-content:center' }, chk));
+    }
+    celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo), ...meio);
     if (fim) celulas.push(fim);
     celulas.push(acoes(c));
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);background:var(--lx-superficie)` }, ...celulas);
+    const destaque = _aba === 'sem' && _sel.has(c.id) ? 'background:var(--lx-info-bg)' : 'background:var(--lx-superficie)';
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '88px 1.5fr 130px 130px 168px' : _aba === 'and' ? '88px 1.2fr 120px 80px 200px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
-    const labels = _aba === 'sem' ? ['Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Cancelada', 'Ações'];
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` }, ...labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l)));
+    const cols = _aba === 'sem' ? '34px 80px 1.5fr 124px 124px 168px' : _aba === 'and' ? '88px 1.2fr 120px 80px 200px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
+    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Cancelada', 'Ações'];
+    const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
+    if (_aba === 'sem') {
+      // checkbox "selecionar todas" no cabeçalho
+      const todas = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
+      const lista = listaDaAba();
+      todas.checked = lista.length > 0 && lista.every(c => _sel.has(c.id));
+      todas.onchange = () => { if (todas.checked) lista.forEach(c => _sel.add(c.id)); else _sel.clear(); renderTabela(); atualizarBarraSel(); };
+      cels[0] = el('div', { style: 'display:flex;justify-content:center' }, todas);
+    }
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` }, ...cels);
   }
   function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }
+
+  // Barra flutuante que aparece quando há corridas selecionadas (lote).
+  const barraSel = el('div', { style: 'display:none;position:sticky;top:0;z-index:30;align-items:center;gap:12px;padding:10px 16px;margin-bottom:0;background:var(--lx-azul-primario);color:#fff;border-radius:var(--lx-raio) var(--lx-raio) 0 0;box-shadow:0 4px 16px -6px rgba(4,44,83,.4)' });
+  const barraSelTxt = el('span', { style: 'font-size:13px;font-weight:700' }, '');
+  function atualizarBarraSel() {
+    const n = _sel.size;
+    if (!n || _aba !== 'sem') { barraSel.style.display = 'none'; return; }
+    barraSel.style.display = 'flex';
+    barraSelTxt.textContent = `${n} corrida${n > 1 ? 's' : ''} selecionada${n > 1 ? 's' : ''}`;
+  }
+  const btnVerRotaLote = el('button', { class: 'lx-btn', style: 'background:#fff;color:var(--lx-azul-primario);font-weight:700;padding:6px 14px;font-size:13px', onClick: () => abrirRotaLote() }, 'Ver rota otimizada');
+  const btnLimparSel = el('button', { class: 'lx-btn', style: 'background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:6px 12px;font-size:13px', onClick: () => { _sel.clear(); renderTabela(); atualizarBarraSel(); } }, 'Limpar');
+  barraSel.append(barraSelTxt, el('div', { style: 'flex:1' }), btnVerRotaLote, btnLimparSel);
+
+  // Modal: mapa com a rota otimizada de todas as selecionadas + agrupamento e despacho.
+  async function abrirRotaLote() {
+    const ids = [..._sel];
+    if (!ids.length) return;
+    const mapaDiv = el('div', { style: 'height:46vh;min-height:300px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
+    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Otimizando rota…');
+    const listaGrupo = el('div', { style: 'display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto' });
+    const corpo = el('div', {}, mapaDiv, info, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:8px 0 4px' }, 'Sequência sugerida'), listaGrupo);
+    const ov = modal(`Rota otimizada — ${ids.length} corridas`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+    const box = ov.querySelector('div'); if (box) box.style.width = '820px';
+
+    let dados;
+    try { dados = await post('/entregas/acompanhamento/rota-lote', { ids }); } catch { info.textContent = 'Erro ao otimizar a rota.'; return; }
+    try { await garantirLeaflet(); } catch { info.textContent = 'Não foi possível carregar o mapa.'; return; }
+    const L = window.L;
+    const centro = dados.coleta || (dados.destinos[0]);
+    if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
+    const mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 13, scrollWheelZoom: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+    setTimeout(() => mapa.invalidateSize(), 120);
+    const bounds = [];
+    if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .9, weight: 2 }).addTo(mapa).bindPopup('Coleta: ' + (dados.coleta.endereco || '')); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
+    dados.destinos.forEach((d) => {
+      const m = L.marker([d.lat, d.lng]).addTo(mapa).bindPopup(`${d.sequencia}º — ${d.protocolo}<br>${d.endereco || ''}`);
+      // número da sequência como tooltip permanente
+      m.bindTooltip(String(d.sequencia), { permanent: true, direction: 'center', className: 'lx-seq-tip' });
+      bounds.push([d.lat, d.lng]);
+    });
+    if (dados.rota && dados.rota.coordenadas && dados.rota.coordenadas.length >= 2) {
+      L.polyline(dados.rota.coordenadas, { color: '#185FA5', weight: 4, opacity: .7 }).addTo(mapa);
+      dados.rota.coordenadas.forEach(p => bounds.push(p));
+    }
+    if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    info.innerHTML = `<b style="color:var(--lx-azul-primario)">Rota otimizada</b> — ${dados.destinos.length} paradas${dados.rota.distanciaKm ? ' · ' + dados.rota.distanciaKm + ' km' : ''}${dados.rota.duracaoMin ? ' · ~' + dados.rota.duracaoMin + ' min' : ''}`;
+
+    // Lista da sequência com checkbox por corrida (pra dividir o lote no despacho).
+    const selDespacho = new Set(dados.destinos.map(d => d.id)); // por padrão, todas vão juntas
+    dados.destinos.forEach(d => {
+      const chk = el('input', { type: 'checkbox', checked: true, style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
+      chk.onchange = () => { if (chk.checked) selDespacho.add(d.id); else selDespacho.delete(d.id); };
+      listaGrupo.append(el('div', { style: 'display:flex;align-items:center;gap:10px;padding:7px 10px;border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio)' },
+        chk,
+        el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);min-width:24px' }, d.sequencia + 'º'),
+        el('span', { style: 'font-weight:700;font-size:12px;min-width:80px' }, d.protocolo),
+        el('span', { style: 'flex:1;font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || '')));
+    });
+    if (dados.semCoordenada && dados.semCoordenada.length) {
+      listaGrupo.append(el('div', { style: 'font-size:11px;color:var(--lx-erro);padding:6px 10px' }, `${dados.semCoordenada.length} corrida(s) sem coordenada não entraram na rota: ${dados.semCoordenada.map(s => s.protocolo).join(', ')}`));
+    }
+
+    // Rodapé: despachar as marcadas para um motoboy.
+    await carregarMotoboys();
+    const buscaMb = el('input', { class: 'lx-input', placeholder: 'Buscar motoboy por nº ou nome…', style: 'flex:1' });
+    const listaMb = el('div', { style: 'display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;z-index:70;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio);max-height:180px;overflow:auto;box-shadow:0 -8px 24px -8px rgba(4,44,83,.25)' });
+    let mbEscolhido = null;
+    function renderMb(f) {
+      f = (f || '').toLowerCase().replace('#', '').trim();
+      listaMb.innerHTML = '';
+      if (!f) { listaMb.style.display = 'none'; return; }
+      const vis = _motoboys.filter(m => { const cod = String(m.codigo || '').padStart(3, '0'); return cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
+      if (!vis.length) { listaMb.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--lx-tinta-2)">Nenhum motoboy</div>'; listaMb.style.display = 'block'; return; }
+      vis.forEach(m => {
+        const it = el('div', { style: 'display:flex;align-items:center;gap:8px;padding:8px 11px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `#${String(m.codigo||0).padStart(3,'0')} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario)' }, '#' + String(m.codigo||0).padStart(3,'0')),
+          el('span', { style: 'flex:1;font-size:13px' }, m.nome_completo),
+          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, m.online ? '🟢' : '⚪'));
+        listaMb.append(it);
+      });
+      listaMb.style.display = 'block';
+    }
+    buscaMb.addEventListener('input', () => { mbEscolhido = null; renderMb(buscaMb.value); });
+    const btnDespachar = el('button', { class: 'lx-btn lx-btn-primario', onClick: async () => {
+      if (!mbEscolhido) { toast('Escolha um motoboy', 'erro'); return; }
+      const lote = [...selDespacho];
+      if (!lote.length) { toast('Nenhuma corrida marcada', 'erro'); return; }
+      try { btnDespachar.disabled = true; const r = await post('/filas/atribuir-lote', { motoboy_id: mbEscolhido.id, entrega_ids: lote }); ov.remove(); toast(`${r.atribuidas} corrida(s) despachada(s) para ${r.motoboy_nome}`); _sel.clear(); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btnDespachar.disabled = false; }
+    } }, 'Despachar marcadas');
+    corpo.append(el('div', { style: 'margin-top:14px;padding-top:14px;border-top:0.5px solid var(--lx-linha)' },
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:6px' }, 'Despachar'),
+      el('div', { style: 'display:flex;gap:8px;align-items:stretch' }, el('div', { style: 'position:relative;flex:1' }, buscaMb, listaMb), btnDespachar)));
+  }
+
   function renderTabela() {
     tabelaWrap.innerHTML = ''; tabelaWrap.append(cabecalho());
     const lista = listaDaAba();
@@ -518,7 +631,11 @@ export async function montar(container) {
     cnt.and.textContent = String(_dados.totais.emAndamento || 0);
     cnt.con.textContent = String(_dados.totais.concluidas || 0);
     cnt.can.textContent = String(_dados.totais.canceladas || 0);
+    // Remove da seleção corridas que não estão mais em "sem associação".
+    const idsAtuais = new Set(_dados.semAssociacao.map(c => c.id));
+    [..._sel].forEach(id => { if (!idsAtuais.has(id)) _sel.delete(id); });
     renderTabela();
+    atualizarBarraSel();
   }
 
   function periodoParaDatas() {
@@ -550,7 +667,7 @@ export async function montar(container) {
   try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
   preencherDrops(); atualizarBadge();
 
-  const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, tabelaWrap);
+  const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, barraSel, tabelaWrap);
   container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas'));
   setAba('sem');
   carregar();
