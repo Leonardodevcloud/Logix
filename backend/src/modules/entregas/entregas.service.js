@@ -107,17 +107,20 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.motoboy_id,
-            -- Usa distancia_km do banco; se null/zero, calcula haversine entre coleta e 1º ponto
+            -- Usa distancia_km do banco; se null/zero e existem coordenadas de coleta e destino,
+            -- calcula haversine entre ponto de coleta e primeiro destino
             COALESCE(
               NULLIF(e.distancia_km, 0),
-              (SELECT ROUND((6371 * 2 * ASIN(SQRT(
-                POWER(SIN(RADIANS(ep.lat - COALESCE(e.coleta_lat, ep.lat)) / 2), 2) +
-                COS(RADIANS(COALESCE(e.coleta_lat, ep.lat))) * COS(RADIANS(ep.lat)) *
-                POWER(SIN(RADIANS(ep.lng - COALESCE(e.coleta_lng, ep.lng)) / 2), 2)
-              )))::numeric, 2)
-              FROM entregas_pontos ep
-              WHERE ep.entrega_id = e.id AND ep.lat IS NOT NULL AND ep.lng IS NOT NULL
-              ORDER BY ep.ordem LIMIT 1)
+              CASE WHEN e.coleta_lat IS NOT NULL AND e.coleta_lng IS NOT NULL THEN
+                (SELECT ROUND((6371 * 2 * ASIN(SQRT(
+                  POWER(SIN(RADIANS(ep.lat - e.coleta_lat) / 2), 2) +
+                  COS(RADIANS(e.coleta_lat)) * COS(RADIANS(ep.lat)) *
+                  POWER(SIN(RADIANS(ep.lng - e.coleta_lng) / 2), 2)
+                )))::numeric, 2)
+                FROM entregas_pontos ep
+                WHERE ep.entrega_id = e.id AND ep.lat IS NOT NULL AND ep.lng IS NOT NULL
+                ORDER BY ep.ordem LIMIT 1)
+              END
             ) AS distancia_km,
             e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
             m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone,
@@ -331,13 +334,14 @@ async function gerarProtocoloHtml(id) {
   const cor = d.cor_primaria || '#185FA5';
   const nomeEmpresa = d.nome_exibicao || d.nome_fantasia || d.razao_social || 'Logix';
 
+  const TZ = 'America/Bahia';
   function fmtDataHtml(iso) {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return new Date(iso).toLocaleString('pt-BR', { timeZone: TZ, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   }
   function fmtHoraHtml(iso) {
     if (!iso) return null;
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    return new Date(iso).toLocaleTimeString('pt-BR', { timeZone: TZ, hour:'2-digit', minute:'2-digit' });
   }
 
   // Detectar tipo real de base64
@@ -526,7 +530,7 @@ async function gerarProtocoloHtml(id) {
   ${pontosHtml}
 
   <div class="rodape">
-    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+    <span>Gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Bahia' })}</span>
     <span>Logix · Gestão de Entregas</span>
   </div>
 
