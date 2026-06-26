@@ -4,6 +4,7 @@ const AUDIT_CATEGORIES = {
   AUTENTICACAO: 'autenticacao',
   IMPERSONACAO: 'impersonacao',
   EMPRESA: 'empresa',
+  LOJA: 'loja',
   MOTOBOY: 'motoboy',
   ENTREGA: 'entrega',
   MAQUININHA: 'maquininha',
@@ -23,7 +24,13 @@ const ERRO_MSGS = {
   ENTREGA_NAO_ENCONTRADA: 'Entrega não encontrada',
 };
 
-const PERFIS = { SUPER_ADMIN: 'super_admin', CLIENTE: 'cliente', MOTOBOY: 'motoboy' };
+const PERFIS = {
+  SUPER_ADMIN: 'super_admin',   // dono da plataforma (você) — enxerga todas as empresas
+  CENTRAL_ADMIN: 'central_admin', // dono da central — opera a empresa inteira
+  LOJA: 'loja',                 // usuário da loja-cliente — enxerga só a própria loja
+  MOTOBOY: 'motoboy',
+  CLIENTE: 'cliente',           // legado: equivale a 'loja' (mantido p/ transição)
+};
 
 const STATUS_ENTREGA = {
   AGUARDANDO_ATRIBUICAO: 'aguardando_atribuicao',

@@ -12,8 +12,8 @@ async function listar({ ativo }) {
   const { rows } = await query(
     `SELECT e.*,
        (SELECT count(*)::int FROM motoboys m WHERE m.empresa_id = e.id) AS total_motoboys,
-       (SELECT u.id FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil = 'cliente' ORDER BY u.criado_em LIMIT 1) AS responsavel_usuario_id,
-       (SELECT u.email FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil = 'cliente' ORDER BY u.criado_em LIMIT 1) AS email_acesso
+       (SELECT u.id FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil IN ('central_admin','cliente') ORDER BY u.criado_em LIMIT 1) AS responsavel_usuario_id,
+       (SELECT u.email FROM usuarios u WHERE u.empresa_id = e.id AND u.perfil IN ('central_admin','cliente') ORDER BY u.criado_em LIMIT 1) AS email_acesso
      FROM empresas e ${where} ORDER BY e.razao_social`,
     params
   );
@@ -47,7 +47,7 @@ async function criar(dados, { adminId, ip }) {
     await permissoesService.habilitarModulosPadrao(empresa.id, (sql, params) => cliente.query(sql, params));
     const papelAdminId = await permissoesService.idDoTemplate('Administrador');
     const usuario = await authService.criarUsuario({
-      empresaId: empresa.id, perfil: PERFIS.CLIENTE,
+      empresaId: empresa.id, perfil: PERFIS.CENTRAL_ADMIN,
       nome: dados.responsavel || dados.razao_social, email: dados.email,
       telefone: dados.telefone, senha: dados.senha, papelId: papelAdminId,
       executor: (sql, params) => cliente.query(sql, params),

@@ -21,6 +21,7 @@ const branding = require('./src/modules/branding');
 const permissoes = require('./src/modules/permissoes');
 const filas = require('./src/modules/filas');
 const equipe = require('./src/modules/equipe');
+const lojas = require('./src/modules/lojas');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -29,6 +30,7 @@ async function migrar() {
   await permissoes.initPermissoesTables();
   await motoboys.initMotoboysTables();
   await entregas.initEntregasTables();
+  await lojas.initLojasTables();   // depois de entregas e enderecos_salvos (FKs + ALTER perfil)
   await filas.initFilasTables();
   await equipe.initEquipeTables();
   await branding.initBrandingTables();
@@ -60,6 +62,7 @@ function montarApp() {
   api.use('/permissoes', permissoes.initPermissoesRoutes());
   api.use('/filas', filas.initFilasRoutes());
   api.use('/equipe', equipe.initEquipeRoutes());
+  api.use('/lojas', lojas.initLojasRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último

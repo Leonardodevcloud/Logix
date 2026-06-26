@@ -13,7 +13,7 @@ async function comCoordenadas(ponto) {
 }
 
 // Lança uma nova entrega: geocoding, otimização de rota e gravação transacional.
-async function criarEntrega({ empresaId, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, ip }) {
+async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, ip }) {
   if (!coleta || !coleta.endereco) throw AppError.validacao('Informe o ponto de coleta');
   if (!Array.isArray(destinos) || destinos.length === 0) throw AppError.validacao('Informe ao menos um destino');
 
@@ -41,10 +41,10 @@ async function criarEntrega({ empresaId, criadoPor, coleta, destinos, distribuic
   try {
     await cliente.query('BEGIN');
     const { rows } = await cliente.query(
-      `INSERT INTO entregas (empresa_id, protocolo, motoboy_id, status, distribuicao,
+      `INSERT INTO entregas (empresa_id, loja_id, protocolo, motoboy_id, status, distribuicao,
          coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-      [empresaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
        coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor]
     );
     const entregaId = rows[0].id;
@@ -79,24 +79,25 @@ async function obter({ empresaId, id }) {
   return { ...rows[0], pontos: pontos.rows };
 }
 
-async function listar({ empresaId, status, motoboyId }) {
-  const cond = ['empresa_id = $1']; const params = [empresaId];
-  if (status) { params.push(status); cond.push(`status = $${params.length}`); }
-  if (motoboyId) { params.push(motoboyId); cond.push(`motoboy_id = $${params.length}`); }
+async function listar({ empresaId, status, motoboyId, lojaId = null }) {
+  const cond = ['e.empresa_id = $1']; const params = [empresaId];
+  if (status) { params.push(status); cond.push(`e.status = $${params.length}`); }
+  if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
+  if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.motoboy_id, e.status, e.distancia_km, e.tempo_estimado_min,
-             e.coleta_endereco, e.criado_em,
+             e.coleta_endereco, e.criado_em, e.loja_id,
              m.nome_completo AS motoboy_nome,
              (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
-       WHERE e.empresa_id = $1 ORDER BY e.criado_em DESC LIMIT 200`,
+       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 200`,
     params
   );
   return rows;
 }
 
-async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
+async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
   // status: 'entregue' | 'cancelada' | null (todas)
   if (status === 'entregue') cond.push("e.status = 'entregue'");
@@ -105,6 +106,7 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
   if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
   if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
+  if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.motoboy_id,
             -- Usa distancia_km do banco; se null/zero/NaN e existem coordenadas de coleta e destino,
@@ -136,12 +138,16 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status }) {
 }
 
 // Detalhe de uma entrega concluída: pontos + protocolos (fotos)
-async function detalharConcluida({ empresaId, id }) {
+async function detalharConcluida({ empresaId, id, lojaId = null }) {
   const { rows: ent } = await query(
     `SELECT e.*, m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone
      FROM entregas e LEFT JOIN motoboys m ON m.id = e.motoboy_id
      WHERE e.id = $1 AND e.empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  // Isolamento por loja: usuário de loja não acessa entrega de outra loja.
+  if (lojaId && ent[0].loja_id && ent[0].loja_id !== lojaId) {
+    throw AppError.naoEncontrado('Entrega não encontrada');
+  }
 
   const { rows: pontos } = await query(
     `SELECT ep.id, ep.ordem, ep.nome, ep.endereco, ep.lat, ep.lng,

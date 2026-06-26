@@ -10,7 +10,7 @@ async function conferirSenha(senha, hash) { return bcrypt.compare(senha, hash); 
 
 function gerarAccessToken(usuario) {
   return jwt.sign(
-    { id: usuario.id, perfil: usuario.perfil, empresaId: usuario.empresa_id, nome: usuario.nome },
+    { id: usuario.id, perfil: usuario.perfil, empresaId: usuario.empresa_id, lojaId: usuario.loja_id || null, nome: usuario.nome },
     process.env.JWT_ACCESS_SECRET,
     { expiresIn: ACCESS_TTL }
   );

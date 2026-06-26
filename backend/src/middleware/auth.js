@@ -33,7 +33,8 @@ function exigirPerfil(...perfis) {
 }
 
 const verificarAdmin = exigirPerfil(PERFIS.SUPER_ADMIN);
-const verificarAdminOuFinanceiro = exigirPerfil(PERFIS.SUPER_ADMIN, PERFIS.CLIENTE);
+// Aceita perfis de administração da central (e legado 'cliente' durante a transição).
+const verificarAdminOuFinanceiro = exigirPerfil(PERFIS.SUPER_ADMIN, PERFIS.CENTRAL_ADMIN, PERFIS.LOJA, PERFIS.CLIENTE);
 
 module.exports = { verificarToken, exigirPerfil, verificarAdmin, verificarAdminOuFinanceiro };
 

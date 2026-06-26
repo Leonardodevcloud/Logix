@@ -14,6 +14,7 @@ module.exports = function concluidasRoutes() {
         status: req.query.status || null,
         de: req.query.de, ate: req.query.ate,
         motoboyId: req.query.motoboy_id,
+        lojaId: req.lojaId || req.query.loja_id || null,
       }));
     } catch (e) { next(e); }
   });
@@ -21,7 +22,7 @@ module.exports = function concluidasRoutes() {
   // GET /entregas/:id/detalhe
   router.get('/:id/detalhe', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
-      res.json(await service.detalharConcluida({ empresaId: req.empresaId, id: req.params.id }));
+      res.json(await service.detalharConcluida({ empresaId: req.empresaId, id: req.params.id, lojaId: req.lojaId || null }));
     } catch (e) { next(e); }
   });
 

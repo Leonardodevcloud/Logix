@@ -9,7 +9,8 @@
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
     "smoke": "node scripts/smoke-test.js",
-    "backfill:km": "node scripts/backfill-km.js"
+    "backfill:km": "node scripts/backfill-km.js",
+    "backfill:lojas": "node scripts/backfill-lojas.js"
   },
   "engines": {
     "node": ">=18"

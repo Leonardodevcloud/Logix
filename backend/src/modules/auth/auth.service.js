@@ -5,7 +5,7 @@ const { registrarAuditoria } = require('../../shared/auditLogger');
 const sh = require('./auth.shared');
 
 function publico(u) {
-  return { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil, empresaId: u.empresa_id };
+  return { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil, empresaId: u.empresa_id, lojaId: u.loja_id || null };
 }
 
 // Emite access + refresh e persiste o hash do refresh.
@@ -21,7 +21,7 @@ async function emitirSessao(usuario) {
 
 async function autenticar({ email, senha, ip }) {
   const { rows } = await query(
-    `SELECT id, empresa_id, perfil, nome, email, senha_hash, ativo FROM usuarios WHERE email = $1`,
+    `SELECT id, empresa_id, loja_id, perfil, nome, email, senha_hash, ativo FROM usuarios WHERE email = $1`,
     [email]
   );
   const usuario = rows[0];
@@ -43,7 +43,7 @@ async function renovar({ refreshToken }) {
   if (!refreshToken) throw AppError.naoAutorizado(ERRO_MSGS.TOKEN_AUSENTE);
   const hash = sh.hashRefresh(refreshToken);
   const { rows } = await query(
-    `SELECT rt.id, rt.revogado, rt.expira_em, u.id AS usuario_id, u.empresa_id, u.perfil, u.nome
+    `SELECT rt.id, rt.revogado, rt.expira_em, u.id AS usuario_id, u.empresa_id, u.loja_id, u.perfil, u.nome
        FROM refresh_tokens rt JOIN usuarios u ON u.id = rt.usuario_id
       WHERE rt.token_hash = $1`,
     [hash]
@@ -53,7 +53,7 @@ async function renovar({ refreshToken }) {
     throw AppError.naoAutorizado(ERRO_MSGS.TOKEN_INVALIDO);
   }
   await query(`UPDATE refresh_tokens SET revogado = TRUE WHERE id = $1`, [reg.id]);
-  return emitirSessao({ id: reg.usuario_id, empresa_id: reg.empresa_id, perfil: reg.perfil, nome: reg.nome });
+  return emitirSessao({ id: reg.usuario_id, empresa_id: reg.empresa_id, loja_id: reg.loja_id, perfil: reg.perfil, nome: reg.nome });
 }
 
 async function encerrar({ refreshToken }) {
@@ -64,7 +64,7 @@ async function encerrar({ refreshToken }) {
 // Super admin entra como cliente/motoboy sem senha.
 async function impersonar({ adminId, usuarioAlvoId, ip }) {
   const { rows } = await query(
-    `SELECT id, empresa_id, perfil, nome FROM usuarios WHERE id = $1 AND ativo = TRUE`,
+    `SELECT id, empresa_id, loja_id, perfil, nome FROM usuarios WHERE id = $1 AND ativo = TRUE`,
     [usuarioAlvoId]
   );
   const alvo = rows[0];
@@ -78,15 +78,15 @@ async function impersonar({ adminId, usuarioAlvoId, ip }) {
 }
 
 // Cria usuário (usado no cadastro de empresa/cliente e de motoboy).
-async function criarUsuario({ empresaId = null, perfil, nome, email, telefone = null, senha, papelId = null, executor = query }) {
+async function criarUsuario({ empresaId = null, lojaId = null, perfil, nome, email, telefone = null, senha, papelId = null, executor = query }) {
   const senhaHash = await sh.hashSenha(senha);
   // `executor` permite executar dentro de uma transação aberta (ex.: criação de empresa),
   // garantindo que a FK usuarios.empresa_id enxergue a empresa ainda não commitada.
   const { rows } = await executor(
-    `INSERT INTO usuarios (empresa_id, perfil, nome, email, telefone, senha_hash, papel_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, empresa_id, perfil, nome, email`,
-    [empresaId, perfil, nome, email, telefone, senhaHash, papelId]
+    `INSERT INTO usuarios (empresa_id, loja_id, perfil, nome, email, telefone, senha_hash, papel_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, empresa_id, loja_id, perfil, nome, email`,
+    [empresaId, lojaId, perfil, nome, email, telefone, senhaHash, papelId]
   );
   return publico(rows[0]);
 }
