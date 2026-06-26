@@ -5,13 +5,16 @@
 
    Uso: npm run backfill:km
         DRY_RUN=1 npm run backfill:km   (apenas relatório, não grava) */
-require('dotenv').config();
+try { require('dotenv').config(); } catch { /* dotenv opcional — usa env vars do shell */ }
 const { query, pool } = require('../src/shared/db');
 
 let geocodificar = null;
 try { geocodificar = require('../src/integracoes/openrouteservice').geocodificar; } catch {}
 
 const DRY = process.env.DRY_RUN === '1';
+// Acima deste limite, o km é tratado como coordenada corrompida (não grava).
+// Entregas urbanas/intermunicipais raramente passam de 100 km; ajuste se necessário.
+const MAX_KM = Number(process.env.MAX_KM || 100);
 
 function haversineKm(pts) {
   let km = 0;
@@ -35,6 +38,7 @@ async function backfill() {
 
   console.log(`${entregas.length} entrega(s) sem km para processar.${DRY ? ' [DRY-RUN]' : ''}`);
   let geocodadas = 0, calculadas = 0, semCoord = 0;
+  const suspeitas = [];
 
   for (const e of entregas) {
     let { coleta_lat, coleta_lng, coleta_endereco } = e;
@@ -77,6 +81,17 @@ async function backfill() {
     if (pts.length < 2) { semCoord++; continue; }
 
     const km = haversineKm(pts);
+
+    // Sanidade: km absurdo (> MAX_KM) indica coordenada corrompida/invertida.
+    // Não grava; apenas reporta as coordenadas para inspeção manual.
+    if (km > MAX_KM) {
+      suspeitas.push({ protocolo: e.protocolo, km, origem, pontos: pontosCoord });
+      console.log(`  ${e.protocolo}: ${km} km  ⚠️  SUSPEITO (não será gravado)`);
+      console.log(`     origem: ${origem.lat}, ${origem.lng}`);
+      pontosCoord.forEach((p, i) => console.log(`     ponto ${i + 1}: ${p.lat}, ${p.lng}`));
+      continue;
+    }
+
     calculadas++;
     console.log(`  ${e.protocolo}: ${km} km`);
     if (!DRY) {
@@ -88,7 +103,12 @@ async function backfill() {
     }
   }
 
-  console.log(`\nResumo: ${calculadas} km calculadas, ${geocodadas} coletas geocodificadas, ${semCoord} sem coordenada suficiente.`);
+  console.log(`\nResumo: ${calculadas} km calculadas, ${geocodadas} coletas geocodificadas, ${semCoord} sem coordenada, ${suspeitas.length} suspeita(s) ignorada(s).`);
+  if (suspeitas.length) {
+    console.log('\n⚠️  Entregas com km suspeito (coordenada provavelmente corrompida) — NÃO gravadas:');
+    suspeitas.forEach(s => console.log(`   ${s.protocolo}: ${s.km} km`));
+    console.log('   Verifique se lat/lng estão invertidos ou se o geocoding na criação errou.');
+  }
 }
 
 backfill()
