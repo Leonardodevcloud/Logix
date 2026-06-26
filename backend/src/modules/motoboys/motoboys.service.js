@@ -29,8 +29,10 @@ async function criar({ empresaId, dados, usuarioId, ip }) {
   try {
     const { rows } = await query(
       `INSERT INTO motoboys (empresa_id, nome_completo, cpf, rg, data_nascimento, telefone_principal,
-         telefone_emergencia, cep, endereco, foto_url, observacoes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+         telefone_emergencia, cep, endereco, foto_url, observacoes, codigo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+         (SELECT COALESCE(MAX(codigo),0)+1 FROM motoboys WHERE empresa_id = $1))
+       RETURNING *`,
       [empresaId, dados.nome_completo, apenasDigitos(dados.cpf), dados.rg || null,
        dados.data_nascimento || null, dados.telefone_principal || null, dados.telefone_emergencia || null,
        apenasDigitos(dados.cep), dados.endereco || null, dados.foto_url || null, dados.observacoes || null]
