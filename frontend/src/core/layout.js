@@ -25,6 +25,9 @@ function gruposNav() {
   }
 
   const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
+  // Central tem a tela de Acompanhamento (visão de todas as lojas).
+  if (a.perfil === 'central_admin' && auth.temModulo('entregas'))
+    operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'rastreio' });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
   // Lojas: só para a administração da central (central_admin), não para usuários de loja.

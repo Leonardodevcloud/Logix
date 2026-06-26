@@ -8,6 +8,19 @@ const service = require('../entregas.service');
 module.exports = function acompanhamentoRoutes() {
   const router = express.Router();
 
+  // GET /entregas/acompanhamento — visão da central (3 seções + filtros).
+  // Registrada antes de /:id/* para não colidir com o param.
+  router.get('/acompanhamento', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      const lojaId = req.lojaId || req.query.loja_id || null;
+      res.json(await service.listarAcompanhamento({
+        empresaId: req.empresaId, lojaId,
+        de: req.query.de || null, ate: req.query.ate || null,
+        q: req.query.q || null, regiao: req.query.regiao || null,
+      }));
+    } catch (e) { next(e); }
+  });
+
   // GET /entregas/:id/acompanhar
   router.get('/:id/acompanhar', exigirTenant, async (req, res, next) => {
     try { res.json(await service.acompanhar({ empresaId: req.empresaId, id: req.params.id })); }
@@ -25,13 +38,32 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
-
   // PATCH /entregas/:id/cancelar
   router.patch('/:id/cancelar', exigirTenant, async (req, res, next) => {
     try {
       res.json(await service.cancelarEntrega({
         empresaId: req.empresaId, id: req.params.id,
         motivo: req.body.motivo, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  // PUT /entregas/:id/enderecos — editar coleta/pontos de uma entrega ativa
+  router.put('/:id/enderecos', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      res.json(await service.editarEnderecos({
+        empresaId: req.empresaId, id: req.params.id,
+        coleta: req.body.coleta, pontos: req.body.pontos,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  // PATCH /entregas/:id/finalizar — finalização manual pela central
+  router.patch('/:id/finalizar', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      res.json(await service.finalizarManual({
+        empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip,
       }));
     } catch (e) { next(e); }
   });

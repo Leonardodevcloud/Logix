@@ -102,4 +102,45 @@ async function distribuirFila({ empresaId, usuarioId, ip }) {
   return resultado;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirAutomatica, distribuirFila };
+// Troca o motoboy de uma entrega JÁ atribuída (ou em coleta/rota).
+// Diferente de atribuir(), aceita status ativos — usado na tela de acompanhamento.
+async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
+  const ent = await query(`SELECT id, status, protocolo, motoboy_id FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]);
+  if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const statusAtual = ent.rows[0].status;
+  if (['entregue', 'cancelada'].includes(statusAtual))
+    throw AppError.validacao(`Entrega já está ${statusAtual} — não é possível trocar o motoboy`);
+
+  const mb = await query(`SELECT id, nome_completo FROM motoboys WHERE id = $1 AND empresa_id = $2 AND status = 'ativo'`, [motoboyId, empresaId]);
+  if (!mb.rows[0]) throw AppError.validacao('Motoboy inválido ou inativo');
+
+  // Se a entrega estava na fila, passa para aguardando_coleta; senão mantém o status atual.
+  const novoStatus = statusAtual === STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO
+    ? STATUS_ENTREGA.AGUARDANDO_COLETA : statusAtual;
+
+  const { rows } = await query(
+    `UPDATE entregas SET motoboy_id = $1, status = $2 WHERE id = $3 RETURNING id, protocolo, status, motoboy_id`,
+    [motoboyId, novoStatus, entregaId]
+  );
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'reatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id, para: motoboyId }, ip });
+  emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
+  return { ...rows[0], motoboy_nome: mb.rows[0].nome_completo };
+}
+
+// Lista TODOS os motoboys ativos da empresa (não só online), para o seletor de troca.
+async function listarTodosAtivos(empresaId) {
+  const { rows } = await query(
+    `SELECT m.id, m.nome_completo, m.online, COALESCE(c.carga, 0) AS carga
+       FROM motoboys m
+       LEFT JOIN (
+         SELECT motoboy_id, count(*)::int AS carga FROM entregas
+          WHERE empresa_id = $1 AND status = ANY($2) GROUP BY motoboy_id
+       ) c ON c.motoboy_id = m.id
+      WHERE m.empresa_id = $1 AND m.status = 'ativo'
+      ORDER BY m.online DESC, carga ASC, m.nome_completo`,
+    [empresaId, STATUS_ATIVOS]
+  );
+  return rows;
+}
+
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };

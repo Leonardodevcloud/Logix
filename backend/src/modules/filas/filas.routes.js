@@ -16,6 +16,21 @@ function initFilasRoutes() {
     try { res.json(await service.listarDisponiveis(req.empresaId)); } catch (e) { next(e); }
   });
 
+  // Todos os motoboys ativos (online e offline) — para o seletor de troca de motoboy.
+  router.get('/motoboys-ativos', exigirPermissao('filas.ver'), async (req, res, next) => {
+    try { res.json(await service.listarTodosAtivos(req.empresaId)); } catch (e) { next(e); }
+  });
+
+  // Troca o motoboy de uma entrega já atribuída/em rota.
+  router.post('/:entregaId/reatribuir', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
+    try {
+      res.json(await service.reatribuir({
+        empresaId: req.empresaId, entregaId: req.params.entregaId,
+        motoboyId: req.body.motoboy_id, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   router.post('/:entregaId/atribuir', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
     try {
       res.json(await service.atribuir({

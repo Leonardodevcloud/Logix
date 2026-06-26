@@ -303,8 +303,106 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
   }
 }
 
+// ── Tela de Acompanhamento (central) ──────────────────────────────────────────
+// Retorna as corridas separadas em 3 seções, com filtros opcionais.
+// Filtros: lojaId, de, ate (datas ISO), q (busca protocolo/NF), regiao (texto no endereço).
+async function listarAcompanhamento({ empresaId, lojaId = null, de = null, ate = null, q = null, regiao = null }) {
+  const cond = ['e.empresa_id = $1']; const params = [empresaId];
+  if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
+  if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
+  if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
+  if (q) { params.push(`%${q}%`); cond.push(`(e.protocolo ILIKE $${params.length} OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf ILIKE $${params.length}))`); }
+  if (regiao) { params.push(`%${regiao}%`); cond.push(`(e.coleta_endereco ILIKE $${params.length} OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.endereco ILIKE $${params.length}))`); }
+
+  const { rows } = await query(
+    `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em,
+            e.coleta_nome, e.coleta_endereco, e.loja_id,
+            l.nome_fantasia AS loja_nome,
+            m.id AS motoboy_id, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
+            (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco,
+            (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS total_pontos
+       FROM entregas e
+       LEFT JOIN lojas l    ON l.id = e.loja_id
+       LEFT JOIN motoboys m ON m.id = e.motoboy_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY e.criado_em DESC
+      LIMIT 500`,
+    params
+  );
+
+  const semAssociacao = [], emAndamento = [], concluidas = [];
+  for (const r of rows) {
+    if (r.status === 'aguardando_atribuicao') semAssociacao.push(r);
+    else if (['aguardando_coleta', 'em_coleta', 'em_rota'].includes(r.status)) emAndamento.push(r);
+    else concluidas.push(r); // entregue | cancelada
+  }
+  return { semAssociacao, emAndamento, concluidas,
+    totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length } };
+}
+
+// Edita os endereços/observações dos pontos e/ou da coleta de uma entrega ativa.
+// Só permite enquanto a entrega não foi concluída/cancelada.
+async function editarEnderecos({ empresaId, id, coleta, pontos, usuarioId, ip }) {
+  const { rows: ent } = await query(`SELECT id, status FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  if (['entregue', 'cancelada'].includes(ent[0].status))
+    throw AppError.validacao(`Entrega já está ${ent[0].status} — não pode ser editada`);
+
+  // Atualiza coleta (se enviada). Re-geocodifica se vier endereço sem coordenada.
+  if (coleta && coleta.endereco) {
+    let { lat, lng } = coleta;
+    if ((!lat || !lng)) { try { const g = await geocodificar(coleta.endereco); lat = g.lat; lng = g.lng; } catch {} }
+    await query(
+      `UPDATE entregas SET coleta_nome = COALESCE($2, coleta_nome), coleta_endereco = $3, coleta_lat = $4, coleta_lng = $5 WHERE id = $1`,
+      [id, coleta.nome || null, coleta.endereco, lat || null, lng || null]
+    );
+  }
+
+  // Atualiza pontos individuais (cada item: { id, endereco, observacoes }).
+  if (Array.isArray(pontos)) {
+    for (const p of pontos) {
+      if (!p.id) continue;
+      let lat = p.lat, lng = p.lng;
+      if (p.endereco && (!lat || !lng)) { try { const g = await geocodificar(p.endereco); lat = g.lat; lng = g.lng; } catch {} }
+      await query(
+        `UPDATE entregas_pontos SET
+           endereco = COALESCE($2, endereco),
+           lat = COALESCE($3, lat), lng = COALESCE($4, lng),
+           observacoes = COALESCE($5, observacoes)
+         WHERE id = $1 AND entrega_id = $6`,
+        [p.id, p.endereco || null, lat || null, lng || null, p.observacoes ?? null, id]
+      );
+    }
+  }
+
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'editar_enderecos', detalhe: { id }, ip }).catch(() => {});
+  emitirParaEmpresa(empresaId, 'entrega.status', { id });
+  return { ok: true };
+}
+
+// Finaliza manualmente uma entrega (admin marca como entregue sem passar pelo app).
+async function finalizarManual({ empresaId, id, usuarioId, ip }) {
+  const { rows: ent } = await query(`SELECT id, status, protocolo, iniciada_em, criado_em FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  if (['entregue', 'cancelada'].includes(ent[0].status))
+    throw AppError.validacao(`Entrega já está ${ent[0].status}`);
+
+  // Marca todos os pontos pendentes como entregues e a entrega como concluída.
+  await query(`UPDATE entregas_pontos SET status = 'entregue', entregue_em = COALESCE(entregue_em, now()), finalizado_em = COALESCE(finalizado_em, now()) WHERE entrega_id = $1 AND status != 'entregue'`, [id]);
+  await query(
+    `UPDATE entregas SET status = 'entregue', concluida_em = now(),
+        tempo_total_min = ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(iniciada_em, criado_em))) / 60)
+     WHERE id = $1 AND empresa_id = $2`,
+    [id, empresaId]
+  );
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'finalizar_manual', detalhe: { id }, ip }).catch(() => {});
+  emitirParaEmpresa(empresaId, 'entrega.concluida', { id, protocolo: ent[0].protocolo });
+  return { ok: true };
+}
+
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  listarAcompanhamento, editarEnderecos, finalizarManual,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
