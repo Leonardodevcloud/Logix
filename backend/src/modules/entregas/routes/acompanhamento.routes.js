@@ -8,17 +8,26 @@ const service = require('../entregas.service');
 module.exports = function acompanhamentoRoutes() {
   const router = express.Router();
 
+  const csv = v => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
+
   // GET /entregas/acompanhamento — visão da central (3 seções + filtros).
-  // Registrada antes de /:id/* para não colidir com o param.
+  // Aceita: loja_ids (csv), cidades (csv), de, ate, q. Registrada antes de /:id/*.
   router.get('/acompanhamento', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
-      const lojaId = req.lojaId || req.query.loja_id || null;
       res.json(await service.listarAcompanhamento({
-        empresaId: req.empresaId, lojaId,
+        empresaId: req.empresaId,
+        lojaIds: csv(req.query.loja_ids),
+        cidades: csv(req.query.cidades),
         de: req.query.de || null, ate: req.query.ate || null,
-        q: req.query.q || null, regiao: req.query.regiao || null,
+        q: req.query.q || null,
+        lojaIdToken: req.lojaId || null, // trava de segurança p/ usuário de loja
       }));
     } catch (e) { next(e); }
+  });
+
+  // GET /entregas/acompanhamento/cidades — cidades das lojas (filtro de região).
+  router.get('/acompanhamento/cidades', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try { res.json(await service.listarCidadesLojas(req.empresaId)); } catch (e) { next(e); }
   });
 
   // GET /entregas/:id/acompanhar

@@ -305,19 +305,39 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
 
 // ── Tela de Acompanhamento (central) ──────────────────────────────────────────
 // Retorna as corridas separadas em 3 seções, com filtros opcionais.
-// Filtros: lojaId, de, ate (datas ISO), q (busca protocolo/NF), regiao (texto no endereço).
-async function listarAcompanhamento({ empresaId, lojaId = null, de = null, ate = null, q = null, regiao = null }) {
+// Filtros: lojaIds[] (OR), cidades[] (OR, via cidade da loja), de/ate (range de datas).
+// q (busca): quando presente, IGNORA os demais filtros e procura em protocolo/NF/endereço.
+// lojaIdToken: trava de segurança — usuário de loja só vê a própria, sempre.
+async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null, de = null, ate = null, q = null, lojaIdToken = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
-  if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
-  if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
-  if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
-  if (q) { params.push(`%${q}%`); cond.push(`(e.protocolo ILIKE $${params.length} OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf ILIKE $${params.length}))`); }
-  if (regiao) { params.push(`%${regiao}%`); cond.push(`(e.coleta_endereco ILIKE $${params.length} OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.endereco ILIKE $${params.length}))`); }
+
+  // Trava de segurança: usuário de loja nunca escapa da própria loja.
+  if (lojaIdToken) { params.push(lojaIdToken); cond.push(`e.loja_id = $${params.length}`); }
+
+  const buscando = q && String(q).trim();
+  if (buscando) {
+    // Busca = override temporário: ignora loja/cidade/data, procura em tudo.
+    params.push(`%${String(q).trim()}%`);
+    const i = params.length;
+    cond.push(`(e.protocolo ILIKE $${i}
+       OR e.coleta_endereco ILIKE $${i}
+       OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND (ep.numero_nf ILIKE $${i} OR ep.endereco ILIKE $${i})))`);
+  } else {
+    if (Array.isArray(lojaIds) && lojaIds.length) {
+      params.push(lojaIds); cond.push(`e.loja_id = ANY($${params.length}::uuid[])`);
+    }
+    if (Array.isArray(cidades) && cidades.length) {
+      params.push(cidades);
+      cond.push(`e.loja_id IN (SELECT id FROM lojas WHERE empresa_id = $1 AND cidade = ANY($${params.length}::text[]))`);
+    }
+    if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
+    if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
+  }
 
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em,
             e.coleta_nome, e.coleta_endereco, e.loja_id,
-            l.nome_fantasia AS loja_nome,
+            l.nome_fantasia AS loja_nome, l.cidade AS loja_cidade, l.estado AS loja_uf,
             m.id AS motoboy_id, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco,
             (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS total_pontos
@@ -336,8 +356,19 @@ async function listarAcompanhamento({ empresaId, lojaId = null, de = null, ate =
     else if (['aguardando_coleta', 'em_coleta', 'em_rota'].includes(r.status)) emAndamento.push(r);
     else concluidas.push(r); // entregue | cancelada
   }
-  return { semAssociacao, emAndamento, concluidas,
+  return { semAssociacao, emAndamento, concluidas, buscando: !!buscando,
     totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length } };
+}
+
+// Cidades distintas das lojas da empresa — alimenta o filtro de "região" (checkbox).
+async function listarCidadesLojas(empresaId) {
+  const { rows } = await query(
+    `SELECT DISTINCT cidade, estado FROM lojas
+      WHERE empresa_id = $1 AND cidade IS NOT NULL AND cidade <> ''
+      ORDER BY cidade`,
+    [empresaId]
+  );
+  return rows;
 }
 
 // Edita os endereços/observações dos pontos e/ou da coleta de uma entrega ativa.
@@ -402,7 +433,7 @@ async function finalizarManual({ empresaId, id, usuarioId, ip }) {
 
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, editarEnderecos, finalizarManual,
+  listarAcompanhamento, listarCidadesLojas, editarEnderecos, finalizarManual,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
