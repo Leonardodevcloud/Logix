@@ -19,6 +19,19 @@ async function garantirLeaflet() {
     st.textContent = '.lx-seq-tip{background:#185FA5;color:#fff;border:none;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center;font-weight:800;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.3);padding:0}.lx-seq-tip::before{display:none}';
     document.head.append(st);
   }
+  if (!document.getElementById('lx-leaflet-js')) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.id = 'lx-leaflet-js';
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.append(s);
+    });
+  } else {
+    // Script já está no DOM mas pode ainda não ter terminado de carregar.
+    let tentativas = 0;
+    while (!window.L && tentativas < 100) { await new Promise(r => setTimeout(r, 50)); tentativas++; }
+  }
 }
 
 function toast(msg, tipo) {
