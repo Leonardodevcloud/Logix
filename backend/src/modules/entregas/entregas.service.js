@@ -361,6 +361,35 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
     totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length, canceladas: canceladas.length } };
 }
 
+// Trajeto GPS de uma entrega: pontos do rastreamento (ordenados) + coleta + destinos.
+// Usado pelo botão "ver rota" no acompanhamento. Em entregas concluídas mostra o caminho real.
+async function trajetoEntrega({ empresaId, id }) {
+  const ent = await query(
+    `SELECT e.id, e.protocolo, e.status, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+            m.nome_completo AS motoboy_nome
+       FROM entregas e LEFT JOIN motoboys m ON m.id = e.motoboy_id
+      WHERE e.id = $1 AND e.empresa_id = $2`,
+    [id, empresaId]
+  );
+  if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+
+  const pontos = await query(
+    `SELECT id, ordem, endereco, lat, lng, status FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`,
+    [id]
+  );
+  const trajeto = await query(
+    `SELECT lat, lng, capturado_em FROM rastreamento WHERE entrega_id = $1 ORDER BY capturado_em ASC`,
+    [id]
+  );
+
+  return {
+    entrega: ent.rows[0],
+    coleta: ent.rows[0].coleta_lat != null ? { lat: Number(ent.rows[0].coleta_lat), lng: Number(ent.rows[0].coleta_lng), endereco: ent.rows[0].coleta_endereco } : null,
+    destinos: pontos.rows.filter(p => p.lat != null).map(p => ({ lat: Number(p.lat), lng: Number(p.lng), endereco: p.endereco, ordem: p.ordem, status: p.status })),
+    trajeto: trajeto.rows.map(t => ({ lat: Number(t.lat), lng: Number(t.lng), em: t.capturado_em })),
+  };
+}
+
 // Cidades distintas das lojas da empresa — alimenta o filtro de "região" (checkbox).
 async function listarCidadesLojas(empresaId) {
   const { rows } = await query(
@@ -434,7 +463,7 @@ async function finalizarManual({ empresaId, id, usuarioId, ip }) {
 
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, editarEnderecos, finalizarManual,
+  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, editarEnderecos, finalizarManual,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

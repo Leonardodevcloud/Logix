@@ -5,6 +5,25 @@ import * as auth from '../core/auth.js';
 
 const LS_KEY = 'logix_acomp_filtros';
 
+async function garantirLeaflet() {
+  if (window.L) return;
+  if (!document.getElementById('lx-leaflet-css')) {
+    const l = document.createElement('link');
+    l.id = 'lx-leaflet-css'; l.rel = 'stylesheet';
+    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.append(l);
+  }
+  if (!document.getElementById('lx-leaflet-js')) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.id = 'lx-leaflet-js';
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.append(s);
+    });
+  }
+}
+
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
   document.body.append(t);
@@ -47,6 +66,7 @@ const P = {
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
   add: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>',
   x2: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  rota: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
 };
 
 function carregarFiltros() {
@@ -131,7 +151,7 @@ export async function montar(container) {
   btnFiltros.onclick = () => { _aberto = !_aberto; painel.style.display = _aberto ? 'block' : 'none'; };
 
   // Período
-  const selPeriodo = el('select', { class: 'lx-input', style: 'height:34px' },
+  const selPeriodo = el('select', { class: 'lx-input', style: 'height:36px;line-height:1.4;padding-top:0;padding-bottom:0' },
     el('option', { value: 'hoje' }, 'Hoje'),
     el('option', { value: '7d' }, 'Últimos 7 dias'),
     el('option', { value: '30d' }, 'Últimos 30 dias'),
@@ -251,6 +271,36 @@ export async function montar(container) {
     btn.onclick = async () => { try { btn.disabled = true; await put(`/entregas/${c.id}/enderecos`, { coleta: { endereco: inpColeta.value.trim() }, pontos: pIn.map(pi => ({ id: pi.id, endereco: pi.input.value.trim() })) }); ov.remove(); toast('Atualizado'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
   function abrirProtocolo(c) { const base = window.LOGIX_API || '/api/v1'; window.open(`${base}/entregas/${c.id}/protocolo`, '_blank'); }
+  async function abrirRota(c) {
+    const mapaDiv = el('div', { style: 'height:60vh;min-height:340px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
+    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:10px' }, 'Carregando trajeto…');
+    const ov = modal(`Rota — ${c.protocolo}`, el('div', {}, mapaDiv, info), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+    const box = ov.querySelector('div'); if (box) box.style.width = '760px';
+    let dados;
+    try { dados = await get(`/entregas/${c.id}/trajeto`); } catch { info.textContent = 'Erro ao carregar a rota.'; return; }
+    try { await garantirLeaflet(); } catch { info.textContent = 'Não foi possível carregar o mapa.'; return; }
+    const L = window.L;
+    const centro = dados.coleta || dados.trajeto[0] || dados.destinos[0];
+    if (!centro) { info.textContent = 'Sem coordenadas registradas para esta corrida.'; return; }
+    const mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 14, scrollWheelZoom: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+    setTimeout(() => mapa.invalidateSize(), 120);
+    const bounds = [];
+    const pin = (lat, lng, cor, titulo) => { const m = L.circleMarker([lat, lng], { radius: 8, color: cor, fillColor: cor, fillOpacity: 0.9, weight: 2 }).addTo(mapa); if (titulo) m.bindPopup(titulo); bounds.push([lat, lng]); };
+    if (dados.coleta) pin(dados.coleta.lat, dados.coleta.lng, '#7c3aed', 'Coleta: ' + (dados.coleta.endereco || ''));
+    dados.destinos.forEach((d, i) => pin(d.lat, d.lng, '#0ea5e9', `Destino ${i + 1}: ${d.endereco || ''}`));
+    if (dados.trajeto.length >= 2) {
+      const linha = dados.trajeto.map(t => [t.lat, t.lng]);
+      L.polyline(linha, { color: '#16a34a', weight: 4, opacity: 0.7 }).addTo(mapa);
+      linha.forEach(p => bounds.push(p));
+      info.innerHTML = `<b style="color:var(--lx-ok)">Trajeto GPS registrado</b> — ${dados.trajeto.length} pontos${dados.entrega.motoboy_nome ? ' · ' + dados.entrega.motoboy_nome : ''}`;
+    } else if (dados.entrega.status === 'entregue') {
+      info.innerHTML = 'Esta corrida não tem trajeto GPS registrado (o app pode não ter enviado posições).';
+    } else {
+      info.innerHTML = 'Mostrando coleta e destinos. O trajeto do motoboy aparece conforme o GPS envia posições.';
+    }
+    if (bounds.length) mapa.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+  }
   function botaoIcone(pIcon, titulo, onClick, cor) {
     const b = el('button', { class: 'lx-btn lx-btn-secundario', style: `padding:5px 7px;${cor ? 'color:' + cor : ''}`, title: titulo, 'aria-label': titulo, onClick });
     b.append(svgIcone(pIcon)); return b;
@@ -263,15 +313,19 @@ export async function montar(container) {
         w.append(bAtr, botaoIcone(P.bolt, 'Atribuição automática', () => atribuirAuto(c)));
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
+      w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'and') {
-      w.append(botaoIcone(P.mapa, 'Rastrear', () => { location.hash = '/rastreio'; }));
+      w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
+      w.append(botaoIcone(P.mapa, 'Rastreio ao vivo', () => { location.hash = '/rastreio'; }));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'con') {
+      w.append(botaoIcone(P.rota, 'Ver rota do GPS', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
     } else {
+      w.append(botaoIcone(P.rota, 'Ver rota', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver detalhes', () => abrirProtocolo(c)));
     }
     return w;

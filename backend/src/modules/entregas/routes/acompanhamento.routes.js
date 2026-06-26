@@ -30,6 +30,12 @@ module.exports = function acompanhamentoRoutes() {
     try { res.json(await service.listarCidadesLojas(req.empresaId)); } catch (e) { next(e); }
   });
 
+  // GET /entregas/:id/trajeto — rota GPS da entrega (coleta, destinos, caminho do motoboy)
+  router.get('/:id/trajeto', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try { res.json(await service.trajetoEntrega({ empresaId: req.empresaId, id: req.params.id })); }
+    catch (e) { next(e); }
+  });
+
   // GET /entregas/:id/acompanhar
   router.get('/:id/acompanhar', exigirTenant, async (req, res, next) => {
     try { res.json(await service.acompanhar({ empresaId: req.empresaId, id: req.params.id })); }
