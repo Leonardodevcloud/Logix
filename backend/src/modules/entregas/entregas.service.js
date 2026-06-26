@@ -162,18 +162,34 @@ async function detalharConcluida({ empresaId, id }) {
 
   const e = ent[0];
 
-  // FIX KM: calcular haversine se distancia_km for null ou zero
-  // Se coleta_lat for null, usa o 1º ponto como âncora de origem
+  // FIX KM: calcular haversine se distancia_km for null ou zero.
+  // Se a coleta não tem coordenada mas tem endereço, geocodifica e persiste —
+  // assim entregas de ponto único (sem coleta_lat) passam a exibir km.
   let distanciaKm = e.distancia_km;
   if (!distanciaKm || parseFloat(distanciaKm) === 0) {
     try {
+      let coletaLat = e.coleta_lat, coletaLng = e.coleta_lng;
+      if ((!coletaLat || !coletaLng) && e.coleta_endereco) {
+        try {
+          const g = await geocodificar(e.coleta_endereco);
+          if (g && g.lat && g.lng) {
+            coletaLat = g.lat; coletaLng = g.lng;
+            query(
+              `UPDATE entregas SET coleta_lat = $1, coleta_lng = $2
+               WHERE id = $3 AND (coleta_lat IS NULL OR coleta_lng IS NULL)`,
+              [coletaLat, coletaLng, id]
+            ).catch(() => {});
+          }
+        } catch { /* geocoding indisponível */ }
+      }
+
       const pontosComCoord = pontos.filter(p => p.lat && p.lng)
         .map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }));
-      const coleta = (e.coleta_lat && e.coleta_lng)
-        ? { lat: parseFloat(e.coleta_lat), lng: parseFloat(e.coleta_lng) }
+      const coleta = (coletaLat && coletaLng)
+        ? { lat: parseFloat(coletaLat), lng: parseFloat(coletaLng) }
         : (pontosComCoord[0] || null); // fallback: usa 1º ponto como origem
       const pts = coleta
-        ? [coleta, ...pontosComCoord.slice(coleta === pontosComCoord[0] ? 1 : 0)]
+        ? (coleta === pontosComCoord[0] ? pontosComCoord : [coleta, ...pontosComCoord])
         : pontosComCoord;
       if (pts.length >= 2) {
         let km = 0;

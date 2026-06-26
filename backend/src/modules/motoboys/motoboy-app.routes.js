@@ -4,13 +4,30 @@ const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
+let geocodificar = null;
+try { geocodificar = require('../../integracoes/openrouteservice').geocodificar; } catch {}
 
-// Calcula distância total da entrega (coleta → pontos) via haversine
-// Usado quando ORS não calculou a distância na criação
+// Haversine entre dois pontos {lat,lng} em km.
+function _haversineKm(pts) {
+  let km = 0;
+  const R = 6371, rad = x => x * Math.PI / 180;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    km += 2 * R * Math.asin(Math.sqrt(h));
+  }
+  return parseFloat(km.toFixed(2));
+}
+
+// Calcula distância total da entrega (coleta → pontos) via haversine.
+// Usado quando ORS não calculou a distância na criação.
+// Se a coleta não tem coordenada mas tem endereço, geocodifica on-the-fly
+// e persiste em coleta_lat/lng — assim entregas de ponto único passam a ter km.
 async function calcularKmEntrega(entregaId) {
   try {
     const { rows } = await query(
-      `SELECT e.coleta_lat, e.coleta_lng,
+      `SELECT e.coleta_lat, e.coleta_lng, e.coleta_endereco,
               json_agg(json_build_object('lat', ep.lat, 'lng', ep.lng) ORDER BY ep.ordem) AS pontos
        FROM entregas e
        JOIN entregas_pontos ep ON ep.entrega_id = e.id
@@ -19,25 +36,47 @@ async function calcularKmEntrega(entregaId) {
       [entregaId]
     );
     if (!rows[0]) return null;
-    const { coleta_lat, coleta_lng, pontos } = rows[0];
-    if (!coleta_lat || !coleta_lng || !pontos?.length) return null;
-    const pts = [
-      { lat: parseFloat(coleta_lat), lng: parseFloat(coleta_lng) },
-      ...pontos.filter(p => p.lat && p.lng).map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) })),
-    ];
-    if (pts.length < 2) return null;
-    let km = 0;
-    const R = 6371, rad = x => x * Math.PI / 180;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-      const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-      km += 2 * R * Math.asin(Math.sqrt(h));
+    let { coleta_lat, coleta_lng, coleta_endereco, pontos } = rows[0];
+
+    // Se a coleta não tem coordenada, tenta geocodificar pelo endereço e persistir.
+    if ((!coleta_lat || !coleta_lng) && coleta_endereco && geocodificar) {
+      try {
+        const g = await geocodificar(coleta_endereco);
+        if (g && g.lat && g.lng) {
+          coleta_lat = g.lat; coleta_lng = g.lng;
+          query(
+            `UPDATE entregas SET coleta_lat = $1, coleta_lng = $2
+             WHERE id = $3 AND (coleta_lat IS NULL OR coleta_lng IS NULL)`,
+            [coleta_lat, coleta_lng, entregaId]
+          ).catch(() => {});
+        }
+      } catch { /* geocoding indisponível — segue com fallback abaixo */ }
     }
-    return parseFloat(km.toFixed(2));
+
+    const pontosCoord = (pontos || []).filter(p => p.lat && p.lng)
+      .map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lng) }));
+
+    // Origem: coleta georreferenciada; se ainda faltar, usa o 1º ponto como âncora.
+    const origem = (coleta_lat && coleta_lng)
+      ? { lat: parseFloat(coleta_lat), lng: parseFloat(coleta_lng) }
+      : (pontosCoord[0] || null);
+    if (!origem) return null;
+
+    const pts = (origem === pontosCoord[0])
+      ? pontosCoord                        // coleta == 1º ponto: usa só os pontos
+      : [origem, ...pontosCoord];          // coleta separada: prefixa a coleta
+    if (pts.length < 2) return null;
+    return _haversineKm(pts);
   } catch {
     return null;
   }
+}
+
+// Lê a observação do motoboy aceitando variações de nome de campo vindas do app.
+function _lerObservacao(body) {
+  if (!body) return null;
+  const v = body.observacao ?? body.observacao_motoboy ?? body.observacoes ?? body.obs ?? null;
+  return (typeof v === 'string' && v.trim()) ? v.trim() : (v || null);
 }
 
 module.exports = function motoboyAppRoutes() {
@@ -149,7 +188,8 @@ module.exports = function motoboyAppRoutes() {
   // Responde imediatamente e processa fotos em background (evita timeout no app)
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls, observacao } = req.body;
+      const { recebedor, fotos_urls } = req.body;
+      const observacao = _lerObservacao(req.body);
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
@@ -214,7 +254,8 @@ module.exports = function motoboyAppRoutes() {
   // Fallback: pega automaticamente o primeiro ponto pendente
   router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls, observacao } = req.body;
+      const { recebedor, fotos_urls } = req.body;
+      const observacao = _lerObservacao(req.body);
       const { entregaId } = req.params;
       const empresaId = req.motoboy.empresaId;
 

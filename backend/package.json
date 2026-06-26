@@ -8,7 +8,8 @@
     "worker": "node worker.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
-    "smoke": "node scripts/smoke-test.js"
+    "smoke": "node scripts/smoke-test.js",
+    "backfill:km": "node scripts/backfill-km.js"
   },
   "engines": {
     "node": ">=18"
