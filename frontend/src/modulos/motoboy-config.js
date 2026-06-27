@@ -46,31 +46,70 @@ export function abaConfigCadastro() {
   const corpo = el('div', {});
   wrap.append(corpo);
 
-  function linhaToggle(key, rotulo, travado) {
-    const sw = el('input', { type: 'checkbox', checked: _campos[key] !== false, disabled: !!travado, style: `width:36px;height:20px;cursor:${travado?'not-allowed':'pointer'};accent-color:var(--lx-ok);flex:none` });
-    sw.checked = _campos[key] !== false;
-    sw.onchange = () => { _campos[key] = sw.checked; };
-    return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 14px;border-bottom:1px solid var(--lx-linha)' },
-      el('div', {},
-        el('span', { style: 'font-size:13.5px;font-weight:600' }, rotulo),
-        travado ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-left:8px' }, '(sempre obrigatório)') : el('span', {})),
-      el('div', { style: 'display:flex;align-items:center;gap:8px' },
-        el('span', { style: 'font-size:11.5px;color:var(--lx-tinta-2)' }, 'Obrigatório'),
-        sw));
+  // Todos os campos (dados + documentos) num só conjunto, com flag de seção.
+  const TODOS = [...CAMPOS_TEXTO.map(c => ({ ...c, grupo: 'dados' })), ...CAMPOS_DOC.map(c => ({ ...c, grupo: 'doc' }))];
+
+  const ehObrigatorio = (key) => _campos[key] !== false;
+
+  // Um chip de campo (move de coluna ao clicar).
+  function chip(c, obrigatorio) {
+    const podeMover = !c.travado;
+    const icone = c.travado
+      ? 'lx-cadeado'
+      : (obrigatorio ? 'seta-dir' : 'seta-esq');
+    const setaSvg = c.travado
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+      : (obrigatorio
+          ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7-7 7M21 12H3"/></svg>'
+          : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 19l-7-7 7-7M3 12h18"/></svg>');
+
+    const seta = el('span', { style: `display:inline-flex;color:var(--lx-tinta-3);${c.travado ? '' : 'opacity:.7'}` });
+    seta.innerHTML = setaSvg;
+
+    const grupoTag = c.grupo === 'doc'
+      ? el('span', { style: 'font-size:10px;font-weight:700;color:var(--lx-tinta-3);background:var(--lx-superficie-2);padding:1px 6px;border-radius:5px;text-transform:uppercase;letter-spacing:.03em' }, 'doc')
+      : null;
+
+    const conteudo = obrigatorio
+      ? [el('span', { style: 'flex:1' }, c.rotulo), grupoTag, seta]
+      : [seta, el('span', { style: 'flex:1' }, c.rotulo), grupoTag];
+
+    const chipEl = el('div', {
+      style: `display:flex;align-items:center;gap:9px;font-size:13px;padding:9px 12px;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:9px;${podeMover ? 'cursor:pointer' : 'cursor:default;opacity:.7'};${obrigatorio ? '' : 'color:var(--lx-tinta-2)'}`,
+      onClick: podeMover ? () => { _campos[c.key] = !obrigatorio; render(); } : undefined,
+      onmouseenter: podeMover ? function () { this.style.borderColor = 'var(--lx-azul-primario)'; } : undefined,
+      onmouseleave: podeMover ? function () { this.style.borderColor = 'var(--lx-linha)'; } : undefined,
+    }, ...conteudo.filter(Boolean));
+    return chipEl;
+  }
+
+  function coluna(titulo, iconeSvg, corBorda, corIcone, campos, vazioMsg) {
+    const ic = el('span', { style: `display:inline-flex;color:${corIcone}` }); ic.innerHTML = iconeSvg;
+    const lista = campos.length
+      ? el('div', { style: 'display:flex;flex-direction:column;gap:7px' }, ...campos)
+      : el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-3);text-align:center;padding:20px 10px' }, vazioMsg);
+    return el('div', { style: `background:var(--lx-superficie-2, var(--lx-superficie));border:1px solid var(--lx-linha);border-top:2px solid ${corBorda};border-radius:12px;padding:14px` },
+      el('div', { style: 'display:flex;align-items:center;gap:7px;margin-bottom:12px' },
+        ic, el('span', { style: 'font-size:13px;font-weight:700' }, titulo),
+        el('span', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-left:auto' }, campos.length + (campos.length === 1 ? ' campo' : ' campos'))),
+      lista);
   }
 
   function render() {
     corpo.innerHTML = '';
+    const obrigatorios = TODOS.filter(c => ehObrigatorio(c.key)).map(c => chip(c, true));
+    const opcionais = TODOS.filter(c => !ehObrigatorio(c.key)).map(c => chip(c, false));
+
+    const ASTERISCO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5.6 6.5l12.8 11M18.4 6.5l-12.8 11"/></svg>';
+    const TRACEJADO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"><circle cx="12" cy="12" r="9"/></svg>';
+
     corpo.append(
-      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0 0 16px' }, 'Defina quais campos e documentos são obrigatórios no cadastro pelo app. Campos não obrigatórios podem ficar em branco.'),
-      el('div', { style: 'font-size:12px;font-weight:800;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px' }, 'Dados'),
-      el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);overflow:hidden;margin-bottom:20px' },
-        ...CAMPOS_TEXTO.map(c => linhaToggle(c.key, c.rotulo, c.travado))),
-      el('div', { style: 'font-size:12px;font-weight:800;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px' }, 'Documentos'),
-      el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);overflow:hidden' },
-        ...CAMPOS_DOC.map(c => linhaToggle(c.key, c.rotulo, c.travado))));
-    const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:18px', onClick: salvar }, 'Salvar configuração');
-    corpo.append(btn);
+      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0 0 18px;line-height:1.5' },
+        'Defina o que o motoboy precisa preencher no cadastro pelo app. Clique em um campo para movê-lo entre obrigatório e opcional. Campos com cadeado são sempre obrigatórios.'),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' },
+        coluna('Obrigatórios', ASTERISCO, 'var(--lx-ok)', 'var(--lx-ok)', obrigatorios, 'Nenhum campo obrigatório'),
+        coluna('Opcionais', TRACEJADO, 'var(--lx-tinta-3)', 'var(--lx-tinta-3)', opcionais, 'Tudo é obrigatório')),
+      el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:20px', onClick: salvar }, 'Salvar configuração'));
   }
 
   async function carregar() {
