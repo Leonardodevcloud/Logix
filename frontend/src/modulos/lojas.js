@@ -101,21 +101,65 @@ export async function montar(container) {
     const fNome = input('Nome fantasia *', loja?.nome_fantasia);
     const fRazao = input('Razão social', loja?.razao_social);
     const fCnpj = input('CNPJ', loja?.cnpj);
+    // Endereço
+    const fCep = input('CEP', loja?.cep);
+    const fLogradouro = input('Logradouro', loja?.logradouro);
+    const fNumero = input('Número', loja?.numero);
+    const fComplemento = input('Complemento', loja?.complemento);
+    const fBairro = input('Bairro', loja?.bairro);
     const fCidade = input('Cidade', loja?.cidade);
     const fEstado = input('UF', loja?.estado);
+    // Acesso
     const fResp = input('Responsável', loja?.responsavel);
     const fEmail = input('E-mail de acesso', loja?.email, 'email');
     const fTel = input('Telefone', loja?.telefone);
     const fSenha = input('Senha de acesso' + (ed ? ' (deixe em branco p/ manter)' : ' *'), '', 'password');
 
+    // Busca de CEP: ao completar 8 dígitos, preenche o endereço automaticamente.
+    const cepMsg = el('span', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-left:8px' });
+    let _ultimoCep = '';
+    async function buscarCep() {
+      const cep = (fCep.value || '').replace(/\D/g, '');
+      if (cep.length !== 8 || cep === _ultimoCep) return;
+      _ultimoCep = cep;
+      cepMsg.textContent = 'Buscando…'; cepMsg.style.color = 'var(--lx-tinta-3)';
+      try {
+        const r = await get('/entregas/cep/' + cep);
+        if (r.logradouro && !fLogradouro.value) fLogradouro.value = r.logradouro;
+        if (r.bairro && !fBairro.value) fBairro.value = r.bairro;
+        if (r.cidade) fCidade.value = r.cidade;
+        if (r.uf) fEstado.value = r.uf;
+        cepMsg.textContent = '✓ endereço preenchido'; cepMsg.style.color = 'var(--lx-ok)';
+        if (fNumero) setTimeout(() => fNumero.focus(), 60);
+      } catch {
+        cepMsg.textContent = 'CEP não encontrado'; cepMsg.style.color = 'var(--lx-erro)';
+      }
+    }
+    fCep.addEventListener('blur', buscarCep);
+    fCep.addEventListener('input', () => { if ((fCep.value || '').replace(/\D/g, '').length === 8) buscarCep(); });
+
+    const labelCep = el('label', {}, 'CEP', cepMsg);
+
     const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
       campo('Nome fantasia', fNome),
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, campo('Razão social', fRazao), campo('CNPJ', fCnpj)),
-      el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:10px' }, campo('Cidade', fCidade), campo('UF', fEstado)),
-      campo('Responsável', fResp),
-      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, campo('E-mail de acesso', fEmail), campo('Telefone', fTel)),
-      campo('Senha de acesso', fSenha),
-      el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'E-mail + senha criam o login da loja (a loja vê só as próprias entregas).'));
+      // Endereço
+      el('div', { style: 'border-top:1px solid var(--lx-linha);padding-top:12px;margin-top:2px' },
+        el('div', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:10px' }, 'Endereço'),
+        el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
+          el('div', { style: 'display:grid;grid-template-columns:1fr 2fr;gap:10px' },
+            el('div', { class: 'lx-field' }, labelCep, fCep),
+            campo('Logradouro', fLogradouro)),
+          el('div', { style: 'display:grid;grid-template-columns:1fr 2fr;gap:10px' }, campo('Número', fNumero), campo('Complemento', fComplemento)),
+          el('div', { style: 'display:grid;grid-template-columns:2fr 2fr 1fr;gap:10px' }, campo('Bairro', fBairro), campo('Cidade', fCidade), campo('UF', fEstado)))),
+      // Acesso
+      el('div', { style: 'border-top:1px solid var(--lx-linha);padding-top:12px;margin-top:2px' },
+        el('div', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:10px' }, 'Acesso'),
+        el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
+          campo('Responsável', fResp),
+          el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, campo('E-mail de acesso', fEmail), campo('Telefone', fTel)),
+          campo('Senha de acesso', fSenha),
+          el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'E-mail + senha criam o login da loja (a loja vê só as próprias entregas).'))));
 
     const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario' }, ed ? 'Salvar' : 'Criar loja');
     const ov = modal(ed ? 'Editar loja' : 'Nova loja', corpo, [
@@ -126,7 +170,10 @@ export async function montar(container) {
     btnSalvar.onclick = async () => {
       const dados = {
         nome_fantasia: fNome.value.trim(), razao_social: fRazao.value.trim() || null,
-        cnpj: fCnpj.value.trim() || null, cidade: fCidade.value.trim() || null,
+        cnpj: fCnpj.value.trim() || null,
+        cep: fCep.value.trim() || null, logradouro: fLogradouro.value.trim() || null,
+        numero: fNumero.value.trim() || null, complemento: fComplemento.value.trim() || null,
+        bairro: fBairro.value.trim() || null, cidade: fCidade.value.trim() || null,
         estado: fEstado.value.trim().toUpperCase() || null, responsavel: fResp.value.trim() || null,
         email: fEmail.value.trim() || null, telefone: fTel.value.trim() || null,
       };

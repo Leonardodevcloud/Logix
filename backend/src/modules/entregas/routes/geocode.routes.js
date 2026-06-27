@@ -3,6 +3,7 @@ const { exigirTenant } = require('../../../middleware/tenant');
 const { exigirPermissao } = require('../../../middleware/permissoes');
 const AppError = require('../../../shared/AppError');
 const { httpRequest } = require('../../../shared/httpRequest');
+const { consultarCep } = require('../../../integracoes/cep');
 const { query } = require('../../../shared/db');
 
 const BASE_ORS = 'https://api.openrouteservice.org';
@@ -137,6 +138,15 @@ async function geocodificarReversoComFallback(lat, lng) {
 // ── Rotas ─────────────────────────────────────────────────────────────────────
 module.exports = function geocodeRoutes() {
   const router = express.Router();
+
+  // GET /entregas/cep/:cep — consulta endereço por CEP (BrasilAPI + ViaCEP).
+  router.get('/cep/:cep', exigirTenant, async (req, res, next) => {
+    try {
+      const r = await consultarCep(req.params.cep);
+      if (!r) throw AppError.naoEncontrado('CEP não encontrado');
+      res.json(r);
+    } catch (e) { next(e); }
+  });
 
   // GET /entregas/geocode?q=endereco
   router.get('/geocode', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
