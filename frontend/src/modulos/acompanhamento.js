@@ -113,8 +113,8 @@ const P = {
 };
 
 function carregarFiltros() {
-  try { const j = JSON.parse(localStorage.getItem(LS_KEY)); if (j) return j; } catch {}
-  return { periodo: 'hoje', de: '', ate: '', lojas: [], cidades: [] };
+  try { const j = JSON.parse(localStorage.getItem(LS_KEY)); if (j) { if (!j.categorias) j.categorias = []; return j; } } catch {}
+  return { periodo: 'hoje', de: '', ate: '', lojas: [], cidades: [], categorias: [] };
 }
 function salvarFiltros(f) { try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {} }
 
@@ -170,14 +170,14 @@ export async function montar(container) {
   const podeEditar = auth.pode('entregas.editar');
 
   let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], canceladas: [], totais: {}, buscando: false };
-  let _lojas = [], _cidades = [], _motoboys = [];
+  let _lojas = [], _cidades = [], _categorias = [], _motoboys = [];
   let _aba = 'sem';
   let _busca = '';
   let _sel = new Set(); // IDs das corridas selecionadas (lote)
   const filtros = carregarFiltros();
 
   // ── Busca (sempre visível) ──────────────────────────────────────
-  const inpBusca = el('input', { class: 'lx-input', placeholder: 'Pesquisar protocolo, NF ou endereço…', style: 'height:34px;width:100%;padding-left:34px' });
+  const inpBusca = el('input', { class: 'lx-input', placeholder: 'Pesquisar protocolo, NF, endereço ou motoboy…', style: 'height:34px;width:100%;padding-left:34px' });
   let _debounce;
   inpBusca.addEventListener('input', () => { clearTimeout(_debounce); _debounce = setTimeout(() => { _busca = inpBusca.value.trim(); carregar(); avisoBusca(); }, 400); });
   const buscaWrap = el('span', { style: 'position:relative;display:flex;align-items:center;flex:1;min-width:180px' });
@@ -210,9 +210,10 @@ export async function montar(container) {
     el('span', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'até'), inpAte);
   selPeriodo.onchange = () => { customWrap.style.display = selPeriodo.value === 'custom' ? 'flex' : 'none'; };
 
-  // Dropdowns multi-select de loja e cidade (escaláveis).
+  // Dropdowns multi-select de loja, cidade e categoria (escaláveis).
   const dropLojas = dropMulti('Todas as lojas', [], filtros.lojas, arr => { filtros.lojas = arr; });
   const dropCidades = dropMulti('Todas as regiões', [], filtros.cidades, arr => { filtros.cidades = arr; });
+  const dropCategorias = dropMulti('Todas as categorias', [], filtros.categorias || [], arr => { filtros.categorias = arr; });
 
   function aplicarFiltros() {
     filtros.periodo = selPeriodo.value;
@@ -222,9 +223,9 @@ export async function montar(container) {
     carregar();
   }
   function limparFiltros() {
-    filtros.periodo = 'hoje'; filtros.de = ''; filtros.ate = ''; filtros.lojas = []; filtros.cidades = [];
+    filtros.periodo = 'hoje'; filtros.de = ''; filtros.ate = ''; filtros.lojas = []; filtros.cidades = []; filtros.categorias = [];
     selPeriodo.value = 'hoje'; inpDe.value = ''; inpAte.value = ''; customWrap.style.display = 'none';
-    dropLojas._setSel([]); dropCidades._setSel([]);
+    dropLojas._setSel([]); dropCidades._setSel([]); dropCategorias._setSel([]);
     salvarFiltros(filtros); atualizarBadge(); carregar();
   }
   const btnAplicar = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: () => { aplicarFiltros(); _aberto = false; painel.style.display = 'none'; } }, 'Aplicar');
@@ -233,20 +234,22 @@ export async function montar(container) {
   const colPeriodo = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Período'), selPeriodo, customWrap);
   const colLojas = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Lojas'), dropLojas);
   const colCidades = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Regiões'), dropCidades);
+  const colCategorias = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Categorias'), dropCategorias);
 
   painel.append(
-    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:start;margin-bottom:16px' }, colPeriodo, colLojas, colCidades),
+    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:start;margin-bottom:16px' }, colPeriodo, colLojas, colCidades, colCategorias),
     el('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, btnLimpar, btnAplicar));
 
   function preencherDrops() {
     dropLojas._setItens(_lojas.map(l => ({ valor: l.id, rotulo: l.nome_fantasia })));
     dropCidades._setItens(_cidades.map(c => ({ valor: c.cidade, rotulo: c.estado ? `${c.cidade}/${c.estado}` : c.cidade })));
-    dropLojas._setSel(filtros.lojas); dropCidades._setSel(filtros.cidades);
+    dropCategorias._setItens(_categorias.map(c => ({ valor: c.id, rotulo: c.nome })));
+    dropLojas._setSel(filtros.lojas); dropCidades._setSel(filtros.cidades); dropCategorias._setSel(filtros.categorias || []);
   }
   function atualizarBadge() {
     let n = 0;
     if (filtros.periodo && filtros.periodo !== 'hoje') n++;
-    n += filtros.lojas.length + filtros.cidades.length;
+    n += filtros.lojas.length + filtros.cidades.length + ((filtros.categorias && filtros.categorias.length) || 0);
     badgeAtivos.textContent = String(n);
     badgeAtivos.style.display = n ? 'inline' : 'none';
   }
@@ -674,12 +677,21 @@ export async function montar(container) {
       c.motoboy_codigo ? el('span', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700' }, '#' + String(c.motoboy_codigo).padStart(3, '0')) : el('span', {}));
   }
 
+  // Badge da categoria de frete (modalidade) da corrida.
+  function celulaCategoria(c) {
+    if (!c.categoria_nome) return el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3)' }, '—');
+    const cor = c.categoria_cor || '#7c3aed';
+    return el('div', { style: `display:inline-flex;align-items:center;gap:5px;min-width:0` },
+      el('span', { style: `width:9px;height:9px;border-radius:3px;background:${cor};flex:none` }),
+      el('span', { style: 'font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.categoria_nome));
+  }
+
   function linha(c) {
-    // Colunas por aba. 'sem' tem checkbox e direção; as demais têm coluna de motoboy.
-    const cols = _aba === 'sem' ? '34px 70px 1.1fr 88px 92px 104px 250px'
-      : _aba === 'and' ? '72px 1.2fr 120px 96px 110px 248px'
-      : _aba === 'con' ? '72px 1.3fr 116px 96px 96px 110px 150px'
-      : '72px 1.3fr 120px 100px 100px 150px'; // canceladas
+    // Colunas por aba. Agora todas têm a coluna Categoria (após Trajeto).
+    const cols = _aba === 'sem' ? '34px 70px 1fr 110px 80px 88px 100px 230px'
+      : _aba === 'and' ? '72px 1.1fr 110px 120px 92px 106px 230px'
+      : _aba === 'con' ? '72px 1.2fr 110px 110px 92px 92px 104px 140px'
+      : '72px 1.2fr 110px 116px 96px 96px 140px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -691,6 +703,7 @@ export async function montar(container) {
     }
     celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo));
     celulas.push(enderecoEmpilhado(c)); // Trajeto (Coleta/Entrega) em TODAS as abas
+    celulas.push(celulaCategoria(c));   // Categoria (modalidade) em TODAS as abas
 
     if (_aba === 'sem') {
       celulas.push(bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)); // Direção
@@ -716,14 +729,14 @@ export async function montar(container) {
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '34px 70px 1.1fr 88px 92px 104px 250px'
-      : _aba === 'and' ? '72px 1.2fr 120px 96px 110px 248px'
-      : _aba === 'con' ? '72px 1.3fr 116px 96px 96px 110px 150px'
-      : '72px 1.3fr 120px 100px 100px 150px';
-    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
-      : ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
+    const cols = _aba === 'sem' ? '34px 70px 1fr 110px 80px 88px 100px 230px'
+      : _aba === 'and' ? '72px 1.1fr 110px 120px 92px 106px 230px'
+      : _aba === 'con' ? '72px 1.2fr 110px 110px 92px 92px 104px 140px'
+      : '72px 1.2fr 110px 116px 96px 96px 140px';
+    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Direção', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
+      : ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
     const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
     if (_aba === 'sem') {
       const todas = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
@@ -943,6 +956,7 @@ export async function montar(container) {
       if (ate) params.set('ate', ate);
       if (filtros.lojas.length) params.set('loja_ids', filtros.lojas.join(','));
       if (filtros.cidades.length) params.set('cidades', filtros.cidades.join(','));
+      if (filtros.categorias && filtros.categorias.length) params.set('categoria_ids', filtros.categorias.join(','));
     }
     try { _dados = await get('/entregas/acompanhamento?' + params.toString()); render(); }
     catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
@@ -958,6 +972,7 @@ export async function montar(container) {
   (async () => {
     try { _lojas = await get('/lojas?ativo=true'); } catch { _lojas = []; }
     try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
+    try { _categorias = await get('/entregas/acompanhamento/categorias'); } catch { _categorias = []; }
     preencherDrops(); atualizarBadge();
   })();
 

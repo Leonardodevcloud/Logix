@@ -11,13 +11,14 @@ module.exports = function acompanhamentoRoutes() {
   const csv = v => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
 
   // GET /entregas/acompanhamento — visão da central (3 seções + filtros).
-  // Aceita: loja_ids (csv), cidades (csv), de, ate, q. Registrada antes de /:id/*.
+  // Aceita: loja_ids (csv), cidades (csv), categoria_ids (csv), de, ate, q.
   router.get('/acompanhamento', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       res.json(await service.listarAcompanhamento({
         empresaId: req.empresaId,
         lojaIds: csv(req.query.loja_ids),
         cidades: csv(req.query.cidades),
+        categoriaIds: csv(req.query.categoria_ids),
         de: req.query.de || null, ate: req.query.ate || null,
         q: req.query.q || null,
         lojaIdToken: req.lojaId || null, // trava de segurança p/ usuário de loja
@@ -28,6 +29,11 @@ module.exports = function acompanhamentoRoutes() {
   // GET /entregas/acompanhamento/cidades — cidades das lojas (filtro de região).
   router.get('/acompanhamento/cidades', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try { res.json(await service.listarCidadesLojas(req.empresaId)); } catch (e) { next(e); }
+  });
+
+  // GET /entregas/acompanhamento/categorias — categorias de frete (filtro).
+  router.get('/acompanhamento/categorias', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try { res.json(await service.listarCategoriasFrete(req.empresaId)); } catch (e) { next(e); }
   });
 
   // POST /entregas/acompanhamento/rota-lote — rota otimizada de várias entregas (despacho em lote).
