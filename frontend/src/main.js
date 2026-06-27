@@ -70,6 +70,7 @@ async function boot() {
   router.rota('/filas',                () => import('./modulos/filas.js'));
   router.rota('/marca',                () => import('./modulos/branding.js'));
   router.rota('/equipe',               () => import('./modulos/equipe.js'));
+  router.rota('/configuracoes',        () => import('./modulos/configuracoes.js'));
 
   router.definirGuarda((caminho) => {
     if (caminho !== '/login' && !auth.estaLogado()) return '/login';

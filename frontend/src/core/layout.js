@@ -43,6 +43,9 @@ function gruposNav() {
   const config = [];
   if (auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });
+  // Configurações da operação — só para a administração da central.
+  if (a.perfil === 'central_admin')
+    config.push({ rota: '/configuracoes', rotulo: 'Configurações', icone: 'config' });
 
   const grupos = [{ titulo: 'Operação', itens: operacao }];
   if (config.length) grupos.push({ titulo: 'Configuração', itens: config });
