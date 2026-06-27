@@ -39,6 +39,9 @@ function gruposNav() {
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
   if (auth.temModulo('filas') && auth.pode('filas.ver'))
     operacao.push({ rota: '/filas', rotulo: 'Filas', icone: 'filas' });
+  // Financeiro: faturamento de clientes e motoboys (só central).
+  if (a.perfil === 'central_admin')
+    operacao.push({ rota: '/financeiro', rotulo: 'Financeiro', icone: 'financeiro' });
 
   const config = [];
   if (auth.pode('usuarios.gerenciar'))

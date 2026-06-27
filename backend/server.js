@@ -24,6 +24,7 @@ const equipe = require('./src/modules/equipe');
 const lojas = require('./src/modules/lojas');
 const config = require('./src/modules/config');
 const clientehub = require('./src/modules/clientehub');
+const financeiro = require('./src/modules/financeiro');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -69,6 +70,7 @@ function montarApp() {
   api.use('/lojas', lojas.initLojasRoutes());
   api.use('/config', config.initConfigRoutes());
   api.use('/clientes', clientehub.initClienteHubRoutes());
+  api.use('/financeiro', financeiro.initFinanceiroRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último
