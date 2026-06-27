@@ -35,9 +35,11 @@ async function garantirLeaflet() {
 }
 
 function toast(msg, tipo) {
-  const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
+  const longa = (msg || '').length > 60;
+  const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:13px 18px;border-radius:12px;font-size:13px;font-weight:600;line-height:1.45;max-width:${longa ? '420px' : '320px'};background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
   document.body.append(t);
-  setTimeout(() => t.remove(), 3000);
+  // Mensagens longas (ex.: explicação do funil de disparo) ficam mais tempo.
+  setTimeout(() => t.remove(), longa ? 7000 : 3000);
 }
 function modal(titulo, corpo, acoes) {
   const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(4,44,83,.45);display:flex;align-items:center;justify-content:center;z-index:1000' });
