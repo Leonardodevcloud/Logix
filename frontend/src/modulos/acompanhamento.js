@@ -546,14 +546,82 @@ export async function montar(container) {
   }
   // Coleta e destino empilhados (um abaixo do outro), endereço completo.
   function enderecoEmpilhado(c) {
-    const ponto = (cor, rotulo, texto) => el('div', { style: 'display:flex;align-items:flex-start;gap:7px;min-width:0' },
+    const ponto = (cor, rotulo, texto, extra) => el('div', { style: 'display:flex;align-items:flex-start;gap:7px;min-width:0' },
       el('span', { style: `width:7px;height:7px;border-radius:2px;background:${cor};flex-shrink:0;margin-top:5px` }),
       el('span', { style: 'font-size:11px;color:var(--lx-tinta-3);font-weight:700;flex-shrink:0;width:50px;margin-top:1px' }, rotulo),
-      el('span', { style: 'font-size:12px;color:var(--lx-tinta);line-height:1.4' }, texto || '—'));
+      el('div', { style: 'min-width:0' },
+        el('span', { style: 'font-size:12px;color:var(--lx-tinta);line-height:1.4' }, texto || '—'),
+        extra || el('span', {})));
+
+    const total = c.total_pontos != null ? Number(c.total_pontos) : 1;
+    const rotuloEntrega = total > 1 ? `Entrega 1 de ${total}` : 'Entrega';
+    // se há mais de 1 ponto, mostra um link para ver todos os pontos + detalhes
+    const verTodos = total > 1
+      ? el('button', { style: 'display:inline-flex;align-items:center;gap:4px;margin-top:2px;background:none;border:none;padding:0;cursor:pointer;color:var(--lx-azul-primario);font-size:11px;font-weight:700', onClick: (e) => { e.stopPropagation(); abrirPontos(c); } }, `+${total - 1} ponto${total - 1 > 1 ? 's' : ''} · ver todos`)
+      : null;
+
     return el('div', { style: 'display:flex;flex-direction:column;gap:4px;min-width:0' },
       el('div', { style: 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px' }, c.loja_nome || '—'),
       ponto('var(--lx-azul-primario)', 'Coleta', c.coleta_endereco),
-      ponto('var(--lx-ok)', 'Entrega', c.destino_endereco));
+      ponto('var(--lx-ok)', rotuloEntrega, c.destino_endereco, verTodos ? el('div', {}, verTodos) : null));
+  }
+
+  // Modal: todos os pontos da corrida com detalhes ricos (razão social, tel, nota, obs).
+  async function abrirPontos(c) {
+    const corpo = el('div', { style: 'min-height:120px' }, el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Carregando pontos…'));
+    const ov = modal(`Pontos da corrida — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+    const box = ov.querySelector('div'); if (box) box.style.width = '600px';
+    let dados;
+    try { dados = await get(`/entregas/${c.id}/pontos`); } catch { corpo.innerHTML = ''; corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-erro)' }, 'Erro ao carregar os pontos.')); return; }
+
+    corpo.innerHTML = '';
+    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:62vh;overflow:auto' });
+
+    // Coleta
+    lista.append(cartaoPonto({
+      cor: 'var(--lx-azul-primario)', etiqueta: 'COLETA', titulo: dados.loja_nome || dados.coleta.nome || 'Ponto de coleta',
+      endereco: dados.coleta.endereco,
+    }, false));
+
+    // Entregas
+    (dados.pontos || []).forEach((p, i) => {
+      lista.append(cartaoPonto({
+        cor: 'var(--lx-ok)', etiqueta: `ENTREGA ${i + 1}`,
+        titulo: p.nome_fantasia || p.nome || `Destino ${p.ordem}`,
+        endereco: p.endereco, complemento: p.complemento, telefone: p.telefone,
+        numero_nf: p.numero_nf, observacoes: p.observacoes,
+        status: p.status, recebedor: p.recebedor, entregue_em: p.entregue_em,
+      }, i < dados.pontos.length - 1));
+    });
+    corpo.append(lista);
+  }
+
+  // Cartão de um ponto, com os dados ricos inline embaixo do endereço.
+  function cartaoPonto(p, temProximo) {
+    const linhaInfo = (rotulo, valor) => valor ? el('div', { style: 'display:flex;gap:6px;font-size:11.5px;margin-top:2px' },
+      el('span', { style: 'color:var(--lx-tinta-3);font-weight:700;min-width:78px' }, rotulo),
+      el('span', { style: 'color:var(--lx-tinta);min-width:0' }, valor)) : null;
+
+    const trilho = el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:14px;flex-shrink:0' },
+      el('span', { style: `width:11px;height:11px;border-radius:50%;background:${p.cor};margin-top:4px;flex-shrink:0` }),
+      temProximo ? el('span', { style: 'flex:1;width:2px;background:var(--lx-linha);margin:2px 0' }) : el('span', {}));
+
+    const corpo = el('div', { style: 'padding-bottom:16px;min-width:0;flex:1' },
+      el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px' },
+        el('span', { style: `font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 7px;border-radius:999px;background:${p.cor}1a;color:${p.cor}` }, p.etiqueta),
+        p.titulo ? el('span', { style: 'font-size:13px;font-weight:700' }, p.titulo) : el('span', {}),
+        p.status === 'entregue' ? el('span', { style: 'font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--lx-ok-bg);color:var(--lx-ok)' }, '✓ entregue') : el('span', {})),
+      el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2);line-height:1.4' }, p.endereco || '—'));
+
+    [
+      linhaInfo('Complemento', p.complemento),
+      linhaInfo('Telefone', p.telefone),
+      linhaInfo('Nº da nota', p.numero_nf),
+      linhaInfo('Observações', p.observacoes),
+      linhaInfo('Recebedor', p.recebedor),
+    ].filter(Boolean).forEach(x => corpo.append(x));
+
+    return el('div', { style: 'display:flex;gap:12px;align-items:stretch' }, trilho, corpo);
   }
 
   // Badge de status SLA (No prazo / Atenção / Atraso iminente / Fora do prazo).

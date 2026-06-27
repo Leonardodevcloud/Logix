@@ -106,5 +106,12 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /entregas/:id/pontos — todos os pontos com detalhes ricos (razão social, tel, nota, obs)
+  router.get('/:id/pontos', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      res.json(await service.detalhesPontos({ empresaId: req.empresaId, id: req.params.id }));
+    } catch (e) { next(e); }
+  });
+
   return router;
 };

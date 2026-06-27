@@ -781,9 +781,35 @@ async function logsEntrega({ empresaId, id }) {
   return { protocolo: e.protocolo, status: e.status, eventos };
 }
 
+// Detalhes completos dos pontos de uma corrida (coleta + todos os destinos com
+// razão social, telefone, nº da nota, complemento, observações).
+async function detalhesPontos({ empresaId, id }) {
+  const { rows: ent } = await query(
+    `SELECT e.id, e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+            l.nome_fantasia AS loja_nome
+       FROM entregas e LEFT JOIN lojas l ON l.id = e.loja_id
+      WHERE e.id = $1 AND e.empresa_id = $2`,
+    [id, empresaId]
+  );
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+
+  const { rows: pontos } = await query(
+    `SELECT ordem, nome, nome_fantasia, endereco, complemento, telefone, numero_nf,
+            observacoes, status, recebedor, entregue_em, lat, lng
+       FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`,
+    [id]
+  );
+  return {
+    protocolo: ent[0].protocolo,
+    loja_nome: ent[0].loja_nome,
+    coleta: { nome: ent[0].coleta_nome, endereco: ent[0].coleta_endereco, lat: ent[0].coleta_lat, lng: ent[0].coleta_lng },
+    pontos,
+  };
+}
+
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega, logsEntrega,
+  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
