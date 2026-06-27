@@ -13,7 +13,7 @@ async function comCoordenadas(ponto) {
 }
 
 // Lança uma nova entrega: geocoding, otimização de rota e gravação transacional.
-async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, ip }) {
+async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, modalidadeId = null, centroCustoId = null, ip }) {
   if (!coleta || !coleta.endereco) throw AppError.validacao('Informe o ponto de coleta');
   if (!Array.isArray(destinos) || destinos.length === 0) throw AppError.validacao('Informe ao menos um destino');
 
@@ -42,10 +42,11 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     await cliente.query('BEGIN');
     const { rows } = await cliente.query(
       `INSERT INTO entregas (empresa_id, loja_id, protocolo, motoboy_id, status, distribuicao,
-         coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+         coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por,
+         modalidade_id, centro_custo_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
       [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
-       coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor]
+       coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null]
     );
     const entregaId = rows[0].id;
     let posicao = 1;

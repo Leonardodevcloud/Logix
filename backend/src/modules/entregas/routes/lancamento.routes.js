@@ -20,6 +20,8 @@ module.exports = function lancamentoRoutes() {
         destinos: req.body.destinos,
         distribuicao: req.body.distribuicao,
         motoboyId: req.body.motoboy_id,
+        modalidadeId: req.body.modalidade_id,
+        centroCustoId: req.body.centro_custo_id,
         ip: req.ip,
       });
       res.status(201).json(r);

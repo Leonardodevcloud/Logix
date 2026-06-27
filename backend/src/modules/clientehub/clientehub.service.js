@@ -317,6 +317,29 @@ async function motoboysDisponiveis({ empresaId }) {
   return rows;
 }
 
+// ── Contexto para criação de entrega ──────────────────────────────
+// Modalidades ATIVAS de uma loja (para o seletor ao criar entrega).
+async function modalidadesAtivasLoja({ empresaId, lojaId }) {
+  const { rows } = await query(
+    `SELECT cm.id, cm.categoria_id, c.nome, c.cor
+       FROM cliente_modalidades cm
+       JOIN frete_categorias c ON c.id = cm.categoria_id
+      WHERE cm.loja_id = $1 AND cm.ativo = TRUE AND c.ativo = TRUE
+      ORDER BY c.nome`,
+    [lojaId]
+  );
+  return rows;
+}
+
+// Centros de custo ATIVOS de uma loja (para o seletor ao criar entrega).
+async function centrosAtivosLoja({ empresaId, lojaId }) {
+  const { rows } = await query(
+    `SELECT id, nome, codigo FROM cliente_centros_custo WHERE loja_id = $1 AND ativo = TRUE ORDER BY nome`,
+    [lojaId]
+  );
+  return rows;
+}
+
 module.exports = {
   exigirLoja, alternarStatus,
   listarCentros, criarCentro, atualizarCentro, excluirCentro, criarUsuarioCentro,
@@ -324,4 +347,5 @@ module.exports = {
   listarModalidades, categoriasDisponiveis, adicionarModalidade, atualizarModalidade, removerModalidade,
   obterRegras, salvarRegras,
   listarMotoboysExclusivos, atribuirMotoboy, removerMotoboy, motoboysDisponiveis,
+  modalidadesAtivasLoja, centrosAtivosLoja,
 };

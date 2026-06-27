@@ -565,16 +565,19 @@ export async function montar(container) {
   if (_ehCentral && auth.temModulo('lojas')) {
     get('/lojas?ativo=true').then(ls => {
       _lojas = ls || [];
-      if (_lojas.length > 1) {
+      if (_lojas.length >= 1) {
         lojaSel.innerHTML = '';
         _lojas.forEach(l => lojaSel.append(el('option', { value: l.id }, l.nome_fantasia)));
         lojaWrap.style.display = '';
       }
+      carregarContextoLoja();
     }).catch(() => {});
+  } else {
+    // Usuário de loja: carrega o contexto da própria loja.
+    setTimeout(() => carregarContextoLoja(), 0);
   }
   function lojaSelecionada() {
-    if (_ehCentral && _lojas.length > 1) return lojaSel.value || null;
-    if (_ehCentral && _lojas.length === 1) return _lojas[0].id;
+    if (_ehCentral && _lojas.length >= 1) return lojaSel.value || _lojas[0]?.id || null;
     return null; // usuário de loja: backend resolve pelo token
   }
 
@@ -666,13 +669,21 @@ export async function montar(container) {
     }).filter(Boolean);
     if (!destinos.length) { toast('Confirme ao menos um destino', 'erro'); return; }
     if (!modoAuto.val && !mbId.val) { toast('Selecione um motoboy ou modo automático', 'erro'); return; }
+    if (selModalidade.disabled || !selModalidade.value) { toast('Selecione a modalidade de frete', 'erro'); return; }
     btnCriar.disabled = true; btnCriar.childNodes[1].textContent = ' Criando…';
     msgCriar.style.color = 'var(--lx-tinta-2)'; msgCriar.textContent = '';
     try {
       // Separar apelido (nome legível) do endereço real para exibição no protocolo
       const coletaNome     = coleta.apelido || null;
       const coletaEndereco = coleta.endereco_completo || coleta.label || coleta.apelido || coleta.endereco || '';
-      const r = await post('/entregas', { loja_id: lojaSelecionada(), coleta: { nome: coletaNome, endereco: coletaEndereco, lat: coleta.lat, lng: coleta.lng }, destinos, motoboy_id: !modoAuto.val ? mbId.val : undefined });
+      const r = await post('/entregas', {
+        loja_id: lojaSelecionada(),
+        coleta: { nome: coletaNome, endereco: coletaEndereco, lat: coleta.lat, lng: coleta.lng },
+        destinos,
+        motoboy_id: !modoAuto.val ? mbId.val : undefined,
+        modalidade_id: selModalidade.value || null,
+        centro_custo_id: (_ehCentral && selCentro.value) ? selCentro.value : null,
+      });
       toast('✓ ' + r.protocolo + ' criada!', 'ok');
       msgCriar.style.color = 'var(--lx-ok)'; msgCriar.textContent = '✓ ' + r.protocolo + ' criada!';
       setTimeout(() => { msgCriar.textContent = ''; }, 3000);
@@ -683,8 +694,59 @@ export async function montar(container) {
     finally { btnCriar.disabled = false; btnCriar.childNodes[1].textContent = ' Solicitar entrega'; }
   }
 
+  // ── Cliente / Centro de custo / Modalidade ──────────────────────
+  // Central: escolhe cliente (loja) + centro de custo + modalidade.
+  // Loja: só modalidade (cliente já é o dela).
+  const selModalidade = el('select', { class: 'lx-input' });
+  const modalidadeWrap = el('div', { style: 'padding:12px 14px 0' },
+    el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' }, 'Modalidade de frete'),
+    selModalidade);
+
+  const selCentro = el('select', { class: 'lx-input' });
+  const centroWrap = el('div', { style: 'padding:12px 14px 0;display:none' },
+    el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' }, 'Centro de custo'),
+    selCentro);
+
+  // Carrega modalidades + centros da loja escolhida (ou da loja do usuário).
+  async function carregarContextoLoja() {
+    const lid = lojaSelecionada();
+    const idUrl = lid || 'self'; // usuário de loja: backend resolve pelo token
+
+    selModalidade.innerHTML = '';
+    try {
+      const mods = await get(`/clientes/${idUrl}/contexto/modalidades`);
+      if (!mods.length) {
+        selModalidade.append(el('option', { value: '' }, 'Nenhuma modalidade habilitada'));
+        selModalidade.disabled = true;
+      } else {
+        selModalidade.disabled = false;
+        mods.forEach(m => selModalidade.append(el('option', { value: m.id }, m.nome)));
+        selModalidade.value = mods[0].id; // se só uma, já vem selecionada
+      }
+    } catch {
+      selModalidade.innerHTML = '';
+      selModalidade.append(el('option', { value: '' }, '—'));
+    }
+
+    if (_ehCentral) {
+      selCentro.innerHTML = '';
+      try {
+        const centros = await get(`/clientes/${idUrl}/contexto/centros`);
+        if (!centros.length) { centroWrap.style.display = 'none'; }
+        else {
+          centroWrap.style.display = '';
+          selCentro.append(el('option', { value: '' }, '— Sem centro de custo —'));
+          centros.forEach(c => selCentro.append(el('option', { value: c.id }, c.nome + (c.codigo ? ` (${c.codigo})` : ''))));
+        }
+      } catch { centroWrap.style.display = 'none'; }
+    }
+  }
+  lojaSel.addEventListener('change', carregarContextoLoja);
+
   const sideNova = el('div', { style: 'display:flex;flex-direction:column;gap:0;flex:1' },
     lojaWrap,
+    centroWrap,
+    modalidadeWrap,
     el('div', { style: 'padding:14px;border-bottom:0.5px solid var(--lx-linha)' },
       el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:9px' },
         el('div', { style: 'display:flex;align-items:center;gap:8px' },

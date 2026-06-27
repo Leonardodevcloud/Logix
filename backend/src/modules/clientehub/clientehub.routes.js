@@ -5,7 +5,21 @@ const service = require('./clientehub.service');
 
 function initClienteHubRoutes() {
   const router = express.Router();
-  router.use(verificarToken, resolverTenant, exigirTenant, exigirCentral);
+  router.use(verificarToken, resolverTenant, exigirTenant);
+
+  // ── Contexto para criação de entrega (loja OU central) ──────────
+  // A loja vê só a própria; a central informa a loja via :lojaId.
+  // Resolve a loja: usuário de loja usa req.lojaId; central usa o param.
+  const resolverLoja = (req) => req.lojaId || req.params.lojaId;
+  router.get('/:lojaId/contexto/modalidades', async (req, res, next) => {
+    try { res.json(await service.modalidadesAtivasLoja({ empresaId: req.empresaId, lojaId: resolverLoja(req) })); } catch (e) { next(e); }
+  });
+  router.get('/:lojaId/contexto/centros', async (req, res, next) => {
+    try { res.json(await service.centrosAtivosLoja({ empresaId: req.empresaId, lojaId: resolverLoja(req) })); } catch (e) { next(e); }
+  });
+
+  // ── Daqui em diante, só administração da central ────────────────
+  router.use(exigirCentral);
 
   const base = (req) => ({ empresaId: req.empresaId, lojaId: req.params.lojaId, usuarioId: req.usuario.id, ip: req.ip });
 
