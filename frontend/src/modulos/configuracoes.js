@@ -63,12 +63,11 @@ export async function montar(container) {
 function abaCategoriasFrete() {
   const wrap = el('div', {});
   let _categorias = [];
-  let _lojas = [];
 
   const header = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap' },
     el('div', {},
       el('h3', { style: 'font-size:16px;font-weight:800;margin:0 0 2px' }, 'Categorias de Frete'),
-      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0' }, 'Crie categorias para organizar sua operação e defina quais clientes as utilizam.')),
+      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0' }, 'Crie categorias para organizar sua operação. A modalidade de cada cliente é definida em outra seção.')),
     el('button', { class: 'lx-btn lx-btn-primario', style: 'white-space:nowrap', onClick: () => abrirForm() }, '+ Nova categoria'));
 
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
@@ -77,11 +76,7 @@ function abaCategoriasFrete() {
   async function carregar() {
     lista.innerHTML = '<div style="font-size:13px;color:var(--lx-tinta-2);padding:20px;text-align:center">Carregando…</div>';
     try {
-      const [cats, lojas] = await Promise.all([
-        get('/config/frete-categorias'),
-        get('/lojas?ativo=true').catch(() => []),
-      ]);
-      _categorias = cats; _lojas = lojas;
+      _categorias = await get('/config/frete-categorias');
       render();
     } catch (e) { lista.innerHTML = ''; lista.append(el('div', { style: 'font-size:13px;color:var(--lx-erro);padding:20px;text-align:center' }, e.message || 'Erro ao carregar')); }
   }
@@ -98,13 +93,6 @@ function abaCategoriasFrete() {
   }
 
   function cartao(c) {
-    const clientes = (c.lojas || []);
-    const chips = clientes.length
-      ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:5px;margin-top:8px' },
-          ...clientes.slice(0, 6).map(l => el('span', { style: 'font-size:11px;padding:2px 9px;border-radius:999px;background:var(--lx-superficie-2);color:var(--lx-tinta-2);font-weight:600' }, l.nome)),
-          clientes.length > 6 ? el('span', { style: 'font-size:11px;padding:2px 9px;color:var(--lx-tinta-3);font-weight:700' }, `+${clientes.length - 6}`) : el('span', {}))
-      : el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:8px;font-style:italic' }, 'Nenhum cliente vinculado');
-
     const toggle = el('label', { style: 'display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--lx-tinta-2);user-select:none' });
     const chk = el('input', { type: 'checkbox', style: 'width:15px;height:15px;accent-color:var(--lx-ok);cursor:pointer' });
     chk.checked = c.ativo;
@@ -120,8 +108,7 @@ function abaCategoriasFrete() {
           el('div', { style: 'display:flex;align-items:center;gap:9px' },
             el('span', { style: `width:13px;height:13px;border-radius:4px;background:${c.cor};flex-shrink:0` }),
             el('span', { style: 'font-size:15px;font-weight:800' }, c.nome)),
-          c.descricao ? el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin-top:3px' }, c.descricao) : el('span', {}),
-          chips),
+          c.descricao ? el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin-top:3px' }, c.descricao) : el('span', {})),
         el('div', { style: 'display:flex;align-items:center;gap:10px;flex-shrink:0' },
           toggle,
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 12px;font-size:12px', onClick: () => abrirForm(c) }, 'Editar'),
@@ -157,31 +144,6 @@ function abaCategoriasFrete() {
     renderPaleta();
     corpo.append(el('div', { class: 'lx-field' }, el('label', {}, 'Cor da etiqueta'), paletaWrap));
 
-    // Clientes (lojas) vinculados — multi-select por checkboxes
-    const vinculadas = new Set((cat?.lojas || []).map(l => l.id));
-    const buscaLoja = el('input', { class: 'lx-input', placeholder: 'Buscar cliente…', style: 'margin-bottom:8px' });
-    const listaLojas = el('div', { style: 'max-height:200px;overflow:auto;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);padding:6px' });
-    function renderLojas() {
-      const f = buscaLoja.value.toLowerCase().trim();
-      listaLojas.innerHTML = '';
-      const vis = _lojas.filter(l => !f || (l.nome_fantasia || '').toLowerCase().includes(f));
-      if (!vis.length) { listaLojas.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:8px' }, 'Nenhum cliente encontrado')); return; }
-      vis.forEach(l => {
-        const row = el('label', { style: 'display:flex;align-items:center;gap:9px;padding:7px 8px;cursor:pointer;border-radius:6px;font-size:13px' });
-        row.onmouseenter = () => row.style.background = 'var(--lx-superficie-2)';
-        row.onmouseleave = () => row.style.background = 'transparent';
-        const cb = el('input', { type: 'checkbox', style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario);cursor:pointer' });
-        cb.checked = vinculadas.has(l.id);
-        cb.onchange = () => { if (cb.checked) vinculadas.add(l.id); else vinculadas.delete(l.id); contador.textContent = `${vinculadas.size} cliente(s) selecionado(s)`; };
-        row.append(cb, el('span', {}, l.nome_fantasia || l.nome || '—'));
-        listaLojas.append(row);
-      });
-    }
-    buscaLoja.addEventListener('input', renderLojas);
-    renderLojas();
-    const contador = el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:6px' }, `${vinculadas.size} cliente(s) selecionado(s)`);
-    corpo.append(el('div', { class: 'lx-field' }, el('label', {}, 'Clientes que utilizam'), buscaLoja, listaLojas, contador));
-
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, ehEdicao ? 'Salvar' : 'Criar categoria');
     const ov = modal(ehEdicao ? 'Editar categoria' : 'Nova categoria', corpo, [
       el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn,
@@ -189,7 +151,7 @@ function abaCategoriasFrete() {
     btn.onclick = async () => {
       const nome = inpNome.value.trim();
       if (!nome) { toast('Informe o nome', 'erro'); return; }
-      const payload = { nome, descricao: inpDesc.value.trim() || null, cor: corSel, lojaIds: [...vinculadas] };
+      const payload = { nome, descricao: inpDesc.value.trim() || null, cor: corSel };
       try {
         btn.disabled = true;
         if (ehEdicao) await put(`/config/frete-categorias/${cat.id}`, payload);
