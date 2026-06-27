@@ -517,23 +517,22 @@ export async function montar(container) {
       sub ? el('span', { style: 'font-size:10px;color:var(--lx-tinta-3)' }, sub) : el('span', {}));
   }
 
+  // Célula de motoboy (código + nome) para as abas que não são 'sem'.
+  function celulaMotoboy(c) {
+    if (!c.motoboy_nome) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, 'sem motoboy');
+    return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3;min-width:0' },
+      el('span', { style: 'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome),
+      c.motoboy_codigo ? el('span', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700' }, '#' + String(c.motoboy_codigo).padStart(3, '0')) : el('span', {}));
+  }
+
   function linha(c) {
-    const cols = _aba === 'sem' ? '34px 78px 1.4fr 116px 110px 116px 150px' : _aba === 'and' ? '88px 1.1fr 110px 116px 70px 180px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
-    const dataHora = iso => { if (!iso) return '—'; const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
-    const meio = _aba === 'sem'
-      ? [enderecoEmpilhado(c), bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng), dataHora(c.criado_em), slaBadge(c.sla)]
-      : _aba === 'and'
-      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome ? '🏍 ' + (c.motoboy_codigo ? '#' + String(c.motoboy_codigo).padStart(3,'0') + ' ' : '') + c.motoboy_nome : 'sem motoboy')), statusBadge(c.status), slaBadge(c.sla)]
-      : _aba === 'con'
-      ? [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || '—')), dataHora(c.concluida_em)]
-      : [el('div', { style: 'min-width:0' }, el('div', { style: 'font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'), el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome || 'sem motoboy')),
-         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.coleta_endereco || '—')];
-    const fim = _aba === 'con'
-      ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, c.distancia_km && parseFloat(c.distancia_km) > 0 ? parseFloat(c.distancia_km).toFixed(1) : '—')
-      : _aba === 'can'
-      ? dataHora(c.criado_em)
-      : _aba === 'sem' ? null  // 'sem' já tem dataHora no meio
-      : dataHora(c.criado_em);
+    // Colunas por aba. 'sem' tem checkbox e direção; as demais têm coluna de motoboy.
+    const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
+      : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
+      : _aba === 'con' ? '76px 1.5fr 130px 104px 104px 96px'
+      : '76px 1.5fr 130px 104px 104px 96px'; // canceladas
+    const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
+
     const celulas = [];
     if (_aba === 'sem') {
       const chk = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
@@ -541,18 +540,42 @@ export async function montar(container) {
       chk.onchange = () => { if (chk.checked) _sel.add(c.id); else _sel.delete(c.id); atualizarBarraSel(); };
       celulas.push(el('div', { style: 'display:flex;justify-content:center' }, chk));
     }
-    celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo), ...meio);
-    if (fim) celulas.push(fim);
+    celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo));
+    celulas.push(enderecoEmpilhado(c)); // Trajeto (Coleta/Entrega) em TODAS as abas
+
+    if (_aba === 'sem') {
+      celulas.push(bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)); // Direção
+      celulas.push(dataHora(c.criado_em));  // Solicitação
+      celulas.push(slaBadge(c.sla));        // Status
+    } else if (_aba === 'and') {
+      celulas.push(celulaMotoboy(c));       // Motoboy
+      celulas.push(dataHora(c.criado_em));  // Solicitação
+      celulas.push(slaBadge(c.sla));        // Status
+    } else if (_aba === 'con') {
+      celulas.push(celulaMotoboy(c));       // Motoboy
+      celulas.push(dataHora(c.criado_em));  // Solicitação
+      celulas.push(dataHora(c.concluida_em)); // Concluída
+    } else { // canceladas
+      celulas.push(celulaMotoboy(c));       // Motoboy
+      celulas.push(dataHora(c.criado_em));  // Solicitação
+      celulas.push(dataHora(c.cancelada_em || c.criado_em)); // Cancelada
+    }
     celulas.push(acoes(c));
+
     const destaque = _aba === 'sem' && _sel.has(c.id) ? 'background:var(--lx-info-bg)' : 'background:var(--lx-superficie)';
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '34px 78px 1.4fr 116px 110px 116px 150px' : _aba === 'and' ? '88px 1.1fr 110px 116px 70px 180px' : _aba === 'con' ? '88px 1.2fr 130px 60px 110px' : '88px 1.2fr 1.2fr 130px 90px';
-    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Status', 'Ações'] : _aba === 'and' ? ['Protocolo', 'Loja / motoboy', 'Andamento', 'Status', 'Tempo', 'Ações'] : _aba === 'con' ? ['Protocolo', 'Loja / motoboy', 'Concluída', 'KM', 'Ações'] : ['Protocolo', 'Loja / motoboy', 'Coleta', 'Cancelada', 'Ações'];
+    const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
+      : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
+      : _aba === 'con' ? '76px 1.5fr 130px 104px 104px 96px'
+      : '76px 1.5fr 130px 104px 104px 96px';
+    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Concluída', 'Ações']
+      : ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
     const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
     if (_aba === 'sem') {
-      // checkbox "selecionar todas" no cabeçalho
       const todas = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
       const lista = listaDaAba();
       todas.checked = lista.length > 0 && lista.every(c => _sel.has(c.id));
