@@ -154,7 +154,9 @@ async function abrirRevisao(motoboyId, aoFechar) {
   try { d = await get('/motoboys/cadastros/' + motoboyId); }
   catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); return; }
 
-  const s = SITUACOES[d.situacao_cadastro] || SITUACOES.pendente;
+  // Status de exibição combinado (mesma lógica do backend).
+  const sx = d.situacao_cadastro === 'aprovado' ? (d.status === 'inativo' ? 'inativo' : 'ativo') : d.situacao_cadastro;
+  const s = STATUS[sx] || STATUS.pendente;
 
   // ── Dados pessoais (editáveis) ──
   const campos = {};
