@@ -131,4 +131,90 @@ async function vincularLojas(empresaId, categoriaId, lojaIds) {
 module.exports = {
   listarCategorias, obterCategoria, criarCategoria, atualizarCategoria,
   alternarCategoria, excluirCategoria,
+  obterSla, salvarSla, removerSlaLoja, slaEfetivoCliente,
 };
+
+// ── Configuração de SLA (global e por cliente) ───────────────────────
+// faixas: [{ ate_km, minutos }]. loja_id NULL = config global da empresa.
+
+const FAIXAS_PADRAO = [
+  { ate_km: 3, minutos: 60 },
+  { ate_km: 7, minutos: 90 },
+  { ate_km: 15, minutos: 120 },
+  { ate_km: 9999, minutos: 180 },
+];
+
+function normalizarFaixas(faixas) {
+  if (!Array.isArray(faixas)) return [];
+  return faixas
+    .map(f => ({ ate_km: Number(f.ate_km), minutos: Math.round(Number(f.minutos)) }))
+    .filter(f => Number.isFinite(f.ate_km) && f.ate_km > 0 && Number.isFinite(f.minutos) && f.minutos > 0)
+    .sort((a, b) => a.ate_km - b.ate_km);
+}
+
+// Obtém a config de SLA. lojaId NULL = global. Se a loja não tiver config própria,
+// retorna { tem_propria: false } + a global (para a tela mostrar o que está valendo).
+async function obterSla({ empresaId, lojaId = null }) {
+  if (lojaId) {
+    const { rows } = await query(
+      `SELECT faixas, minutos_atencao, minutos_iminente, sla_padrao_min
+         FROM sla_config WHERE empresa_id = $1 AND loja_id = $2`,
+      [empresaId, lojaId]
+    );
+    const global = await obterSla({ empresaId, lojaId: null });
+    if (rows[0]) return { tem_propria: true, ...rows[0], global };
+    return { tem_propria: false, ...global, global };
+  }
+  // Global
+  const { rows } = await query(
+    `SELECT faixas, minutos_atencao, minutos_iminente, sla_padrao_min
+       FROM sla_config WHERE empresa_id = $1 AND loja_id IS NULL`,
+    [empresaId]
+  );
+  if (rows[0]) return rows[0];
+  return { faixas: FAIXAS_PADRAO, minutos_atencao: 30, minutos_iminente: 15, sla_padrao_min: 90 };
+}
+
+// Salva (cria/atualiza) a config de SLA. lojaId NULL = global; com lojaId = sobrescreve só aquele cliente.
+async function salvarSla({ empresaId, lojaId = null, faixas, minutosAtencao, minutosIminente, slaPadraoMin, usuarioId, ip }) {
+  const f = normalizarFaixas(faixas);
+  if (!f.length) throw AppError.validacao('Informe ao menos uma faixa de km → minutos');
+  const atencao = Number.isFinite(+minutosAtencao) ? Math.max(1, Math.round(+minutosAtencao)) : 30;
+  const iminente = Number.isFinite(+minutosIminente) ? Math.max(1, Math.round(+minutosIminente)) : 15;
+  const padrao = Number.isFinite(+slaPadraoMin) ? Math.max(1, Math.round(+slaPadraoMin)) : 90;
+
+  if (lojaId) {
+    const loja = await query(`SELECT id FROM lojas WHERE id = $1 AND empresa_id = $2`, [lojaId, empresaId]);
+    if (!loja.rows[0]) throw AppError.naoEncontrado('Cliente não encontrado');
+    await query(
+      `INSERT INTO sla_config (empresa_id, loja_id, faixas, minutos_atencao, minutos_iminente, sla_padrao_min, atualizado_em)
+       VALUES ($1,$2,$3,$4,$5,$6, now())
+       ON CONFLICT (empresa_id, loja_id) WHERE loja_id IS NOT NULL
+       DO UPDATE SET faixas = $3, minutos_atencao = $4, minutos_iminente = $5, sla_padrao_min = $6, atualizado_em = now()`,
+      [empresaId, lojaId, JSON.stringify(f), atencao, iminente, padrao]
+    );
+  } else {
+    await query(
+      `INSERT INTO sla_config (empresa_id, loja_id, faixas, minutos_atencao, minutos_iminente, sla_padrao_min, atualizado_em)
+       VALUES ($1, NULL, $2,$3,$4,$5, now())
+       ON CONFLICT (empresa_id) WHERE loja_id IS NULL
+       DO UPDATE SET faixas = $2, minutos_atencao = $3, minutos_iminente = $4, sla_padrao_min = $5, atualizado_em = now()`,
+      [empresaId, JSON.stringify(f), atencao, iminente, padrao]
+    );
+  }
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'config', acao: lojaId ? 'salvar_sla_cliente' : 'salvar_sla_global', detalhe: { lojaId }, ip }).catch(() => {});
+  return { ok: true, faixas: f, minutos_atencao: atencao, minutos_iminente: iminente, sla_padrao_min: padrao };
+}
+
+// Remove a config de SLA de uma loja (ela volta a usar a global).
+async function removerSlaLoja({ empresaId, lojaId, usuarioId, ip }) {
+  await query(`DELETE FROM sla_config WHERE empresa_id = $1 AND loja_id = $2`, [empresaId, lojaId]);
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'config', acao: 'remover_sla_cliente', detalhe: { lojaId }, ip }).catch(() => {});
+  return { ok: true };
+}
+
+// Atalho usado por outros módulos: SLA efetivo de um cliente (próprio ou global).
+async function slaEfetivoCliente({ empresaId, lojaId }) {
+  const r = await obterSla({ empresaId, lojaId });
+  return { faixas: r.faixas, minutos_atencao: r.minutos_atencao, minutos_iminente: r.minutos_iminente, sla_padrao_min: r.sla_padrao_min, tem_propria: !!r.tem_propria };
+}

@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
+import { EditorSla } from './sla-editor.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -31,7 +32,7 @@ export async function montar(container) {
   // ── Sub-abas do módulo ──────────────────────────────────────────
   const ABAS = [
     { id: 'fretes', rotulo: 'Categorias de Frete' },
-    // futuras: SLA, Disparo, etc.
+    { id: 'sla', rotulo: 'SLA Global' },
   ];
   let _aba = 'fretes';
 
@@ -51,6 +52,7 @@ export async function montar(container) {
   function renderPainel() {
     painel.innerHTML = '';
     if (_aba === 'fretes') painel.append(abaCategoriasFrete());
+    else if (_aba === 'sla') painel.append(abaSlaGlobal());
   }
 
   conteudo.append(navAbas, painel);
@@ -169,6 +171,32 @@ function abaCategoriasFrete() {
     btn.onclick = async () => { try { btn.disabled = true; await del(`/config/frete-categorias/${c.id}`); ov.remove(); toast('Categoria excluída'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
 
+  carregar();
+  return wrap;
+}
+
+// ── Aba: SLA Global ───────────────────────────────────────────────
+function abaSlaGlobal() {
+  const wrap = el('div', {});
+  wrap.append(
+    el('div', { style: 'margin-bottom:18px' },
+      el('h3', { style: 'font-size:16px;font-weight:800;margin:0 0 2px' }, 'SLA Global'),
+      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0' }, 'Prazos padrão de entrega por distância. Vale para todos os clientes — exceto os que tiverem um SLA próprio configurado em “Gerir cliente → SLA”.')));
+
+  const editor = EditorSla();
+  const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:22px', onClick: salvar }, 'Salvar SLA global');
+  wrap.append(editor, btnSalvar);
+
+  async function carregar() {
+    try { const r = await get('/config/sla'); editor.preencher(r); }
+    catch (e) { toast(e.message || 'Erro ao carregar SLA', 'erro'); }
+  }
+  async function salvar() {
+    const v = editor.obterValor();
+    if (!v.faixas.length) { toast('Adicione ao menos uma faixa', 'erro'); return; }
+    try { btnSalvar.disabled = true; await put('/config/sla', v); toast('SLA global salvo'); }
+    catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
+  }
   carregar();
   return wrap;
 }

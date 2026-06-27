@@ -60,6 +60,39 @@ function initConfigRoutes() {
     catch (e) { next(e); }
   });
 
+  // ── SLA global ─────────────────────────────────────────────────
+  router.get('/sla', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.obterSla({ empresaId: req.empresaId, lojaId: null })); } catch (e) { next(e); }
+  });
+  router.put('/sla', exigirCentral, async (req, res, next) => {
+    try {
+      res.json(await service.salvarSla({
+        empresaId: req.empresaId, lojaId: null,
+        faixas: req.body.faixas, minutosAtencao: req.body.minutos_atencao,
+        minutosIminente: req.body.minutos_iminente, slaPadraoMin: req.body.sla_padrao_min,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  // ── SLA por cliente (sobrescreve o global) ─────────────────────
+  router.get('/sla/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.obterSla({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }
+  });
+  router.put('/sla/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try {
+      res.json(await service.salvarSla({
+        empresaId: req.empresaId, lojaId: req.params.lojaId,
+        faixas: req.body.faixas, minutosAtencao: req.body.minutos_atencao,
+        minutosIminente: req.body.minutos_iminente, slaPadraoMin: req.body.sla_padrao_min,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+  router.delete('/sla/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.removerSlaLoja({ empresaId: req.empresaId, lojaId: req.params.lojaId, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
+  });
+
   return router;
 }
 

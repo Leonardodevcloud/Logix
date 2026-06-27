@@ -1,5 +1,6 @@
 import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
+import { EditorSla } from './sla-editor.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -46,6 +47,7 @@ export function abrirGestaoCliente(loja, aoFechar) {
     { id: 'modalidades', rotulo: 'Modalidades de frete' },
     { id: 'regras', rotulo: 'Regras de acionamento' },
     { id: 'motos', rotulo: 'Atribuição de motos' },
+    { id: 'sla', rotulo: 'SLA' },
   ];
   let _aba = 'centros';
   const nav = el('div', { style: 'display:flex;gap:2px;padding:0 26px;border-bottom:1px solid var(--lx-linha);overflow-x:auto' });
@@ -68,6 +70,7 @@ export function abrirGestaoCliente(loja, aoFechar) {
     else if (_aba === 'modalidades') corpo.append(abaModalidades(loja));
     else if (_aba === 'regras') corpo.append(abaRegras(loja));
     else if (_aba === 'motos') corpo.append(abaMotos(loja));
+    else if (_aba === 'sla') corpo.append(abaSlaCliente(loja));
   }
   function fechar() { overlay.remove(); if (aoFechar) aoFechar(); }
 
@@ -383,6 +386,66 @@ function abaMotos(loja) {
       try { btn.disabled = true; await post(`/clientes/${loja.id}/motoboys`, { motoboyId: mbEscolhido.id, modalidadeId: selMod.value || null }); ov.remove(); toast('Motoboy atribuído'); carregar(); }
       catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
+  }
+  carregar();
+  return wrap;
+}
+
+// ── Aba: SLA do cliente (sobrescreve o global) ────────────────────
+function abaSlaCliente(loja) {
+  const wrap = el('div', {});
+  wrap.append(secHead('SLA do cliente', 'Por padrão, este cliente usa o SLA global. Ative um SLA próprio para definir prazos exclusivos — ele sobrescreve o global apenas para este cliente.'));
+
+  // Toggle: usar SLA próprio?
+  const sw = el('input', { type: 'checkbox', style: 'width:38px;height:20px;cursor:pointer;accent-color:var(--lx-ok);flex:none' });
+  const lblToggle = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);margin-bottom:18px' },
+    el('div', {},
+      el('div', { style: 'font-size:13.5px;font-weight:700' }, 'SLA próprio deste cliente'),
+      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, 'Quando desligado, vale o SLA global.')),
+    sw);
+
+  const editor = EditorSla();
+  const editorWrap = el('div', { style: 'display:none' }, editor);
+  const aviso = el('div', { style: 'display:none;font-size:12.5px;color:var(--lx-tinta-2);padding:10px 14px;background:var(--lx-info-bg);border-radius:8px;margin-bottom:16px' });
+
+  const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:20px;display:none', onClick: salvar }, 'Salvar SLA do cliente');
+  const btnRemover = el('button', { class: 'lx-btn lx-btn-secundario', style: 'margin-top:20px;margin-left:10px;display:none;color:var(--lx-erro)', onClick: remover }, 'Remover SLA próprio');
+
+  wrap.append(lblToggle, aviso, editorWrap, el('div', { style: 'display:flex' }, btnSalvar, btnRemover));
+
+  let _temPropria = false;
+
+  sw.onchange = () => {
+    const on = sw.checked;
+    editorWrap.style.display = on ? 'block' : 'none';
+    btnSalvar.style.display = on ? 'inline-flex' : 'none';
+    btnRemover.style.display = (on && _temPropria) ? 'inline-flex' : 'none';
+    aviso.style.display = on ? 'none' : 'block';
+    if (!on) aviso.textContent = 'Este cliente está usando o SLA global. Ative acima para definir um SLA próprio.';
+  };
+
+  async function carregar() {
+    try {
+      const r = await get(`/config/sla/cliente/${loja.id}`);
+      _temPropria = !!r.tem_propria;
+      sw.checked = _temPropria;
+      // preenche o editor com a config própria (se houver) ou com a global como ponto de partida
+      editor.preencher(_temPropria ? r : (r.global || r));
+      sw.onchange();
+    } catch (e) { toast(e.message || 'Erro ao carregar SLA', 'erro'); }
+  }
+  async function salvar() {
+    const v = editor.obterValor();
+    if (!v.faixas.length) { toast('Adicione ao menos uma faixa', 'erro'); return; }
+    try { btnSalvar.disabled = true; await put(`/config/sla/cliente/${loja.id}`, v); _temPropria = true; btnRemover.style.display = 'inline-flex'; toast('SLA do cliente salvo'); }
+    catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
+  }
+  function remover() {
+    confirmar('Remover SLA próprio', 'O cliente voltará a usar o SLA global. Continuar?', async () => {
+      await del(`/config/sla/cliente/${loja.id}`);
+      _temPropria = false; sw.checked = false; sw.onchange();
+      toast('SLA próprio removido — usando o global');
+    }, 'Remover', true);
   }
   carregar();
   return wrap;
