@@ -363,11 +363,15 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
 
   const semAssociacao = [], emAndamento = [], concluidas = [], canceladas = [];
   for (const r of rows) {
-    // status SLA (só faz sentido para corridas ainda não concluídas/canceladas)
-    if (!['entregue', 'cancelada'].includes(r.status)) {
-      r.sla = calcularStatusSla(r, slaPorLoja.get(r.loja_id) || slaGeral);
-    } else {
+    const cfg = slaPorLoja.get(r.loja_id) || slaGeral;
+    if (r.status === 'entregue') {
+      // veredito final: compara a hora de conclusão com o vencimento
+      r.sla = calcularStatusSla(r, cfg, r.concluida_em ? new Date(r.concluida_em).getTime() : Date.now(), true);
+    } else if (r.status === 'cancelada') {
       r.sla = null;
+    } else {
+      // em aberto: compara com agora
+      r.sla = calcularStatusSla(r, cfg, Date.now(), false);
     }
     if (r.status === 'aguardando_atribuicao') semAssociacao.push(r);
     else if (['aguardando_coleta', 'em_coleta', 'em_rota'].includes(r.status)) emAndamento.push(r);
@@ -379,12 +383,12 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
 }
 
 // Calcula o status de SLA de uma corrida com base na config (faixas por km).
-// Retorna { nivel, rotulo, vencimentoIso, minutosRestantes } ou null se sem config.
-// Níveis: 'no_prazo' | 'atencao' | 'iminente' | 'fora_prazo'.
-function calcularStatusSla(corrida, cfg) {
+// `momento` = instante de referência (Date.now() para ativas; concluida_em para finalizadas).
+// `final` = true quando é veredito de corrida concluída (só No prazo / Fora do prazo).
+// Retorna { nivel, rotulo, vencimentoIso, minutosRestantes, final } ou null se sem config.
+function calcularStatusSla(corrida, cfg, momento = Date.now(), final = false) {
   if (!cfg) return null;
   const km = corrida.distancia_km != null ? Number(corrida.distancia_km) : null;
-  // descobre os minutos de SLA pela faixa de km (ou o padrão)
   let minutos = cfg.sla_padrao_min || 90;
   if (km != null && Array.isArray(cfg.faixas) && cfg.faixas.length) {
     const faixa = [...cfg.faixas].sort((a, b) => a.ate_km - b.ate_km).find(f => km <= f.ate_km);
@@ -392,17 +396,22 @@ function calcularStatusSla(corrida, cfg) {
   }
   const criado = new Date(corrida.criado_em).getTime();
   const vencimento = criado + minutos * 60000;
-  const restanteMin = Math.round((vencimento - Date.now()) / 60000);
+  const restanteMin = Math.round((vencimento - momento) / 60000);
   const atencao = cfg.minutos_atencao ?? 30;
   const iminente = cfg.minutos_iminente ?? 15;
 
   let nivel, rotulo;
-  if (restanteMin < 0) { nivel = 'fora_prazo'; rotulo = 'Fora do prazo'; }
-  else if (restanteMin <= iminente) { nivel = 'iminente'; rotulo = 'Atraso iminente'; }
-  else if (restanteMin <= atencao) { nivel = 'atencao'; rotulo = 'Atenção'; }
-  else { nivel = 'no_prazo'; rotulo = 'No prazo'; }
-
-  return { nivel, rotulo, vencimentoIso: new Date(vencimento).toISOString(), minutosRestantes: restanteMin };
+  if (final) {
+    // veredito de corrida concluída: só dois resultados
+    if (restanteMin < 0) { nivel = 'fora_prazo'; rotulo = 'Fora do prazo'; }
+    else { nivel = 'no_prazo'; rotulo = 'No prazo'; }
+  } else {
+    if (restanteMin < 0) { nivel = 'fora_prazo'; rotulo = 'Fora do prazo'; }
+    else if (restanteMin <= iminente) { nivel = 'iminente'; rotulo = 'Atraso iminente'; }
+    else if (restanteMin <= atencao) { nivel = 'atencao'; rotulo = 'Atenção'; }
+    else { nivel = 'no_prazo'; rotulo = 'No prazo'; }
+  }
+  return { nivel, rotulo, vencimentoIso: new Date(vencimento).toISOString(), minutosRestantes: restanteMin, final };
 }
 
 // Trajeto GPS de uma entrega: pontos do rastreamento (ordenados) + coleta + destinos.
@@ -693,9 +702,28 @@ async function finalizarManual({ empresaId, id, usuarioId, ip }) {
   return { ok: true };
 }
 
+// Reabre uma corrida concluída: volta para a fila de atribuição (Sem associação)
+// e remove o motoboy. Os pontos voltam para pendente.
+async function reabrirEntrega({ empresaId, id, usuarioId, ip }) {
+  const { rows: ent } = await query(`SELECT id, status, protocolo FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  if (ent[0].status !== 'entregue') throw AppError.validacao('Só é possível reabrir corridas concluídas');
+
+  await query(`UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL WHERE entrega_id = $1`, [id]);
+  await query(
+    `UPDATE entregas SET status = 'aguardando_atribuicao', motoboy_id = NULL,
+        concluida_em = NULL, iniciada_em = NULL, tempo_total_min = NULL
+     WHERE id = $1 AND empresa_id = $2`,
+    [id, empresaId]
+  );
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'reabrir', detalhe: { id }, ip }).catch(() => {});
+  emitirParaEmpresa(empresaId, 'entrega.reaberta', { id, protocolo: ent[0].protocolo });
+  return { ok: true, protocolo: ent[0].protocolo };
+}
+
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual,
+  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

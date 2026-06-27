@@ -108,6 +108,7 @@ const P = {
   add: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>',
   x2: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   rota: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+  reabrir: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
 };
 
 function carregarFiltros() {
@@ -345,6 +346,11 @@ export async function montar(container) {
     const ov = modal('Finalizar corrida', el('p', { style: 'font-size:14px' }, `Finalizar ${c.protocolo} manualmente? Todos os pontos serão marcados como entregues.`), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
     btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/finalizar`, {}); ov.remove(); toast('Finalizada'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
+  function abrirReabrir(c) {
+    const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Reabrir corrida');
+    const ov = modal('Reabrir corrida', el('p', { style: 'font-size:14px' }, `Reabrir ${c.protocolo}? A corrida volta para “Sem associação”, o motoboy${c.motoboy_nome ? ' ' + c.motoboy_nome : ''} será removido e ela ficará disponível para nova atribuição.`), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
+    btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/reabrir`, {}); ov.remove(); toast('Corrida reaberta — voltou para Sem associação'); setAba('sem'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
+  }
   // Campo de endereço com autocomplete via /entregas/geocode.
   // Retorna { wrap, getValor } — getValor() devolve { endereco, lat, lng } do escolhido (ou texto digitado).
   function campoGeo(rotulo, valorInicial) {
@@ -480,6 +486,7 @@ export async function montar(container) {
     } else if (_aba === 'con') {
       w.append(botaoIcone(P.rota, 'Ver rota do GPS', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
+      if (podeEditar) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
     } else {
       w.append(botaoIcone(P.rota, 'Ver rota', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver detalhes', () => abrirProtocolo(c)));
@@ -509,9 +516,15 @@ export async function montar(container) {
     };
     const c = cores[sla.nivel] || cores.no_prazo;
     const min = sla.minutosRestantes;
-    const sub = sla.nivel === 'fora_prazo'
-      ? `há ${Math.abs(min)} min`
-      : (min != null ? `faltam ${min} min` : '');
+    let sub;
+    if (sla.final) {
+      // veredito de corrida concluída: "X min antes" / "X min depois"
+      if (min == null) sub = '';
+      else if (min >= 0) sub = `${min} min antes`;
+      else sub = `${Math.abs(min)} min depois`;
+    } else {
+      sub = sla.nivel === 'fora_prazo' ? `há ${Math.abs(min)} min` : (min != null ? `faltam ${min} min` : '');
+    }
     return el('div', { style: 'display:flex;flex-direction:column;gap:2px;align-items:flex-start' },
       el('span', { style: `font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:${c.bg};color:${c.cor};white-space:nowrap` }, sla.rotulo),
       sub ? el('span', { style: 'font-size:10px;color:var(--lx-tinta-3)' }, sub) : el('span', {}));
@@ -529,7 +542,7 @@ export async function montar(container) {
     // Colunas por aba. 'sem' tem checkbox e direção; as demais têm coluna de motoboy.
     const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
       : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
-      : _aba === 'con' ? '76px 1.5fr 130px 104px 104px 96px'
+      : _aba === 'con' ? '76px 1.4fr 120px 100px 100px 118px 96px'
       : '76px 1.5fr 130px 104px 104px 96px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
@@ -555,6 +568,7 @@ export async function montar(container) {
       celulas.push(celulaMotoboy(c));       // Motoboy
       celulas.push(dataHora(c.criado_em));  // Solicitação
       celulas.push(dataHora(c.concluida_em)); // Concluída
+      celulas.push(slaBadge(c.sla));        // Status (veredito final)
     } else { // canceladas
       celulas.push(celulaMotoboy(c));       // Motoboy
       celulas.push(dataHora(c.criado_em));  // Solicitação
@@ -568,11 +582,11 @@ export async function montar(container) {
   function cabecalho() {
     const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
       : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
-      : _aba === 'con' ? '76px 1.5fr 130px 104px 104px 96px'
+      : _aba === 'con' ? '76px 1.4fr 120px 100px 100px 118px 96px'
       : '76px 1.5fr 130px 104px 104px 96px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Status', 'Ações']
       : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Concluída', 'Ações']
+      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
       : ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
     const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
     if (_aba === 'sem') {

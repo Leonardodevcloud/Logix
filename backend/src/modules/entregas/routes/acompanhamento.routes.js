@@ -90,5 +90,14 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // PATCH /entregas/:id/reabrir — reabre corrida concluída (volta para a fila, sem motoboy)
+  router.patch('/:id/reabrir', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      res.json(await service.reabrirEntrega({
+        empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   return router;
 };
