@@ -82,6 +82,33 @@ function _lerObservacao(body) {
 module.exports = function motoboyAppRoutes() {
   const router = express.Router();
 
+  // GET /motoboys/app/perfil — dados completos + estatísticas para a aba Perfil.
+  router.get('/app/perfil', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const id = req.motoboy.id;
+      const { rows } = await query(
+        `SELECT m.id, m.nome_completo, m.cpf, m.codigo, m.telefone_principal, m.telefone_emergencia,
+                m.foto_url, m.online, m.status, m.criado_em
+           FROM motoboys m WHERE m.id = $1`,
+        [id]
+      );
+      if (!rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
+      const m = rows[0];
+
+      // Estatísticas: concluídas e ganhos (hoje, mês, total). Em centavos.
+      const { rows: stat } = await query(
+        `SELECT
+            count(*) FILTER (WHERE status = 'entregue')::int AS total_entregues,
+            count(*) FILTER (WHERE status = 'entregue' AND concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date)::int AS entregues_hoje,
+            COALESCE(SUM(valor_motoboy_cent) FILTER (WHERE status = 'entregue' AND concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date), 0)::bigint AS ganhos_hoje_cent,
+            COALESCE(SUM(valor_motoboy_cent) FILTER (WHERE status = 'entregue' AND date_trunc('month', concluida_em AT TIME ZONE 'America/Bahia') = date_trunc('month', now() AT TIME ZONE 'America/Bahia')), 0)::bigint AS ganhos_mes_cent
+           FROM entregas WHERE motoboy_id = $1`,
+        [id]
+      );
+      res.json({ ...m, ...stat[0] });
+    } catch (e) { next(e); }
+  });
+
   // GET /motoboys/app/eu
   router.get('/app/eu', verificarTokenMotoboy, async (req, res, next) => {
     try {
