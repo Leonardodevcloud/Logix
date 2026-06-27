@@ -42,6 +42,7 @@ async function migrarMotoboys() {
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS motivo_reenvio TEXT",
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS revisado_por UUID",
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS revisado_em TIMESTAMPTZ",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS ativado_em TIMESTAMPTZ",
   ];
   for (const sql of cols) { try { await query(sql); } catch {} }
 

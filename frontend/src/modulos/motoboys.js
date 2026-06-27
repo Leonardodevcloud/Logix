@@ -3,6 +3,7 @@ import { el, icones, secHeader, estadoVazio, campo } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import * as auth from '../core/auth.js';
 import { abaCadastros } from './motoboy-cadastros.js';
+import { abaNovoMotoboy } from './motoboy-novo.js';
 import { abaConfigCadastro, abaModalidadesInteresse } from './motoboy-config.js';
 
 function fmtCpf(c) {
@@ -14,6 +15,16 @@ function iniciais(nome) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'M';
 }
 const CORES = ['#185FA5','#534AB7','#0F6E56','#854F0B','#993C1D','#6b4fc9'];
+
+// Avatar do motoboy: usa a selfie (foto_url) quando houver; senão, iniciais coloridas.
+export function avatarMotoboy(m, tam = 34, esmaecido = false) {
+  const cor = CORES[(m.nome_completo || '').length % CORES.length];
+  const base = `width:${tam}px;height:${tam}px;border-radius:50%;flex:none;opacity:${esmaecido ? '0.45' : '1'}`;
+  if (m.foto_url) {
+    return el('img', { src: m.foto_url, alt: m.nome_completo || '', style: `${base};object-fit:cover`, onerror: function () { this.style.display = 'none'; } });
+  }
+  return el('div', { style: `${base};background:${cor};color:#fff;display:grid;place-items:center;font-weight:800;font-size:${Math.round(tam * 0.36)}px` }, iniciais(m.nome_completo));
+}
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -82,8 +93,7 @@ export async function montar(container) {
     return el('tr', {},
       el('td', {},
         el('div', { style: 'display:flex;align-items:center;gap:11px' },
-          el('div', { style: `width:34px;height:34px;border-radius:50%;background:${cor};color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none;opacity:${inativo?'0.45':'1'}` },
-            iniciais(m.nome_completo)),
+          avatarMotoboy(m, 34, inativo),
           el('div', {},
             el('div', { style: `font-weight:700;color:var(--lx-tinta);${inativo?'opacity:.5':''}` }, m.nome_completo),
             el('div', { style: 'color:var(--lx-tinta-2);font-size:11.5px' }, m.endereco ? m.endereco.split(',')[0] : '—')))),
@@ -207,19 +217,14 @@ export async function montar(container) {
       tabAtivos, tabInativos, tabOnline, tabTodos, resumo),
     tabBody);
 
-  // Conteúdo da aba "Frota" (o conteúdo original do módulo).
-  const conteudoFrota = el('div', {});
-  if (podeGerenciar) conteudoFrota.append(secHeader('Novo motoboy'), formNovo(carregar));
-  conteudoFrota.append(secHeader('Profissionais'), lista);
-
   // ── Navegação de abas do módulo ──────────────────────────────────
   const ABAS = [
-    { id: 'frota', rotulo: 'Frota' },
     { id: 'cadastros', rotulo: 'Cadastros' },
+    { id: 'novo', rotulo: 'Novo motoboy' },
     { id: 'modalidades', rotulo: 'Modalidades de interesse' },
     { id: 'config', rotulo: 'Config de cadastro' },
   ];
-  let _aba = 'frota';
+  let _aba = 'cadastros';
   const nav = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);margin-bottom:18px;flex-wrap:wrap' });
   const painel = el('div', {});
 
@@ -235,8 +240,8 @@ export async function montar(container) {
   }
   function renderPainel() {
     painel.innerHTML = '';
-    if (_aba === 'frota') { painel.append(conteudoFrota); carregar(); }
-    else if (_aba === 'cadastros') painel.append(abaCadastros());
+    if (_aba === 'cadastros') painel.append(abaCadastros());
+    else if (_aba === 'novo') painel.append(abaNovoMotoboy(() => { _aba = 'cadastros'; renderNav(); renderPainel(); }));
     else if (_aba === 'modalidades') painel.append(abaModalidadesInteresse());
     else if (_aba === 'config') painel.append(abaConfigCadastro());
   }

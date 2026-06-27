@@ -68,7 +68,12 @@ function rotasCentralCadastro() {
 
   // Lista de cadastros (com contadores).
   router.get('/cadastros', async (req, res, next) => {
-    try { res.json(await service.listarCadastros({ empresaId: req.empresaId, situacao: req.query.situacao || null, busca: req.query.busca || null })); } catch (e) { next(e); }
+    try { res.json(await service.listarCadastros({ empresaId: req.empresaId, situacao: req.query.situacao || null, busca: req.query.busca || null, criadoDe: req.query.criado_de || null, criadoAte: req.query.criado_ate || null, ativadoDe: req.query.ativado_de || null, ativadoAte: req.query.ativado_ate || null })); } catch (e) { next(e); }
+  });
+
+  // Cadastro pela central (admin) — nada obrigatório, já entra ativo.
+  router.post('/cadastros', async (req, res, next) => {
+    try { res.status(201).json(await service.cadastrarPeloAdmin({ empresaId: req.empresaId, dados: req.body, usuarioId: req.usuario.id })); } catch (e) { next(e); }
   });
 
   // Detalhe completo (com documentos e URLs).
@@ -85,6 +90,14 @@ function rotasCentralCadastro() {
   });
   router.post('/cadastros/:id/reenvio', async (req, res, next) => {
     try { res.json(await service.solicitarReenvio({ empresaId: req.empresaId, motoboyId: req.params.id, motivo: req.body.motivo, docsParaRemover: req.body.docs_para_remover || [], usuarioId: req.usuario.id })); } catch (e) { next(e); }
+  });
+
+  // Ativar / desativar (status operacional).
+  router.post('/cadastros/:id/ativar', async (req, res, next) => {
+    try { res.json(await service.ativarMotoboy({ empresaId: req.empresaId, motoboyId: req.params.id })); } catch (e) { next(e); }
+  });
+  router.post('/cadastros/:id/desativar', async (req, res, next) => {
+    try { res.json(await service.desativarMotoboy({ empresaId: req.empresaId, motoboyId: req.params.id })); } catch (e) { next(e); }
   });
 
   // Editar dados (inclui senha).

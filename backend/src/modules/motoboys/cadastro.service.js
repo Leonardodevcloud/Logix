@@ -7,6 +7,18 @@ try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catc
 let emitirParaMotoboy = () => {};
 try { emitirParaMotoboy = require('../../realtime/ws').emitirParaMotoboy; } catch {}
 
+// Calcula o "status na tela" combinando situacao_cadastro + status operacional.
+// Pendente / Reenvio (cadastro em andamento) → mostra a situação.
+// Aprovado → Ativo ou Inativo conforme o status operacional.
+// Recusado → Recusado.
+function statusExibicao({ situacao_cadastro, status }) {
+  if (situacao_cadastro === 'pendente') return 'pendente';
+  if (situacao_cadastro === 'reenvio') return 'reenvio';
+  if (situacao_cadastro === 'recusado') return 'recusado';
+  // aprovado
+  return status === 'inativo' ? 'inativo' : 'ativo';
+}
+
 const TIPOS_DOC = ['selfie', 'habilitacao', 'comprovante_endereco', 'antecedentes'];
 
 // Converte data para o formato AAAA-MM-DD que o Postgres aceita.
@@ -185,16 +197,105 @@ function rotuloDoc(tipo) {
   return { selfie: 'Selfie', habilitacao: 'Habilitação (CNH)', comprovante_endereco: 'Comprovante de endereço', antecedentes: 'Antecedentes criminais' }[tipo] || tipo;
 }
 
+// ── Cadastro pela CENTRAL (admin) ─────────────────────────────────
+// Mesmo formato do app, porém NADA é obrigatório (pode salvar incompleto).
+// Já entra aprovado + ativo (origem 'central'). Admin pode subir os documentos.
+async function cadastrarPeloAdmin({ empresaId, dados, usuarioId }) {
+  const d = dados || {};
+  const nome = String(d.nome_completo || '').trim();
+  if (!nome) throw AppError.validacao('Informe ao menos o nome do motoboy');
+
+  const cpf = String(d.cpf || '').replace(/\D/g, '');
+  const tel = String(d.telefone_principal || '').replace(/\D/g, '');
+  const email = String(d.email || '').trim().toLowerCase();
+  const nascimento = normalizarData(d.data_nascimento);
+
+  // Validações leves: só checa formato se o campo foi preenchido.
+  if (cpf && cpf.length !== 11) throw AppError.validacao('CPF inválido');
+  if (email && !/^[^@]+@[^@]+\.[^@]+$/.test(email)) throw AppError.validacao('E-mail inválido');
+
+  // Duplicidade só quando há CPF ou e-mail informado.
+  if (cpf || email) {
+    const dup = await query(
+      `SELECT id FROM motoboys WHERE empresa_id = $1 AND (($2 <> '' AND cpf = $2) OR ($3 <> '' AND lower(email) = $3)) LIMIT 1`,
+      [empresaId, cpf, email]
+    );
+    if (dup.rows[0]) throw AppError.conflito('Já existe um motoboy com este CPF ou e-mail.');
+  }
+
+  const senhaHash = d.senha ? await bcrypt.hash(String(d.senha), 10) : null;
+
+  const { rows } = await query(
+    `INSERT INTO motoboys (empresa_id, nome_completo, cpf, data_nascimento, telefone_principal, telefone_emergencia,
+        email, senha_hash, cep, logradouro, numero, complemento, bairro, cidade, estado,
+        modalidade_interesse_id, situacao_cadastro, origem_cadastro, status, revisado_por, revisado_em, ativado_em,
+        codigo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'aprovado','central','ativo',$17,now(),now(),
+        (SELECT COALESCE(MAX(codigo),0)+1 FROM motoboys WHERE empresa_id = $1))
+     RETURNING id, codigo`,
+    [empresaId, nome, cpf || null, nascimento, tel || null, String(d.telefone_emergencia || '').replace(/\D/g, '') || null,
+     email || null, senhaHash, String(d.cep || '').replace(/\D/g, '') || null, d.logradouro || null, d.numero || null,
+     d.complemento || null, d.bairro || null, d.cidade || null, (d.estado || '').toUpperCase().slice(0, 2) || null,
+     d.modalidade_interesse_id || null, usuarioId || null]
+  );
+  const motoboyId = rows[0].id;
+
+  // Documentos enviados pelo admin (opcionais), em base64.
+  const docs = d.documentos || {};
+  for (const tipo of TIPOS_DOC) {
+    if (docs[tipo]) {
+      try {
+        const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: docs[tipo] });
+        await query(
+          `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho)
+           VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
+          [empresaId, motoboyId, tipo, key, mime, tamanho]
+        );
+      } catch (e) { /* documento opcional: ignora falha individual */ }
+    }
+  }
+  return { ok: true, motoboy_id: motoboyId, codigo: rows[0].codigo };
+}
+
+// Ativar / desativar (status operacional) de um motoboy aprovado.
+async function ativarMotoboy({ empresaId, motoboyId }) {
+  const { rows } = await query(
+    `UPDATE motoboys SET status = 'ativo', ativado_em = COALESCE(ativado_em, now())
+      WHERE id = $1 AND empresa_id = $2 AND situacao_cadastro = 'aprovado' RETURNING id`,
+    [motoboyId, empresaId]
+  );
+  if (!rows[0]) throw AppError.validacao('Só é possível ativar um motoboy aprovado');
+  return { ok: true };
+}
+async function desativarMotoboy({ empresaId, motoboyId }) {
+  const { rows } = await query(
+    `UPDATE motoboys SET status = 'inativo', online = FALSE
+      WHERE id = $1 AND empresa_id = $2 AND situacao_cadastro = 'aprovado' RETURNING id`,
+    [motoboyId, empresaId]
+  );
+  if (!rows[0]) throw AppError.validacao('Só é possível desativar um motoboy aprovado');
+  return { ok: true };
+}
+
 // ── Central: listar cadastros (pendentes/aprovados) ───────────────
-async function listarCadastros({ empresaId, situacao = null, busca = null }) {
+async function listarCadastros({ empresaId, situacao = null, busca = null, criadoDe = null, criadoAte = null, ativadoDe = null, ativadoAte = null }) {
   const params = [empresaId];
   const cond = ['m.empresa_id = $1'];
-  if (situacao) { params.push(situacao); cond.push(`m.situacao_cadastro = $${params.length}`); }
+  // `situacao` aceita os status de exibição combinados.
+  if (situacao === 'ativo') cond.push(`m.situacao_cadastro = 'aprovado' AND m.status = 'ativo'`);
+  else if (situacao === 'inativo') cond.push(`m.situacao_cadastro = 'aprovado' AND m.status = 'inativo'`);
+  else if (situacao === 'pendente') cond.push(`m.situacao_cadastro IN ('pendente','reenvio')`);
+  else if (situacao === 'recusado') cond.push(`m.situacao_cadastro = 'recusado'`);
+  else if (situacao) { params.push(situacao); cond.push(`m.situacao_cadastro = $${params.length}`); }
   if (busca) { params.push('%' + busca + '%'); cond.push(`(m.nome_completo ILIKE $${params.length} OR m.cpf ILIKE $${params.length} OR m.email ILIKE $${params.length})`); }
+  if (criadoDe)  { params.push(criadoDe);  cond.push(`m.criado_em >= $${params.length}`); }
+  if (criadoAte) { params.push(criadoAte); cond.push(`m.criado_em <= $${params.length}`); }
+  if (ativadoDe)  { params.push(ativadoDe);  cond.push(`m.ativado_em >= $${params.length}`); }
+  if (ativadoAte) { params.push(ativadoAte); cond.push(`m.ativado_em <= $${params.length}`); }
   const { rows } = await query(
     `SELECT m.id, m.codigo, m.nome_completo, m.cpf, m.email, m.telefone_principal,
-            m.situacao_cadastro, m.origem_cadastro, m.criado_em, m.modalidade_interesse_id,
-            mi.nome AS modalidade_nome,
+            m.situacao_cadastro, m.status, m.origem_cadastro, m.criado_em, m.ativado_em, m.revisado_em,
+            m.modalidade_interesse_id, mi.nome AS modalidade_nome,
             (SELECT d.storage_key FROM motoboy_documentos d WHERE d.motoboy_id = m.id AND d.tipo = 'selfie' LIMIT 1) AS selfie_key,
             (SELECT count(*)::int FROM motoboy_documentos d WHERE d.motoboy_id = m.id) AS qtd_documentos
        FROM motoboys m
@@ -203,19 +304,24 @@ async function listarCadastros({ empresaId, situacao = null, busca = null }) {
       ORDER BY CASE m.situacao_cadastro WHEN 'pendente' THEN 0 WHEN 'reenvio' THEN 1 ELSE 2 END, m.criado_em DESC`,
     params
   );
-  // Gera a URL assinada fresca da selfie (não pode ser persistida; expira).
+  // Gera a URL assinada fresca da selfie + status de exibição combinado.
   for (const r of rows) {
     if (r.selfie_key) { try { r.foto_url = await storage.urlDe(r.selfie_key); } catch { r.foto_url = null; } }
     delete r.selfie_key;
+    r.status_exibicao = statusExibicao(r);
   }
-  // Contadores por situação.
+  // Contadores pelos status de exibição (o que a tela mostra nos filtros).
   const { rows: cont } = await query(
-    `SELECT situacao_cadastro, count(*)::int AS qtd FROM motoboys WHERE empresa_id = $1 GROUP BY situacao_cadastro`,
+    `SELECT
+        count(*) FILTER (WHERE situacao_cadastro = 'aprovado' AND status = 'ativo')::int   AS ativo,
+        count(*) FILTER (WHERE situacao_cadastro = 'aprovado' AND status = 'inativo')::int AS inativo,
+        count(*) FILTER (WHERE situacao_cadastro IN ('pendente','reenvio'))::int           AS pendente,
+        count(*) FILTER (WHERE situacao_cadastro = 'recusado')::int                        AS recusado,
+        count(*)::int AS todos
+       FROM motoboys WHERE empresa_id = $1`,
     [empresaId]
   );
-  const contadores = {};
-  cont.forEach(c => { contadores[c.situacao_cadastro] = c.qtd; });
-  return { cadastros: rows, contadores };
+  return { cadastros: rows, contadores: cont[0] || {} };
 }
 
 // ── Central: detalhe completo de um cadastro ──────────────────────
@@ -246,7 +352,7 @@ async function detalheCadastro({ empresaId, motoboyId }) {
 async function aprovarCadastro({ empresaId, motoboyId, usuarioId, ip }) {
   const { rows } = await query(
     `UPDATE motoboys SET situacao_cadastro = 'aprovado', status = 'ativo', motivo_reenvio = NULL,
-            revisado_por = $3, revisado_em = now()
+            revisado_por = $3, revisado_em = now(), ativado_em = COALESCE(ativado_em, now())
       WHERE id = $1 AND empresa_id = $2 RETURNING id, nome_completo`,
     [motoboyId, empresaId, usuarioId]
   );
@@ -370,7 +476,8 @@ async function reenviarCadastro({ empresaId, motoboyId, dados }) {
 module.exports = {
   obterConfigCadastro, salvarConfigCadastro,
   listarModalidadesInteresse, criarModalidadeInteresse, atualizarModalidadeInteresse, excluirModalidadeInteresse,
-  cadastrarPeloApp, listarCadastros, detalheCadastro,
+  cadastrarPeloApp, cadastrarPeloAdmin, listarCadastros, detalheCadastro,
   aprovarCadastro, recusarCadastro, solicitarReenvio, editarCadastro, removerDocumento,
+  ativarMotoboy, desativarMotoboy,
   meuCadastro, reenviarCadastro,
 };

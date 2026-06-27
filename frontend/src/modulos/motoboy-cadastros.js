@@ -20,10 +20,12 @@ function modal(titulo, corpo, acoes, larguraMax = '560px') {
   document.body.append(ov); return ov;
 }
 
-const SITUACOES = {
+// Status de exibição combinado (vem pronto do backend em status_exibicao).
+const STATUS = {
   pendente: { rotulo: 'Pendente', cor: '#b45309', bg: '#fef3c7' },
   reenvio: { rotulo: 'Aguardando reenvio', cor: '#7c2d12', bg: '#ffedd5' },
-  aprovado: { rotulo: 'Aprovado', cor: '#15803d', bg: '#dcfce7' },
+  ativo: { rotulo: 'Ativo', cor: '#15803d', bg: '#dcfce7' },
+  inativo: { rotulo: 'Inativo', cor: '#475569', bg: '#e2e8f0' },
   recusado: { rotulo: 'Recusado', cor: '#b91c1c', bg: '#fee2e2' },
 };
 const DOCS = [
@@ -33,30 +35,47 @@ const DOCS = [
   { tipo: 'antecedentes', rotulo: 'Antecedentes criminais' },
 ];
 
-// ── Aba de cadastros (lista + filtros + abrir revisão) ────────────
+// ── Aba de cadastros (lista todos: pendentes, ativos, inativos, recusados) ──
 export function abaCadastros() {
   const wrap = el('div', {});
-  let _filtro = 'pendente';
+  let _filtro = '';
   let _busca = '';
+  let _criadoDe = '', _criadoAte = '', _ativadoDe = '', _ativadoAte = '';
 
   const chips = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px' });
-  const busca = el('input', { class: 'lx-input', placeholder: 'Buscar por nome, CPF ou e-mail…', style: 'max-width:320px;margin-bottom:14px' });
+  const busca = el('input', { class: 'lx-input', placeholder: 'Buscar por nome, CPF ou e-mail…', style: 'max-width:320px' });
   busca.addEventListener('input', () => { _busca = busca.value; carregar(); });
+
+  // Filtros de data (cadastro e ativação).
+  const dataInput = (ph) => el('input', { class: 'lx-input', type: 'date', style: 'max-width:160px', title: ph });
+  const fCriadoDe = dataInput('Cadastro de'), fCriadoAte = dataInput('Cadastro até');
+  const fAtivadoDe = dataInput('Ativação de'), fAtivadoAte = dataInput('Ativação até');
+  [fCriadoDe, fCriadoAte, fAtivadoDe, fAtivadoAte].forEach(i => i.addEventListener('change', () => {
+    _criadoDe = fCriadoDe.value; _criadoAte = fCriadoAte.value; _ativadoDe = fAtivadoDe.value; _ativadoAte = fAtivadoAte.value; carregar();
+  }));
+  const filtrosData = el('details', { style: 'margin-bottom:14px' },
+    el('summary', { style: 'cursor:pointer;font-size:12.5px;color:var(--lx-tinta-2);font-weight:700;padding:6px 0' }, 'Filtrar por data'),
+    el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding:12px;background:var(--lx-superficie-2);border-radius:10px' },
+      el('div', {}, el('label', { style: 'font-size:11px;color:var(--lx-tinta-2);display:block;margin-bottom:4px' }, 'Cadastro: de / até'),
+        el('div', { style: 'display:flex;gap:6px' }, fCriadoDe, fCriadoAte)),
+      el('div', {}, el('label', { style: 'font-size:11px;color:var(--lx-tinta-2);display:block;margin-bottom:4px' }, 'Ativação: de / até'),
+        el('div', { style: 'display:flex;gap:6px' }, fAtivadoDe, fAtivadoAte))));
+
   const lista = el('div', {});
-  wrap.append(chips, busca, lista);
+  wrap.append(chips, el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap' }, busca), filtrosData, lista);
 
   const FILTROS = [
-    { id: 'pendente', rotulo: 'Pendentes' },
-    { id: 'reenvio', rotulo: 'Reenvio' },
-    { id: 'aprovado', rotulo: 'Aprovados' },
-    { id: 'recusado', rotulo: 'Recusados' },
-    { id: '', rotulo: 'Todos' },
+    { id: '', rotulo: 'Todos', chave: 'todos' },
+    { id: 'pendente', rotulo: 'Pendentes', chave: 'pendente' },
+    { id: 'ativo', rotulo: 'Ativos', chave: 'ativo' },
+    { id: 'inativo', rotulo: 'Inativos', chave: 'inativo' },
+    { id: 'recusado', rotulo: 'Recusados', chave: 'recusado' },
   ];
 
   function renderChips(contadores = {}) {
     chips.innerHTML = '';
     FILTROS.forEach(f => {
-      const n = f.id ? (contadores[f.id] || 0) : Object.values(contadores).reduce((a, b) => a + b, 0);
+      const n = contadores[f.chave] || 0;
       const on = _filtro === f.id;
       chips.append(el('button', {
         class: 'lx-chip' + (on ? ' lx-chip-on' : ''),
@@ -71,6 +90,10 @@ export function abaCadastros() {
       const q = new URLSearchParams();
       if (_filtro) q.set('situacao', _filtro);
       if (_busca) q.set('busca', _busca);
+      if (_criadoDe) q.set('criado_de', _criadoDe);
+      if (_criadoAte) q.set('criado_ate', _criadoAte + 'T23:59:59');
+      if (_ativadoDe) q.set('ativado_de', _ativadoDe);
+      if (_ativadoAte) q.set('ativado_ate', _ativadoAte + 'T23:59:59');
       const r = await get('/motoboys/cadastros?' + q.toString());
       renderChips(r.contadores);
       render(r.cadastros);
@@ -80,24 +103,43 @@ export function abaCadastros() {
   function render(cadastros) {
     lista.innerHTML = '';
     if (!cadastros.length) {
-      lista.append(el('div', { style: 'padding:40px;text-align:center;color:var(--lx-tinta-3);font-size:14px' }, 'Nenhum cadastro nesta categoria.'));
+      lista.append(el('div', { style: 'padding:40px;text-align:center;color:var(--lx-tinta-3);font-size:14px' }, 'Nenhum motoboy nesta categoria.'));
       return;
     }
     cadastros.forEach(c => {
-      const s = SITUACOES[c.situacao_cadastro] || SITUACOES.pendente;
+      const s = STATUS[c.status_exibicao] || STATUS.pendente;
       const av = c.foto_url
         ? el('img', { src: c.foto_url, style: 'width:46px;height:46px;border-radius:50%;object-fit:cover;flex:none' })
         : el('div', { style: 'width:46px;height:46px;border-radius:50%;background:var(--lx-azul-primario);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none' }, iniciais(c.nome_completo));
+
+      // Ações conforme o status.
+      const acoes = el('div', { style: 'display:flex;gap:8px;align-items:center' });
+      const aprovado = c.situacao_cadastro === 'aprovado';
+      // Botão principal: "Editar" se aprovado, "Verificar" se pendente/reenvio/recusado.
+      acoes.append(el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px;padding:8px 14px', onClick: () => abrirRevisao(c.id, carregar) }, aprovado ? 'Editar' : 'Verificar'));
+      // Toggle ativar/desativar (só para aprovados).
+      if (aprovado) {
+        const ativo = c.status_exibicao === 'ativo';
+        acoes.append(el('button', {
+          class: 'lx-btn lx-btn-secundario', style: `font-size:12.5px;padding:8px 12px;color:${ativo ? 'var(--lx-erro)' : 'var(--lx-ok)'}`,
+          onClick: async () => {
+            try { await post(`/motoboys/cadastros/${c.id}/${ativo ? 'desativar' : 'ativar'}`, {}); toast(ativo ? 'Motoboy desativado' : 'Motoboy ativado'); carregar(); }
+            catch (e) { toast(e.message || 'Erro', 'erro'); }
+          },
+        }, ativo ? 'Desativar' : 'Ativar'));
+      }
+
       const card = el('div', { style: 'display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);margin-bottom:8px;background:var(--lx-superficie)' },
         av,
         el('div', { style: 'flex:1;min-width:0' },
           el('div', { style: 'font-weight:700;font-size:14px' }, c.nome_completo),
           el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' },
-            `${fmtCpf(c.cpf)} · ${c.email || 'sem e-mail'}${c.modalidade_nome ? ' · ' + c.modalidade_nome : ''}`)),
-        el('div', { style: 'text-align:right' },
-          el('span', { style: `display:inline-block;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700;background:${s.bg};color:${s.cor}` }, s.rotulo),
-          el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:4px' }, `${c.qtd_documentos} doc(s) · ${dataBR(c.criado_em)}`)),
-        el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px;padding:8px 14px', onClick: () => abrirRevisao(c.id, carregar) }, 'Verificar'));
+            `${fmtCpf(c.cpf)} · ${c.email || 'sem e-mail'}${c.modalidade_nome ? ' · ' + c.modalidade_nome : ''}`),
+          el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:3px' },
+            `Cadastro: ${dataBR(c.criado_em)}${c.ativado_em ? ' · Ativação: ' + dataBR(c.ativado_em) : ''} · ${c.qtd_documentos} doc(s)`)),
+        el('div', { style: 'text-align:right;min-width:90px' },
+          el('span', { style: `display:inline-block;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700;background:${s.bg};color:${s.cor}` }, s.rotulo)),
+        acoes);
       lista.append(card);
     });
   }
