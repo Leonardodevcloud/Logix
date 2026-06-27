@@ -50,7 +50,8 @@ function montarApp() {
   app.use(helmet());
   const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({ origin: origensCors.length ? origensCors : true, credentials: true }));
-  app.use(express.json({ limit: '2mb' }));
+  // 15mb: o cadastro do app envia até 4 documentos/fotos em base64 numa única requisição.
+  app.use(express.json({ limit: '15mb' }));
   app.use(cookieParser());
   app.use(sanitizarEntrada);
   app.use(requestLogger);
