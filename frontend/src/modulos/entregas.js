@@ -410,6 +410,13 @@ function CampoBusca({ onConfirmar, onLimpar }) {
     inpRow.style.display = 'none';
     confirmadoWrap.style.display = 'block';
     confirmadoWrap.innerHTML = '';
+
+    // Botão de salvar este endereço para uso futuro (com apelido).
+    const jaSalvo = !!(r.apelido && r.id); // veio dos salvos
+    const btnSalvar = el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px', title: 'Salvar endereço',
+      html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>' });
+    btnSalvar.addEventListener('click', () => abrirSalvar(r, btnSalvar));
+
     confirmadoWrap.append(
       el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
         el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }),
@@ -417,14 +424,46 @@ function CampoBusca({ onConfirmar, onLimpar }) {
           el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
           r.numero ? el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600' }, 'Nº ' + r.numero) : el('span', {}),
           el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '))),
-        el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap;flex:none', onClick: () => {
-          _confirmado = null;
-          inpRow.style.display = '';
-          confirmadoWrap.style.display = 'none';
-          inp.value = '';
-          if (onLimpar) onLimpar();
-        }}, 'Trocar')));
+        el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none' },
+          el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap', onClick: () => {
+            _confirmado = null;
+            inpRow.style.display = '';
+            confirmadoWrap.style.display = 'none';
+            inp.value = '';
+            if (onLimpar) onLimpar();
+          }}, 'Trocar'),
+          jaSalvo ? el('span', { style: 'font-size:10px;color:var(--lx-tinta-3)' }, 'salvo') : btnSalvar)));
     if (onConfirmar) onConfirmar(r);
+  }
+
+  // Modal para salvar o endereço confirmado com um apelido.
+  function abrirSalvar(r, btnRef) {
+    const apelido = el('input', { class: 'lx-input', placeholder: 'Ex: Casa do cliente, Loja Centro…', value: r.apelido || '' });
+    const ov = el('div', { style: 'position:fixed;inset:0;background:rgba(4,44,83,.45);display:flex;align-items:center;justify-content:center;z-index:2200' });
+    const box = el('div', { style: 'background:var(--lx-superficie);border-radius:var(--lx-raio-lg);padding:24px;width:420px;max-width:94vw;box-shadow:0 24px 60px -20px rgba(4,44,83,.4)' },
+      el('h3', { style: 'font-size:16px;font-weight:800;margin:0 0 4px' }, 'Salvar endereço'),
+      el('p', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin:0 0 16px' }, r.label || r.endereco_completo || r.endereco || ''),
+      el('div', { class: 'lx-field' }, el('label', {}, 'Apelido'), apelido),
+      el('div', { style: 'display:flex;gap:10px;justify-content:flex-end;margin-top:18px' },
+        el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'),
+        (() => { const b = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar'); b.onclick = async () => {
+          const ap = apelido.value.trim();
+          if (!ap) { apelido.focus(); return; }
+          try {
+            b.disabled = true;
+            await post('/entregas/enderecos-salvos', {
+              apelido: ap,
+              endereco_completo: r.label || r.endereco_completo || r.endereco || ap,
+              lat: r.lat, lng: r.lng, bairro: r.bairro, cidade: r.cidade, uf: r.uf,
+            });
+            ov.remove();
+            if (btnRef) { btnRef.innerHTML = '✓ salvo'; btnRef.style.color = 'var(--lx-ok)'; btnRef.style.pointerEvents = 'none'; }
+          } catch (e) { b.disabled = false; }
+        }; return b; })()));
+    ov.append(box);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.append(ov);
+    setTimeout(() => apelido.focus(), 50);
   }
 
   inp.addEventListener('input', () => {
@@ -558,19 +597,58 @@ export async function montar(container) {
   const _acesso = auth.acessoAtual();
   const _ehCentral = _acesso.perfil === 'super_admin' || _acesso.perfil === 'central_admin';
   let _lojas = [];
-  const lojaSel = el('select', { class: 'lx-input' });
+  let _lojaEscolhida = null; // { id, nome_fantasia, ... }
+
+  // Campo de busca livre de cliente (nome ou CNPJ/código). Substitui o dropdown
+  // para funcionar bem com muitos clientes.
+  const lojaInput = el('input', { class: 'lx-input', placeholder: 'Buscar cliente por nome ou código…', autocomplete: 'off' });
+  const lojaDrop = el('div', { style: 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:var(--lx-raio-sm);z-index:200;max-height:240px;overflow-y:auto;box-shadow:var(--lx-sombra)' });
+  const lojaInputWrap = el('div', { style: 'position:relative' }, lojaInput, lojaDrop);
   const lojaWrap = el('div', { style: 'padding:12px 14px 0;display:none' },
-    el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' }, 'Loja'),
-    lojaSel);
+    el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' }, 'Cliente'),
+    lojaInputWrap);
+
+  // objeto compatível com o resto do código (lojaSel.value)
+  const lojaSel = { value: null, _listeners: [], addEventListener(ev, fn) { if (ev === 'change') this._listeners.push(fn); }, _emitChange() { this._listeners.forEach(fn => fn()); } };
+
+  function escolherLoja(l) {
+    _lojaEscolhida = l;
+    lojaSel.value = l ? l.id : null;
+    lojaInput.value = l ? l.nome_fantasia : '';
+    lojaDrop.style.display = 'none';
+    lojaSel._emitChange();
+  }
+  function renderLojaDrop(filtro) {
+    const f = (filtro || '').toLowerCase().trim();
+    const vis = _lojas.filter(l => !f
+      || (l.nome_fantasia || '').toLowerCase().includes(f)
+      || (l.cnpj || '').toLowerCase().includes(f)
+      || (l.id || '').toLowerCase().startsWith(f));
+    lojaDrop.innerHTML = '';
+    if (!vis.length) { lojaDrop.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:var(--lx-tinta-3)">Nenhum cliente</div>'; lojaDrop.style.display = 'block'; return; }
+    vis.slice(0, 40).forEach(l => {
+      const row = el('div', { style: 'display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => escolherLoja(l) },
+        el('div', { style: 'flex:1;min-width:0' },
+          el('b', { style: 'font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, l.nome_fantasia),
+          l.cnpj ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, l.cnpj) : el('span', {})));
+      row.addEventListener('mouseenter', () => row.style.background = 'var(--lx-superficie-2)');
+      row.addEventListener('mouseleave', () => row.style.background = '');
+      lojaDrop.append(row);
+    });
+    lojaDrop.style.display = 'block';
+  }
+  lojaInput.addEventListener('focus', () => renderLojaDrop(lojaInput.value));
+  lojaInput.addEventListener('input', () => { _lojaEscolhida = null; lojaSel.value = null; renderLojaDrop(lojaInput.value); });
+  document.addEventListener('click', e => { if (!lojaInputWrap.contains(e.target)) lojaDrop.style.display = 'none'; }, true);
+
   if (_ehCentral && auth.temModulo('lojas')) {
     get('/lojas?ativo=true').then(ls => {
       _lojas = ls || [];
       if (_lojas.length >= 1) {
-        lojaSel.innerHTML = '';
-        _lojas.forEach(l => lojaSel.append(el('option', { value: l.id }, l.nome_fantasia)));
         lojaWrap.style.display = '';
+        // pré-seleciona a primeira para já carregar o contexto
+        escolherLoja(_lojas[0]);
       }
-      carregarContextoLoja();
     }).catch(() => {});
   } else {
     // Usuário de loja: carrega o contexto da própria loja.
