@@ -413,26 +413,28 @@ function CampoBusca({ onConfirmar, onLimpar }) {
 
     // Botão de salvar este endereço para uso futuro (com apelido).
     const jaSalvo = !!(r.apelido && r.id); // veio dos salvos
-    const btnSalvar = el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:4px', title: 'Salvar endereço',
-      html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>' });
+    const btnSalvar = el('button', { style: 'font-size:11.5px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:var(--lx-superficie);border:1px dashed var(--lx-azul-claro);border-radius:6px;padding:6px 10px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;margin-top:8px', title: 'Salvar endereço',
+      html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span>Clique para salvar este endereço para uso futuro</span>' });
     btnSalvar.addEventListener('click', () => abrirSalvar(r, btnSalvar));
 
     confirmadoWrap.append(
-      el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
-        el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }),
-        el('div', { style: 'flex:1;min-width:0' },
-          el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
-          r.numero ? el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600' }, 'Nº ' + r.numero) : el('span', {}),
-          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '))),
-        el('div', { style: 'display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none' },
-          el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap', onClick: () => {
+      el('div', {},
+        el('div', { style: 'display:flex;align-items:flex-start;gap:8px;padding:9px 11px;background:var(--lx-info-bg);border-radius:var(--lx-raio-sm)' },
+          el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }),
+          el('div', { style: 'flex:1;min-width:0' },
+            el('b', { style: 'font-size:12.5px;color:var(--lx-azul-profundo);display:block' }, r.apelido || r.label || r.endereco_completo || '—'),
+            r.numero ? el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:600' }, 'Nº ' + r.numero) : el('span', {}),
+            el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, [r.bairro, r.cidade, r.uf].filter(Boolean).join(' · '))),
+          el('button', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700;cursor:pointer;background:none;border:none;white-space:nowrap;flex:none', onClick: () => {
             _confirmado = null;
             inpRow.style.display = '';
             confirmadoWrap.style.display = 'none';
             inp.value = '';
             if (onLimpar) onLimpar();
-          }}, 'Trocar'),
-          jaSalvo ? el('span', { style: 'font-size:10px;color:var(--lx-tinta-3)' }, 'salvo') : btnSalvar)));
+          }}, 'Trocar')),
+        jaSalvo
+          ? el('div', { style: 'font-size:11px;color:var(--lx-ok);font-weight:600;margin-top:6px;display:flex;align-items:center;gap:5px' }, '✓ Endereço já salvo')
+          : btnSalvar));
     if (onConfirmar) onConfirmar(r);
   }
 
@@ -646,8 +648,7 @@ export async function montar(container) {
       _lojas = ls || [];
       if (_lojas.length >= 1) {
         lojaWrap.style.display = '';
-        // pré-seleciona a primeira para já carregar o contexto
-        escolherLoja(_lojas[0]);
+        // Começa em branco — o operador deve buscar o cliente (evita erro por inércia).
       }
     }).catch(() => {});
   } else {
@@ -655,7 +656,7 @@ export async function montar(container) {
     setTimeout(() => carregarContextoLoja(), 0);
   }
   function lojaSelecionada() {
-    if (_ehCentral && _lojas.length >= 1) return lojaSel.value || _lojas[0]?.id || null;
+    if (_ehCentral) return lojaSel.value || null; // exige escolha explícita
     return null; // usuário de loja: backend resolve pelo token
   }
 
@@ -746,6 +747,7 @@ export async function montar(container) {
       return { endereco: v.label || v.apelido || v.endereco_completo, lat: v.lat, lng: v.lng, numero: v.numero || d.numero, nome_fantasia: d.nome_fantasia, numero_nf: d.numero_nf, complemento: d.complemento, observacoes: d.observacoes, telefone: d.telefone };
     }).filter(Boolean);
     if (!destinos.length) { toast('Confirme ao menos um destino', 'erro'); return; }
+    if (_ehCentral && !lojaSelecionada()) { toast('Selecione o cliente', 'erro'); return; }
     if (!modoAuto.val && !mbId.val) { toast('Selecione um motoboy ou modo automático', 'erro'); return; }
     if (selModalidade.disabled || !selModalidade.value) { toast('Selecione a modalidade de frete', 'erro'); return; }
     btnCriar.disabled = true; btnCriar.childNodes[1].textContent = ' Criando…';
@@ -788,6 +790,16 @@ export async function montar(container) {
   // Carrega modalidades + centros da loja escolhida (ou da loja do usuário).
   async function carregarContextoLoja() {
     const lid = lojaSelecionada();
+
+    // Central ainda não escolheu o cliente: pede para selecionar.
+    if (_ehCentral && !lid) {
+      selModalidade.innerHTML = '';
+      selModalidade.append(el('option', { value: '' }, 'Selecione o cliente primeiro'));
+      selModalidade.disabled = true;
+      centroWrap.style.display = 'none';
+      return;
+    }
+
     const idUrl = lid || 'self'; // usuário de loja: backend resolve pelo token
 
     selModalidade.innerHTML = '';
@@ -820,6 +832,8 @@ export async function montar(container) {
     }
   }
   lojaSel.addEventListener('change', carregarContextoLoja);
+  // estado inicial (central sem cliente)
+  if (_ehCentral) carregarContextoLoja();
 
   const sideNova = el('div', { style: 'display:flex;flex-direction:column;gap:0;flex:1' },
     lojaWrap,
