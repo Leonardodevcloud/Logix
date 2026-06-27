@@ -109,6 +109,7 @@ const P = {
   x2: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   rota: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
   reabrir: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  logs: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
 };
 
 function carregarFiltros() {
@@ -351,6 +352,51 @@ export async function montar(container) {
     const ov = modal('Reabrir corrida', el('p', { style: 'font-size:14px' }, `Reabrir ${c.protocolo}? A corrida volta para “Sem associação”, o motoboy${c.motoboy_nome ? ' ' + c.motoboy_nome : ''} será removido e ela ficará disponível para nova atribuição.`), [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Voltar'), btn]);
     btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/reabrir`, {}); ov.remove(); toast('Corrida reaberta — voltou para Sem associação'); setAba('sem'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
+
+  // Modal de logs: timeline completa da corrida.
+  async function abrirLogs(c) {
+    const corpo = el('div', { style: 'min-height:120px' }, el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Carregando histórico…'));
+    const ov = modal(`Histórico — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+    const box = ov.querySelector('div'); if (box) box.style.width = '560px';
+    let dados;
+    try { dados = await get(`/entregas/${c.id}/logs`); } catch { corpo.innerHTML = ''; corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-erro)' }, 'Erro ao carregar o histórico.')); return; }
+
+    const fmt = iso => { const d = new Date(iso); return d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
+    const corEvento = t => {
+      if (['criada'].includes(t)) return 'var(--lx-azul-primario)';
+      if (['atribuir', 'atribuir-lote', 'reatribuir', 'disparar-oferta'].includes(t)) return '#0891b2';
+      if (['iniciada', 'ponto_entregue', 'concluida'].includes(t)) return 'var(--lx-ok)';
+      if (['cancelar', 'cancelada'].includes(t)) return 'var(--lx-erro)';
+      if (['reabrir'].includes(t)) return '#9333ea';
+      if (['editar_enderecos'].includes(t)) return '#a16207';
+      return 'var(--lx-tinta-2)';
+    };
+    const origemTag = o => o === 'app'
+      ? el('span', { style: 'font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--lx-info-bg);color:var(--lx-azul-primario)' }, '🏍 App')
+      : el('span', { style: 'font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--lx-superficie-2);color:var(--lx-tinta-2)' }, '🖥 Central');
+
+    corpo.innerHTML = '';
+    if (!dados.eventos || !dados.eventos.length) { corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-tinta-2)' }, 'Sem registros para esta corrida.')); return; }
+    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:60vh;overflow:auto' });
+    dados.eventos.forEach((ev, i) => {
+      const ultimo = i === dados.eventos.length - 1;
+      const cor = corEvento(ev.tipo);
+      const linha = el('div', { style: 'display:flex;gap:12px;align-items:stretch' });
+      // coluna do marcador + linha vertical
+      const trilho = el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:14px;flex-shrink:0' },
+        el('span', { style: `width:11px;height:11px;border-radius:50%;background:${cor};margin-top:4px;flex-shrink:0` }),
+        ultimo ? el('span', {}) : el('span', { style: 'flex:1;width:2px;background:var(--lx-linha);margin:2px 0' }));
+      const det = ev.detalhe && ev.detalhe.endereco ? ` · ${ev.detalhe.endereco}` : (ev.detalhe && ev.detalhe.recebedor ? ` · recebido por ${ev.detalhe.recebedor}` : '');
+      const conteudo = el('div', { style: 'padding-bottom:14px;min-width:0;flex:1' },
+        el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
+          el('span', { style: `font-size:13px;font-weight:700;color:${cor}` }, ev.titulo),
+          origemTag(ev.origem)),
+        el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);margin-top:2px' }, `${fmt(ev.em)} · ${ev.autor || 'Sistema'}${det}`));
+      linha.append(trilho, conteudo);
+      lista.append(linha);
+    });
+    corpo.append(lista);
+  }
   // Campo de endereço com autocomplete via /entregas/geocode.
   // Retorna { wrap, getValor } — getValor() devolve { endereco, lat, lng } do escolhido (ou texto digitado).
   function campoGeo(rotulo, valorInicial) {
@@ -476,20 +522,25 @@ export async function montar(container) {
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
+      w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'and') {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.mapa, 'Rastreio ao vivo', () => { location.hash = '/rastreio'; }));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
+      w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'con') {
       w.append(botaoIcone(P.rota, 'Ver rota do GPS', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
+      w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       if (podeEditar) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
-    } else {
+    } else { // canceladas
       w.append(botaoIcone(P.rota, 'Ver rota', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver detalhes', () => abrirProtocolo(c)));
+      w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
+      if (podeEditar) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
     }
     return w;
   }
@@ -540,10 +591,10 @@ export async function montar(container) {
 
   function linha(c) {
     // Colunas por aba. 'sem' tem checkbox e direção; as demais têm coluna de motoboy.
-    const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
-      : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
-      : _aba === 'con' ? '76px 1.4fr 120px 100px 100px 118px 96px'
-      : '76px 1.5fr 130px 104px 104px 96px'; // canceladas
+    const cols = _aba === 'sem' ? '34px 70px 1.1fr 88px 92px 104px 250px'
+      : _aba === 'and' ? '72px 1.2fr 120px 96px 110px 248px'
+      : _aba === 'con' ? '72px 1.3fr 116px 96px 96px 110px 150px'
+      : '72px 1.3fr 120px 100px 100px 150px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -580,10 +631,10 @@ export async function montar(container) {
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '34px 74px 1.3fr 96px 100px 110px 188px'
-      : _aba === 'and' ? '76px 1.5fr 130px 104px 118px 168px'
-      : _aba === 'con' ? '76px 1.4fr 120px 100px 100px 118px 96px'
-      : '76px 1.5fr 130px 104px 104px 96px';
+    const cols = _aba === 'sem' ? '34px 70px 1.1fr 88px 92px 104px 250px'
+      : _aba === 'and' ? '72px 1.2fr 120px 96px 110px 248px'
+      : _aba === 'con' ? '72px 1.3fr 116px 96px 96px 110px 150px'
+      : '72px 1.3fr 120px 100px 100px 150px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Direção', 'Solicitação', 'Status', 'Ações']
       : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Status', 'Ações']
       : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']

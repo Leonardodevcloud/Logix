@@ -99,5 +99,12 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /entregas/:id/logs — timeline completa da corrida (criação → finalização)
+  router.get('/:id/logs', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      res.json(await service.logsEntrega({ empresaId: req.empresaId, id: req.params.id }));
+    } catch (e) { next(e); }
+  });
+
   return router;
 };

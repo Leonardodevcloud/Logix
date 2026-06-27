@@ -707,23 +707,83 @@ async function finalizarManual({ empresaId, id, usuarioId, ip }) {
 async function reabrirEntrega({ empresaId, id, usuarioId, ip }) {
   const { rows: ent } = await query(`SELECT id, status, protocolo FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
-  if (ent[0].status !== 'entregue') throw AppError.validacao('Só é possível reabrir corridas concluídas');
+  if (!['entregue', 'cancelada'].includes(ent[0].status)) throw AppError.validacao('Só é possível reabrir corridas concluídas ou canceladas');
 
   await query(`UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL WHERE entrega_id = $1`, [id]);
   await query(
     `UPDATE entregas SET status = 'aguardando_atribuicao', motoboy_id = NULL,
-        concluida_em = NULL, iniciada_em = NULL, tempo_total_min = NULL
+        concluida_em = NULL, iniciada_em = NULL, tempo_total_min = NULL,
+        cancelada_em = NULL, cancelado_por = NULL, motivo_cancelamento = NULL
      WHERE id = $1 AND empresa_id = $2`,
     [id, empresaId]
   );
-  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'reabrir', detalhe: { id }, ip }).catch(() => {});
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'reabrir', detalhe: { id, deStatus: ent[0].status }, ip }).catch(() => {});
   emitirParaEmpresa(empresaId, 'entrega.reaberta', { id, protocolo: ent[0].protocolo });
   return { ok: true, protocolo: ent[0].protocolo };
 }
 
+// Monta a timeline (logs) de uma corrida: criação, atribuições, edições, coleta,
+// entregas de pontos, cancelamento, reabertura — por admin ou pelo motoboy.
+async function logsEntrega({ empresaId, id }) {
+  const { rows: ent } = await query(
+    `SELECT e.id, e.protocolo, e.criado_em, e.iniciada_em, e.concluida_em, e.cancelada_em,
+            e.status, e.criado_por, u.nome AS criado_por_nome
+       FROM entregas e LEFT JOIN usuarios u ON u.id = e.criado_por
+      WHERE e.id = $1 AND e.empresa_id = $2`,
+    [id, empresaId]
+  );
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const e = ent[0];
+
+  const eventos = [];
+  // 1) Criação
+  eventos.push({ em: e.criado_em, tipo: 'criada', titulo: 'Corrida criada', autor: e.criado_por_nome || 'Sistema', origem: 'central' });
+
+  // 2) Auditoria relacionada a esta entrega (detalhe contém o id/entregaId, ou ids[] no lote)
+  const { rows: audit } = await query(
+    `SELECT a.acao, a.detalhe, a.criado_em, a.usuario_id, u.nome AS autor
+       FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id
+      WHERE a.empresa_id = $1
+        AND a.categoria IN ('entregas','entrega','ENTREGA','filas','fila')
+        AND (
+          a.detalhe->>'entregaId' = $2 OR a.detalhe->>'id' = $2
+          OR (a.detalhe ? 'ids' AND a.detalhe->'ids' @> to_jsonb($2::text))
+        )
+      ORDER BY a.criado_em ASC`,
+    [empresaId, id]
+  );
+  const rotulos = {
+    'atribuir': 'Motoboy atribuído', 'atribuir-lote': 'Atribuída em lote', 'reatribuir': 'Motoboy trocado',
+    'disparar-oferta': 'Oferta disparada (raio)', 'editar_enderecos': 'Endereços editados',
+    'cancelar': 'Corrida cancelada', 'finalizar_manual': 'Finalizada manualmente', 'reabrir': 'Corrida reaberta',
+  };
+  for (const a of audit) {
+    eventos.push({ em: a.criado_em, tipo: a.acao, titulo: rotulos[a.acao] || a.acao, autor: a.autor || 'Sistema', origem: 'central', detalhe: a.detalhe || null });
+  }
+
+  // 3) Marcos da própria entrega (coleta/conclusão), úteis mesmo sem auditoria
+  if (e.iniciada_em) eventos.push({ em: e.iniciada_em, tipo: 'iniciada', titulo: 'Coleta iniciada', autor: 'Motoboy', origem: 'app' });
+  if (e.concluida_em) eventos.push({ em: e.concluida_em, tipo: 'concluida', titulo: 'Corrida concluída', autor: 'Motoboy', origem: 'app' });
+  if (e.cancelada_em) eventos.push({ em: e.cancelada_em, tipo: 'cancelada', titulo: 'Corrida cancelada', autor: 'Central', origem: 'central' });
+
+  // 4) Entregas de pontos (cada destino finalizado pelo motoboy)
+  const { rows: pontos } = await query(
+    `SELECT ordem, endereco, status, entregue_em, recebedor FROM entregas_pontos
+      WHERE entrega_id = $1 AND entregue_em IS NOT NULL ORDER BY entregue_em ASC`,
+    [id]
+  );
+  for (const p of pontos) {
+    eventos.push({ em: p.entregue_em, tipo: 'ponto_entregue', titulo: `Ponto ${p.ordem} entregue`, autor: 'Motoboy', origem: 'app', detalhe: { endereco: p.endereco, recebedor: p.recebedor } });
+  }
+
+  // ordena por data
+  eventos.sort((a, b) => new Date(a.em) - new Date(b.em));
+  return { protocolo: e.protocolo, status: e.status, eventos };
+}
+
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega,
+  listarAcompanhamento, listarCidadesLojas, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega, logsEntrega,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
