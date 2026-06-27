@@ -3,12 +3,26 @@ const { exigirTenant } = require('../../../middleware/tenant');
 const { exigirPermissao } = require('../../../middleware/permissoes');
 const { limiteRastreamento } = require('../../../middleware/rateLimit');
 const service = require('../entregas.service');
+const clienteHub = require('../../clientehub/clientehub.service');
+const AppError = require('../../../shared/AppError');
 
 // Acompanhamento em tempo real + recebimento de posição do app.
 module.exports = function acompanhamentoRoutes() {
   const router = express.Router();
 
   const csv = v => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
+
+  // Middleware: exige uma permissão do cliente APENAS quando o ator é a loja
+  // (req.lojaId presente). A central (admin) nunca é bloqueada.
+  const exigirPermissaoCliente = (permissao, msg) => async (req, res, next) => {
+    try {
+      if (req.lojaId) {
+        const ok = await clienteHub.lojaPode(req.lojaId, permissao);
+        if (!ok) throw AppError.proibido(msg || 'Ação não permitida para este cliente');
+      }
+      next();
+    } catch (e) { next(e); }
+  };
 
   // GET /entregas/acompanhamento — visão da central (3 seções + filtros).
   // Aceita: loja_ids (csv), cidades (csv), categoria_ids (csv), de, ate, q.
@@ -67,7 +81,9 @@ module.exports = function acompanhamentoRoutes() {
   });
 
   // PATCH /entregas/:id/cancelar
-  router.patch('/:id/cancelar', exigirTenant, async (req, res, next) => {
+  router.patch('/:id/cancelar', exigirTenant,
+    exigirPermissaoCliente('pode_cancelar_associada', 'Este cliente não tem permissão para cancelar corridas já associadas'),
+    async (req, res, next) => {
     try {
       res.json(await service.cancelarEntrega({
         empresaId: req.empresaId, id: req.params.id,
@@ -77,7 +93,9 @@ module.exports = function acompanhamentoRoutes() {
   });
 
   // PUT /entregas/:id/enderecos — editar coleta/pontos de uma entrega ativa
-  router.put('/:id/enderecos', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+  router.put('/:id/enderecos', exigirTenant, exigirPermissao('entregas.editar'),
+    exigirPermissaoCliente('pode_editar_servico', 'Este cliente não tem permissão para editar o serviço'),
+    async (req, res, next) => {
     try {
       res.json(await service.editarEnderecos({
         empresaId: req.empresaId, id: req.params.id,

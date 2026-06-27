@@ -12,14 +12,25 @@ module.exports = function lancamentoRoutes() {
     try {
       // Loja do pedido: usuário de loja usa a própria (do token); central informa no body.
       const lojaId = req.lojaId || req.body.loja_id || null;
+
+      // Permissão "escolher profissional": se o ator é loja e não tem a permissão,
+      // ignora qualquer motoboy escolhido — a corrida cai no fluxo automático.
+      let motoboyId = req.body.motoboy_id;
+      let distribuicao = req.body.distribuicao;
+      if (req.lojaId && motoboyId) {
+        const clienteHub = require('../../clientehub/clientehub.service');
+        const podeEscolher = await clienteHub.lojaPode(req.lojaId, 'pode_escolher_profissional');
+        if (!podeEscolher) { motoboyId = undefined; distribuicao = 'automatica'; }
+      }
+
       const r = await service.criarEntrega({
         empresaId: req.empresaId,
         lojaId,
         criadoPor: req.usuario.id,
         coleta: req.body.coleta,
         destinos: req.body.destinos,
-        distribuicao: req.body.distribuicao,
-        motoboyId: req.body.motoboy_id,
+        distribuicao,
+        motoboyId,
         modalidadeId: req.body.modalidade_id,
         centroCustoId: req.body.centro_custo_id,
         ip: req.ip,

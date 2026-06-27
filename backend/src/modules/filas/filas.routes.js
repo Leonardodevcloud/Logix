@@ -3,10 +3,23 @@ const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirModulo, exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./filas.service');
+const clienteHub = require('../clientehub/clientehub.service');
+const AppError = require('../../shared/AppError');
 
 function initFilasRoutes() {
   const router = express.Router();
   router.use(verificarToken, resolverTenant, exigirTenant, exigirModulo('filas'));
+
+  // Exige permissão do cliente só quando o ator é a loja (req.lojaId). Central nunca é bloqueada.
+  const exigirPermissaoCliente = (permissao, msg) => async (req, res, next) => {
+    try {
+      if (req.lojaId) {
+        const ok = await clienteHub.lojaPode(req.lojaId, permissao);
+        if (!ok) throw AppError.proibido(msg || 'Ação não permitida para este cliente');
+      }
+      next();
+    } catch (e) { next(e); }
+  };
 
   router.get('/', exigirPermissao('filas.ver'), async (req, res, next) => {
     try { res.json(await service.listarFila(req.empresaId)); } catch (e) { next(e); }
@@ -33,7 +46,9 @@ function initFilasRoutes() {
   });
 
   // Troca o motoboy de uma entrega já atribuída/em rota.
-  router.post('/:entregaId/reatribuir', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
+  router.post('/:entregaId/reatribuir', exigirPermissao('filas.gerenciar'),
+    exigirPermissaoCliente('pode_alterar_profissional', 'Este cliente não tem permissão para alterar o profissional'),
+    async (req, res, next) => {
     try {
       res.json(await service.reatribuir({
         empresaId: req.empresaId, entregaId: req.params.entregaId,

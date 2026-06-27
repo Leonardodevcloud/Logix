@@ -39,10 +39,74 @@ function distanciaKm(e, p) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// ── Regras de acionamento efetivas de uma corrida ─────────────────
+// Junta: regras do cliente (raio, máx corridas, só online) + a modalidade da
+// corrida (e se ela é "só exclusivos"). Cai em defaults se não houver config.
+async function regrasDaEntrega(empresaId, entrega) {
+  const lojaId = entrega.loja_id || null;
+  const modalidadeId = entrega.modalidade_id || null;
+
+  // Regras gerais do cliente.
+  let regras = { max_corridas_motoboy: 3, raio_km: 5, somente_online: true };
+  if (lojaId) {
+    const r = await query(
+      `SELECT max_corridas_motoboy, raio_km, somente_online
+         FROM cliente_regras_acionamento WHERE loja_id = $1`,
+      [lojaId]
+    );
+    if (r.rows[0]) regras = r.rows[0];
+  }
+
+  // Modalidade da corrida: é exclusiva?
+  let soExclusivos = false;
+  if (modalidadeId) {
+    const m = await query(`SELECT so_exclusivos FROM cliente_modalidades WHERE id = $1`, [modalidadeId]);
+    if (m.rows[0]) soExclusivos = !!m.rows[0].so_exclusivos;
+  }
+
+  // Se exclusiva, quais motoboys estão atribuídos a este cliente nesta modalidade
+  // (ou em "todas as modalidades", quando modalidade_id da atribuição é NULL).
+  let exclusivosSet = null;
+  if (soExclusivos && lojaId) {
+    const ex = await query(
+      `SELECT motoboy_id FROM cliente_motoboys
+        WHERE loja_id = $1 AND (modalidade_id = $2 OR modalidade_id IS NULL)`,
+      [lojaId, modalidadeId]
+    );
+    exclusivosSet = new Set(ex.rows.map(r => r.motoboy_id));
+  }
+
+  return {
+    maxCorridas: Number(regras.max_corridas_motoboy) || 3,
+    raioKm: Number(regras.raio_km) || 5,
+    somenteOnline: regras.somente_online !== false,
+    soExclusivos,
+    exclusivosSet, // Set de motoboy_id, ou null se não exclusiva
+  };
+}
+
+// Filtra uma lista de motoboys disponíveis pelas regras: máx corridas e
+// exclusividade. (O "só online" já é garantido por listarDisponiveis.)
+function aplicarRegrasElegibilidade(disponiveis, regras) {
+  return disponiveis.filter(d => {
+    // Máx corridas simultâneas.
+    if ((d.carga || 0) >= regras.maxCorridas) return false;
+    // Exclusividade por modalidade.
+    if (regras.exclusivosSet && !regras.exclusivosSet.has(d.id)) return false;
+    return true;
+  });
+}
+
 // Escolhe o melhor motoboy: mais próximo (se houver posição), senão o menos carregado.
+// Respeita as regras de acionamento do cliente (exclusividade, máx corridas).
 async function escolherMotoboy(empresaId, entrega) {
-  const disponiveis = await listarDisponiveis(empresaId);
+  let disponiveis = await listarDisponiveis(empresaId);
   if (!disponiveis.length) return null;
+
+  const regras = await regrasDaEntrega(empresaId, entrega);
+  disponiveis = aplicarRegrasElegibilidade(disponiveis, regras);
+  if (!disponiveis.length) return null;
+
   if (entrega.coleta_lat != null && entrega.coleta_lng != null) {
     const ids = disponiveis.map((d) => d.id);
     const { rows } = await query(
@@ -51,23 +115,38 @@ async function escolherMotoboy(empresaId, entrega) {
       [ids]
     );
     const pos = new Map(rows.map((r) => [r.motoboy_id, r]));
-    const comPos = disponiveis.filter((d) => pos.has(d.id));
+    let comPos = disponiveis.filter((d) => pos.has(d.id));
+    // Respeita o raio do cliente também na automática (só considera quem está no raio).
+    comPos = comPos.filter(d => distanciaKm(entrega, pos.get(d.id)) <= regras.raioKm);
     if (comPos.length) {
       comPos.sort((a, b) => distanciaKm(entrega, pos.get(a.id)) - distanciaKm(entrega, pos.get(b.id)));
       return comPos[0];
     }
   }
-  return disponiveis[0]; // fallback: menor carga
+  return disponiveis[0]; // fallback: menor carga (já filtrado por exclusividade/carga)
 }
 
 // Atribui um motoboy a uma entrega da fila.
 async function atribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
-  const ent = await query(`SELECT id, status, protocolo FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]);
+  const ent = await query(`SELECT id, status, protocolo, loja_id, modalidade_id FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]);
   if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (ent.rows[0].status !== STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) throw AppError.validacao('Entrega não está na fila de atribuição');
 
   const mb = await query(`SELECT id, nome_completo FROM motoboys WHERE id = $1 AND empresa_id = $2 AND online = TRUE AND status = 'ativo'`, [motoboyId, empresaId]);
   if (!mb.rows[0]) throw AppError.validacao('Motoboy indisponível (offline ou inativo)');
+
+  // Regras do cliente: exclusividade da modalidade + limite de corridas.
+  const regras = await regrasDaEntrega(empresaId, ent.rows[0]);
+  if (regras.exclusivosSet && !regras.exclusivosSet.has(motoboyId)) {
+    throw AppError.validacao('Esta modalidade é exclusiva — o motoboy escolhido não está atribuído a este cliente nesta modalidade');
+  }
+  const cargaAtual = await query(
+    `SELECT count(*)::int AS carga FROM entregas WHERE empresa_id = $1 AND motoboy_id = $2 AND status = ANY($3)`,
+    [empresaId, motoboyId, STATUS_ATIVOS]
+  );
+  if ((cargaAtual.rows[0]?.carga || 0) >= regras.maxCorridas) {
+    throw AppError.validacao(`O motoboy já está no limite de ${regras.maxCorridas} corrida(s) simultânea(s) deste cliente`);
+  }
 
   const { rows } = await query(
     `UPDATE entregas SET motoboy_id = $1, status = $2 WHERE id = $3 RETURNING id, protocolo, status, motoboy_id`,
@@ -103,7 +182,7 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
 // configurado. Não atribui ninguém ainda — o primeiro a aceitar leva.
 async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   const ent = await query(
-    `SELECT id, status, protocolo, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`,
+    `SELECT id, status, protocolo, coleta_lat, coleta_lng, loja_id, modalidade_id FROM entregas WHERE id = $1 AND empresa_id = $2`,
     [entregaId, empresaId]
   );
   if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
@@ -111,14 +190,24 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   if (e.status !== STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) throw AppError.validacao('Entrega não está disponível para disparo');
   if (e.coleta_lat == null || e.coleta_lng == null) throw AppError.validacao('Coleta sem coordenadas — geocodifique antes de disparar');
 
-  // Config de raio/expiração (geral da empresa).
-  const cfg = await query(`SELECT raio_disparo_km, oferta_expira_seg FROM sla_config WHERE empresa_id = $1 AND loja_id IS NULL LIMIT 1`, [empresaId]);
-  const raioKm = cfg.rows[0]?.raio_disparo_km != null ? Number(cfg.rows[0].raio_disparo_km) : 5;
+  // Regras efetivas do cliente (raio, máx corridas, exclusividade da modalidade).
+  const regras = await regrasDaEntrega(empresaId, e);
+  const raioKm = regras.raioKm;
+
+  // Expiração da oferta (config geral da empresa).
+  const cfg = await query(`SELECT oferta_expira_seg FROM sla_config WHERE empresa_id = $1 AND loja_id IS NULL LIMIT 1`, [empresaId]);
   const expiraSeg = cfg.rows[0]?.oferta_expira_seg != null ? Number(cfg.rows[0].oferta_expira_seg) : 120;
 
-  // Motoboys online + ativos, com a última posição conhecida.
-  const disp = await listarDisponiveis(empresaId);
+  // Motoboys online + ativos, filtrados pelas regras (exclusividade + máx corridas).
+  let disp = await listarDisponiveis(empresaId);
   if (!disp.length) throw AppError.validacao('Nenhum motoboy online no momento');
+  disp = aplicarRegrasElegibilidade(disp, regras);
+  if (!disp.length) {
+    throw AppError.validacao(regras.soExclusivos
+      ? 'Nenhum motoboy exclusivo deste cliente está elegível (online e abaixo do limite de corridas)'
+      : 'Nenhum motoboy elegível (todos no limite de corridas)');
+  }
+
   const ids = disp.map(d => d.id);
   const { rows: posicoes } = await query(
     `SELECT DISTINCT ON (motoboy_id) motoboy_id, lat, lng FROM rastreamento
@@ -127,7 +216,7 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   );
   const posMap = new Map(posicoes.map(p => [p.motoboy_id, p]));
 
-  // Filtra quem está dentro do raio.
+  // Filtra quem está dentro do raio do cliente.
   const candidatos = [];
   for (const d of disp) {
     const p = posMap.get(d.id);
@@ -135,7 +224,7 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
     const dist = distanciaKm(e, { lat: Number(p.lat), lng: Number(p.lng) });
     if (dist <= raioKm) candidatos.push({ motoboy_id: d.id, distancia_km: Number(dist.toFixed(2)) });
   }
-  if (!candidatos.length) throw AppError.validacao(`Nenhum motoboy dentro do raio de ${raioKm} km`);
+  if (!candidatos.length) throw AppError.validacao(`Nenhum motoboy elegível dentro do raio de ${raioKm} km`);
 
   // Cria a oferta + candidatos.
   const expiraEm = new Date(Date.now() + expiraSeg * 1000).toISOString();
@@ -195,13 +284,13 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
 
 async function atribuirAutomatica({ empresaId, entregaId, usuarioId, ip }) {
   const ent = await query(
-    `SELECT id, status, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]
+    `SELECT id, status, coleta_lat, coleta_lng, loja_id, modalidade_id FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]
   );
   if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (ent.rows[0].status !== STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) throw AppError.validacao('Entrega não está na fila de atribuição');
 
   const escolhido = await escolherMotoboy(empresaId, ent.rows[0]);
-  if (!escolhido) throw AppError.validacao('Nenhum motoboy online disponível no momento');
+  if (!escolhido) throw AppError.validacao('Nenhum motoboy elegível disponível (verifique exclusividade, raio e limite de corridas)');
   return atribuir({ empresaId, entregaId, motoboyId: escolhido.id, usuarioId, ip });
 }
 

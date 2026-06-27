@@ -340,6 +340,19 @@ async function centrosAtivosLoja({ empresaId, lojaId }) {
   return rows;
 }
 
+// ── Checagem de permissão do cliente ──────────────────────────────
+// Retorna TRUE se a loja tem a permissão (default permissivo se não houver
+// linha de regras). Permissões válidas: pode_cancelar_associada,
+// pode_alterar_profissional, pode_editar_servico, pode_escolher_profissional.
+async function lojaPode(lojaId, permissao) {
+  if (!lojaId) return true; // não é loja agindo → sem restrição aqui
+  const colunasOk = ['pode_cancelar_associada', 'pode_alterar_profissional', 'pode_editar_servico', 'pode_escolher_profissional', 'somente_online'];
+  if (!colunasOk.includes(permissao)) return true;
+  const { rows } = await query(`SELECT ${permissao} AS v FROM cliente_regras_acionamento WHERE loja_id = $1`, [lojaId]);
+  if (!rows[0]) return true; // sem config → permissivo (default)
+  return rows[0].v !== false;
+}
+
 module.exports = {
   exigirLoja, alternarStatus,
   listarCentros, criarCentro, atualizarCentro, excluirCentro, criarUsuarioCentro,
@@ -347,5 +360,5 @@ module.exports = {
   listarModalidades, categoriasDisponiveis, adicionarModalidade, atualizarModalidade, removerModalidade,
   obterRegras, salvarRegras,
   listarMotoboysExclusivos, atribuirMotoboy, removerMotoboy, motoboysDisponiveis,
-  modalidadesAtivasLoja, centrosAtivosLoja,
+  modalidadesAtivasLoja, centrosAtivosLoja, lojaPode,
 };
