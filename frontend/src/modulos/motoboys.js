@@ -2,6 +2,8 @@ import { casca } from '../core/layout.js';
 import { el, icones, secHeader, estadoVazio, campo } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import * as auth from '../core/auth.js';
+import { abaCadastros } from './motoboy-cadastros.js';
+import { abaConfigCadastro, abaModalidadesInteresse } from './motoboy-config.js';
 
 function fmtCpf(c) {
   const d = (c || '').replace(/\D/g, '');
@@ -205,12 +207,43 @@ export async function montar(container) {
       tabAtivos, tabInativos, tabOnline, tabTodos, resumo),
     tabBody);
 
-  const filhos = [];
-  if (podeGerenciar) filhos.push(secHeader('Novo motoboy'), formNovo(carregar));
-  filhos.push(secHeader('Profissionais'), lista);
+  // Conteúdo da aba "Frota" (o conteúdo original do módulo).
+  const conteudoFrota = el('div', {});
+  if (podeGerenciar) conteudoFrota.append(secHeader('Novo motoboy'), formNovo(carregar));
+  conteudoFrota.append(secHeader('Profissionais'), lista);
 
-  container.append(casca('Motoboys', el('div', {}, ...filhos), 'Sua frota de entregadores'));
-  carregar();
+  // ── Navegação de abas do módulo ──────────────────────────────────
+  const ABAS = [
+    { id: 'frota', rotulo: 'Frota' },
+    { id: 'cadastros', rotulo: 'Cadastros' },
+    { id: 'modalidades', rotulo: 'Modalidades de interesse' },
+    { id: 'config', rotulo: 'Config de cadastro' },
+  ];
+  let _aba = 'frota';
+  const nav = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);margin-bottom:18px;flex-wrap:wrap' });
+  const painel = el('div', {});
+
+  function renderNav() {
+    nav.innerHTML = '';
+    ABAS.forEach(a => {
+      const on = a.id === _aba;
+      nav.append(el('button', {
+        style: `background:none;border:none;padding:12px 16px;font-size:14px;font-weight:700;cursor:pointer;border-bottom:2px solid ${on?'var(--lx-azul-primario)':'transparent'};color:${on?'var(--lx-azul-primario)':'var(--lx-tinta-2)'};margin-bottom:-1px`,
+        onClick: () => { _aba = a.id; renderNav(); renderPainel(); },
+      }, a.rotulo));
+    });
+  }
+  function renderPainel() {
+    painel.innerHTML = '';
+    if (_aba === 'frota') { painel.append(conteudoFrota); carregar(); }
+    else if (_aba === 'cadastros') painel.append(abaCadastros());
+    else if (_aba === 'modalidades') painel.append(abaModalidadesInteresse());
+    else if (_aba === 'config') painel.append(abaConfigCadastro());
+  }
+
+  container.append(casca('Motoboys', el('div', {}, nav, painel), 'Sua frota de entregadores e cadastros'));
+  renderNav();
+  renderPainel();
 }
 
 function formNovo(aoCriar) {
