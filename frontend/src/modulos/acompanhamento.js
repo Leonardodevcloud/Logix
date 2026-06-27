@@ -551,61 +551,62 @@ export async function montar(container) {
   const btnLimparSel = el('button', { class: 'lx-btn', style: 'background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:6px 12px;font-size:13px', onClick: () => { _sel.clear(); renderTabela(); atualizarBarraSel(); } }, 'Limpar');
   barraSel.append(barraSelTxt, el('div', { style: 'flex:1' }), btnVerRotaLote, btnLimparSel);
 
-  // Modal: mapa com rotas AGRUPADAS (cada grupo = uma cor) + despacho por grupo.
+  // Modal: rotas AGRUPADAS (cada grupo = uma cor) + drag&drop entre grupos + despacho por grupo.
   async function abrirRotaLote() {
-    const ids = [..._sel];
-    if (!ids.length) return;
+    const idsIniciais = [..._sel];
+    if (!idsIniciais.length) return;
     let retornar = false;
     let mapa = null;
     let dados = null;
-    // override manual de grupos: { entregaId -> indiceGrupo }. null = automático.
+    // override manual: { entregaId -> indiceGrupo }. null = automatico.
     let override = null;
+    // ids ainda no modal (vao saindo conforme despacha)
+    let idsAtivos = [...idsIniciais];
 
     const mapaDiv = el('div', { style: 'height:42vh;min-height:260px;border-radius:var(--lx-raio);overflow:hidden;background:var(--lx-superficie-2)' });
-    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Agrupando rotas…');
+    const info = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0' }, 'Agrupando rotas...');
     const gruposWrap = el('div', { style: 'display:flex;flex-direction:column;gap:12px;max-height:340px;overflow:auto' });
 
     const chkRetorno = el('input', { type: 'checkbox', style: 'width:15px;height:15px;accent-color:var(--lx-azul-primario)' });
     const lblRetorno = el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--lx-tinta);cursor:pointer;user-select:none' }, chkRetorno, el('span', {}, 'Motoboy volta ao ponto de coleta no fim'));
     chkRetorno.onchange = () => { retornar = chkRetorno.checked; recarregar(); };
+    const btnAuto = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px;padding:5px 10px', onClick: () => { override = null; recarregar(); } }, 'Reagrupar automatico');
 
-    const btnAuto = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px;padding:5px 10px', onClick: () => { override = null; recarregar(); } }, 'Reagrupar automático');
-
+    const dica = el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin:2px 0 8px' }, 'Dica: arraste uma corrida e solte sobre outro grupo para reagrupar.');
     const corpo = el('div', {},
-      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap' }, lblRetorno, btnAuto),
-      mapaDiv, info,
-      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:10px 0 6px' }, 'Grupos de rota'), gruposWrap);
-    const ov = modal(`Rota otimizada — ${ids.length} corridas`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:10px;flex-wrap:wrap' }, lblRetorno, btnAuto),
+      mapaDiv, info, dica,
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:6px 0 6px' }, 'Grupos de rota'), gruposWrap);
+    const ov = modal(`Rota otimizada - ${idsIniciais.length} corridas`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
     const box = ov.querySelector('div'); if (box) box.style.width = '860px';
 
-    try { await garantirLeaflet(); } catch { info.textContent = 'Não foi possível carregar o mapa.'; return; }
+    try { await garantirLeaflet(); } catch { info.textContent = 'Nao foi possivel carregar o mapa.'; return; }
     await carregarMotoboys();
     const L = window.L;
 
-    // monta o corpo da requisição com grupos manuais (se houver override)
     function gruposManualPayload() {
-      if (!override || !dados) return null;
-      const mapaGrupos = {};
-      Object.entries(override).forEach(([entregaId, gi]) => { (mapaGrupos[gi] = mapaGrupos[gi] || []).push(entregaId); });
-      return Object.values(mapaGrupos);
+      if (!override) return null;
+      const m = {};
+      Object.entries(override).forEach(([entregaId, gi]) => { if (idsAtivos.includes(entregaId)) (m[gi] = m[gi] || []).push(entregaId); });
+      return Object.values(m).filter(g => g.length);
     }
 
     async function recarregar() {
-      info.textContent = 'Otimizando…';
-      const body = { ids, retornar };
+      info.textContent = 'Otimizando...';
+      if (!idsAtivos.length) { info.textContent = 'Todas as corridas foram despachadas.'; gruposWrap.innerHTML = ''; if (mapa) { mapa.remove(); mapa = null; } return; }
+      const body = { ids: idsAtivos, retornar };
       const gm = gruposManualPayload();
-      if (gm) body.grupos_manual = gm;
+      if (gm && gm.length) body.grupos_manual = gm;
       try { dados = await post('/entregas/acompanhamento/rota-lote', body); } catch { info.textContent = 'Erro ao otimizar.'; return; }
       desenhar();
     }
 
     function desenhar() {
-      // mapa
       if (mapa) { mapa.remove(); mapa = null; }
       const centro = dados.coleta || (dados.grupos[0] && dados.grupos[0].destinos[0]);
       if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
       mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 12, scrollWheelZoom: true });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '(c) OpenStreetMap', maxZoom: 19 }).addTo(mapa);
       setTimeout(() => mapa && mapa.invalidateSize(), 120);
       const bounds = [];
       if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .95, weight: 2 }).addTo(mapa).bindPopup('Coleta'); bounds.push([dados.coleta.lat, dados.coleta.lng]); }
@@ -616,15 +617,13 @@ export async function montar(container) {
         }
         g.destinos.forEach(d => {
           const ico = L.divIcon({ className: '', html: `<div style="background:${g.cor};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">${d.sequencia}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
-          L.marker([d.lat, d.lng], { icon: ico }).addTo(mapa).bindPopup(`<b style="color:${g.cor}">Rota ${gi + 1}</b> · ${d.sequencia}º<br>${d.protocolo}<br>${d.endereco || ''}`);
+          L.marker([d.lat, d.lng], { icon: ico }).addTo(mapa).bindPopup(`<b style="color:${g.cor}">Rota ${gi + 1}</b> - ${d.sequencia}o<br>${d.protocolo}<br>${d.endereco || ''}`);
           bounds.push([d.lat, d.lng]);
         });
       });
       if (bounds.length) mapa.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
       const totalKm = dados.grupos.reduce((s, g) => s + (g.rota.distanciaKm || 0), 0);
-      info.innerHTML = `<b style="color:var(--lx-azul-primario)">${dados.grupos.length} rota(s)</b> · ${dados.grupos.reduce((s,g)=>s+g.destinos.length,0)} paradas · ${totalKm.toFixed(1)} km${retornar ? ' · com retorno' : ''}`;
-
-      // grupos (lista) com seletor de motoboy e mover-entre-grupos
+      info.innerHTML = `<b style="color:var(--lx-azul-primario)">${dados.grupos.length} rota(s)</b> - ${dados.grupos.reduce((s,g)=>s+g.destinos.length,0)} paradas - ${totalKm.toFixed(1)} km${retornar ? ' - com retorno' : ''}`;
       gruposWrap.innerHTML = '';
       dados.grupos.forEach((g, gi) => gruposWrap.append(cartaoGrupo(g, gi)));
       if (dados.semCoordenada && dados.semCoordenada.length) {
@@ -632,37 +631,47 @@ export async function montar(container) {
       }
     }
 
+    // garante que override esteja inicializado com o agrupamento atual
+    function garantirOverride() {
+      if (override) return;
+      override = {};
+      dados.grupos.forEach((g, gi) => g.destinos.forEach(d => { override[d.id] = gi; }));
+    }
+
     function cartaoGrupo(g, gi) {
-      const card = el('div', { style: `border:1px solid ${g.cor}40;border-left:4px solid ${g.cor};border-radius:var(--lx-raio);padding:10px 12px;background:var(--lx-superficie)` });
-      const titulo = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px' },
+      const card = el('div', { 'data-grupo': String(gi), style: `border:1px solid ${g.cor}40;border-left:4px solid ${g.cor};border-radius:var(--lx-raio);padding:10px 12px;background:var(--lx-superficie);transition:background .15s` });
+      // permitir soltar uma corrida neste grupo
+      card.addEventListener('dragover', e => { e.preventDefault(); card.style.background = g.cor + '14'; });
+      card.addEventListener('dragleave', () => { card.style.background = 'var(--lx-superficie)'; });
+      card.addEventListener('drop', e => {
+        e.preventDefault(); card.style.background = 'var(--lx-superficie)';
+        const entregaId = e.dataTransfer.getData('text/plain');
+        if (!entregaId) return;
+        garantirOverride();
+        if (override[entregaId] === gi) return; // ja esta aqui
+        override[entregaId] = gi;
+        recarregar();
+      });
+
+      card.append(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px' },
         el('div', { style: 'display:flex;align-items:center;gap:8px' },
           el('span', { style: `width:11px;height:11px;border-radius:50%;background:${g.cor}` }),
           el('b', { style: 'font-size:13px' }, `Rota ${gi + 1}`),
-          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${g.destinos.length} parada(s) · ${(g.rota.distanciaKm || 0).toFixed(1)} km`)));
-      card.append(titulo);
+          el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${g.destinos.length} parada(s) - ${(g.rota.distanciaKm || 0).toFixed(1)} km`))));
 
-      // paradas do grupo, com botão de mover para outro grupo
       g.destinos.forEach(d => {
-        const mover = el('select', { class: 'lx-input', style: 'font-size:11px;padding:2px 6px;width:auto;height:auto' });
-        mover.append(el('option', { value: '' }, 'mover…'));
-        dados.grupos.forEach((_, gj) => { if (gj !== gi) mover.append(el('option', { value: String(gj) }, `→ Rota ${gj + 1}`)); });
-        mover.append(el('option', { value: 'novo' }, '→ Nova rota'));
-        mover.onchange = () => {
-          if (!mover.value) return;
-          // inicializa override com o agrupamento atual
-          if (!override) { override = {}; dados.grupos.forEach((gg, idx) => gg.destinos.forEach(dd => { override[dd.id] = idx; })); }
-          override[d.id] = mover.value === 'novo' ? dados.grupos.length : Number(mover.value);
-          recarregar();
-        };
-        card.append(el('div', { style: 'display:flex;align-items:center;gap:8px;padding:5px 0;border-top:0.5px solid var(--lx-linha)' },
-          el('span', { style: `font-weight:800;color:${g.cor};min-width:22px` }, d.sequencia + 'º'),
+        const item = el('div', { draggable: 'true', style: 'display:flex;align-items:center;gap:8px;padding:6px 4px;border-top:0.5px solid var(--lx-linha);cursor:grab' },
+          el('span', { style: 'color:var(--lx-tinta-3);font-size:13px;cursor:grab' }, '\u2630'),
+          el('span', { style: `font-weight:800;color:${g.cor};min-width:22px` }, d.sequencia + 'o'),
           el('span', { style: 'font-weight:700;font-size:12px;min-width:78px' }, d.protocolo),
-          el('span', { style: 'flex:1;font-size:11.5px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || ''),
-          mover));
+          el('span', { style: 'flex:1;font-size:11.5px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, d.endereco || ''));
+        item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', d.id); e.dataTransfer.effectAllowed = 'move'; item.style.opacity = '.4'; });
+        item.addEventListener('dragend', () => { item.style.opacity = '1'; });
+        card.append(item);
       });
 
       // despacho do grupo
-      const buscaMb = el('input', { class: 'lx-input', placeholder: 'Motoboy (nº ou nome)…', style: 'flex:1;font-size:12px' });
+      const buscaMb = el('input', { class: 'lx-input', placeholder: 'Motoboy (no ou nome)...', style: 'flex:1;font-size:12px' });
       const listaMb = el('div', { style: 'display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:70;background:var(--lx-superficie);border:0.5px solid var(--lx-linha);border-radius:var(--lx-raio);max-height:150px;overflow:auto;box-shadow:0 8px 24px -8px rgba(4,44,83,.25)' });
       let mbEscolhido = null;
       buscaMb.addEventListener('input', () => {
@@ -675,15 +684,21 @@ export async function montar(container) {
         vis.forEach(m => listaMb.append(el('div', { style: 'display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `#${String(m.codigo||0).padStart(3,'0')} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
           el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, '#' + String(m.codigo||0).padStart(3,'0')),
           el('span', { style: 'flex:1;font-size:12px' }, m.nome_completo),
-          el('span', { style: 'font-size:11px' }, m.online ? '🟢' : '⚪'))));
+          el('span', { style: 'font-size:11px' }, m.online ? '\ud83d\udfe2' : '\u26aa'))));
         listaMb.style.display = 'block';
       });
       const btnDesp = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12px;padding:7px 12px', onClick: async () => {
         if (!mbEscolhido) { toast('Escolha um motoboy', 'erro'); return; }
         const lote = g.destinos.map(d => d.id);
-        try { btnDesp.disabled = true; const r = await post('/filas/atribuir-lote', { motoboy_id: mbEscolhido.id, entrega_ids: lote }); toast(`Rota ${gi + 1}: ${r.atribuidas} corrida(s) → ${r.motoboy_nome}`); lote.forEach(id => _sel.delete(id)); 
-          // remove o grupo despachado e redesenha (ou fecha se acabou)
-          if (_sel.size === 0) { ov.remove(); carregar(); } else { override = null; await recarregar(); carregar(); }
+        try {
+          btnDesp.disabled = true;
+          const r = await post('/filas/atribuir-lote', { motoboy_id: mbEscolhido.id, entrega_ids: lote });
+          toast(`Rota ${gi + 1}: ${r.atribuidas} corrida(s) -> ${r.motoboy_nome}`);
+          // remove as despachadas do estado local e da selecao global
+          lote.forEach(id => { _sel.delete(id); const k = idsAtivos.indexOf(id); if (k >= 0) idsAtivos.splice(k, 1); if (override) delete override[id]; });
+          carregar(); // atualiza a tabela de fundo
+          if (!idsAtivos.length) { ov.remove(); return; } // acabou: fecha
+          await recarregar(); // sobra: reotimiza so o que restou
         } catch (e) { toast(e.message || 'Erro', 'erro'); btnDesp.disabled = false; }
       } }, `Despachar Rota ${gi + 1}`);
       card.append(el('div', { style: 'display:flex;gap:8px;align-items:stretch;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--lx-linha)' },
@@ -693,7 +708,6 @@ export async function montar(container) {
 
     await recarregar();
   }
-
   function renderTabela() {
     tabelaWrap.innerHTML = ''; tabelaWrap.append(cabecalho());
     const lista = listaDaAba();
