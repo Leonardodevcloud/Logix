@@ -728,21 +728,24 @@ async function reabrirEntrega({ empresaId, id, usuarioId, ip }) {
 async function logsEntrega({ empresaId, id }) {
   const { rows: ent } = await query(
     `SELECT e.id, e.protocolo, e.criado_em, e.iniciada_em, e.concluida_em, e.cancelada_em,
-            e.status, e.criado_por, u.nome AS criado_por_nome
-       FROM entregas e LEFT JOIN usuarios u ON u.id = e.criado_por
+            e.status, e.criado_por, e.motoboy_id, e.motivo_cancelamento,
+            u.nome AS criado_por_nome,
+            l.nome_fantasia AS loja_nome,
+            m.nome_completo AS motoboy_atual_nome, m.codigo AS motoboy_atual_codigo
+       FROM entregas e
+       LEFT JOIN usuarios u ON u.id = e.criado_por
+       LEFT JOIN lojas l ON l.id = e.loja_id
+       LEFT JOIN motoboys m ON m.id = e.motoboy_id
       WHERE e.id = $1 AND e.empresa_id = $2`,
     [id, empresaId]
   );
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   const e = ent[0];
 
-  const eventos = [];
-  // 1) Criação
-  eventos.push({ em: e.criado_em, tipo: 'criada', titulo: 'Corrida criada', autor: e.criado_por_nome || 'Sistema', origem: 'central' });
-
-  // 2) Auditoria relacionada a esta entrega (detalhe contém o id/entregaId, ou ids[] no lote)
+  // Busca a auditoria relacionada a esta entrega.
   const { rows: audit } = await query(
-    `SELECT a.acao, a.detalhe, a.criado_em, a.usuario_id, u.nome AS autor
+    `SELECT a.acao, a.detalhe, a.criado_em, a.usuario_id,
+            u.nome AS autor_nome, u.email AS autor_email, u.perfil AS autor_perfil
        FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id
       WHERE a.empresa_id = $1
         AND a.categoria IN ('entregas','entrega','ENTREGA','filas','fila')
@@ -753,28 +756,110 @@ async function logsEntrega({ empresaId, id }) {
       ORDER BY a.criado_em ASC`,
     [empresaId, id]
   );
-  const rotulos = {
-    'atribuir': 'Motoboy atribuído', 'atribuir-lote': 'Atribuída em lote', 'reatribuir': 'Motoboy trocado',
-    'disparar-oferta': 'Oferta disparada (raio)', 'editar_enderecos': 'Endereços editados',
-    'cancelar': 'Corrida cancelada', 'finalizar_manual': 'Finalizada manualmente', 'reabrir': 'Corrida reaberta',
-  };
+
+  // Coleta todos os motoboyIds citados nos detalhes para resolver os nomes de uma vez.
+  const mbIds = new Set();
+  if (e.motoboy_id) mbIds.add(e.motoboy_id);
   for (const a of audit) {
-    eventos.push({ em: a.criado_em, tipo: a.acao, titulo: rotulos[a.acao] || a.acao, autor: a.autor || 'Sistema', origem: 'central', detalhe: a.detalhe || null });
+    const d = a.detalhe || {};
+    [d.motoboyId, d.de, d.para].forEach(v => { if (v && typeof v === 'string' && v.length > 20) mbIds.add(v); });
+  }
+  let mbMap = new Map();
+  if (mbIds.size) {
+    const { rows: mbs } = await query(
+      `SELECT id, nome_completo, codigo FROM motoboys WHERE id = ANY($1::uuid[])`,
+      [[...mbIds]]
+    );
+    mbMap = new Map(mbs.map(m => [m.id, m]));
+  }
+  const nomeMb = (mid) => {
+    const m = mbMap.get(mid);
+    if (!m) return null;
+    return `${m.nome_completo}${m.codigo ? ' (#' + String(m.codigo).padStart(3, '0') + ')' : ''}`;
+  };
+  // Descrição do autor (nome + perfil legível).
+  const perfilLabel = { super_admin: 'Master', central_admin: 'Admin da central', loja: 'Loja', motoboy: 'Motoboy' };
+  const autorTxt = (a) => {
+    if (!a.autor_nome) return 'Sistema';
+    const p = perfilLabel[a.autor_perfil] || '';
+    return p ? `${a.autor_nome} · ${p}` : a.autor_nome;
+  };
+
+  const eventos = [];
+
+  // 1) Criação — quem criou, em qual loja.
+  eventos.push({
+    em: e.criado_em, tipo: 'criada', titulo: 'Corrida criada',
+    autor: e.criado_por_nome || 'Sistema', origem: 'central',
+    linhas: [
+      `Cliente: ${e.loja_nome || '—'}`,
+      `Protocolo: ${e.protocolo}`,
+    ].filter(Boolean),
+  });
+
+  // 2) Eventos de auditoria, com descrição detalhada por tipo.
+  for (const a of audit) {
+    const d = a.detalhe || {};
+    let titulo, linhas = [];
+    switch (a.acao) {
+      case 'atribuir':
+        titulo = 'Motoboy atribuído';
+        linhas.push(`Motoboy: ${nomeMb(d.motoboyId) || '—'}`);
+        break;
+      case 'atribuir-lote':
+        titulo = 'Atribuída em lote';
+        linhas.push(`Motoboy: ${nomeMb(d.motoboyId) || '—'}`);
+        if (Array.isArray(d.ids)) linhas.push(`Corridas no lote: ${d.ids.length}`);
+        break;
+      case 'reatribuir':
+        titulo = 'Motoboy trocado';
+        linhas.push(`De: ${nomeMb(d.de) || '—'}`);
+        linhas.push(`Para: ${nomeMb(d.para) || '—'}`);
+        break;
+      case 'disparar-oferta':
+        titulo = 'Oferta disparada (raio)';
+        if (d.candidatos != null) linhas.push(`Motoboys alcançados: ${d.candidatos}`);
+        if (d.raioKm != null) linhas.push(`Raio: ${d.raioKm} km`);
+        break;
+      case 'editar_enderecos':
+        titulo = 'Endereços editados';
+        break;
+      case 'cancelar':
+        titulo = 'Corrida cancelada';
+        if (d.motivo) linhas.push(`Motivo: ${d.motivo}`);
+        break;
+      case 'finalizar_manual':
+        titulo = 'Finalizada manualmente';
+        break;
+      case 'reabrir':
+        titulo = 'Corrida reaberta';
+        if (d.deStatus) linhas.push(`Reaberta de: ${d.deStatus === 'entregue' ? 'Concluída' : 'Cancelada'}`);
+        break;
+      default:
+        titulo = a.acao;
+    }
+    eventos.push({
+      em: a.criado_em, tipo: a.acao, titulo,
+      autor: autorTxt(a), origem: 'central', linhas,
+    });
   }
 
-  // 3) Marcos da própria entrega (coleta/conclusão), úteis mesmo sem auditoria
-  if (e.iniciada_em) eventos.push({ em: e.iniciada_em, tipo: 'iniciada', titulo: 'Coleta iniciada', autor: 'Motoboy', origem: 'app' });
-  if (e.concluida_em) eventos.push({ em: e.concluida_em, tipo: 'concluida', titulo: 'Corrida concluída', autor: 'Motoboy', origem: 'app' });
-  if (e.cancelada_em) eventos.push({ em: e.cancelada_em, tipo: 'cancelada', titulo: 'Corrida cancelada', autor: 'Central', origem: 'central' });
+  // 3) Marcos da própria entrega (do app do motoboy).
+  const mbAtual = e.motoboy_atual_nome ? `${e.motoboy_atual_nome}${e.motoboy_atual_codigo ? ' (#' + String(e.motoboy_atual_codigo).padStart(3, '0') + ')' : ''}` : null;
+  if (e.iniciada_em) eventos.push({ em: e.iniciada_em, tipo: 'iniciada', titulo: 'Coleta iniciada', autor: mbAtual || 'Motoboy', origem: 'app', linhas: [] });
+  if (e.concluida_em) eventos.push({ em: e.concluida_em, tipo: 'concluida', titulo: 'Corrida concluída', autor: mbAtual || 'Motoboy', origem: 'app', linhas: [] });
 
-  // 4) Entregas de pontos (cada destino finalizado pelo motoboy)
+  // 4) Entregas de pontos (cada destino finalizado pelo motoboy).
   const { rows: pontos } = await query(
     `SELECT ordem, endereco, status, entregue_em, recebedor FROM entregas_pontos
       WHERE entrega_id = $1 AND entregue_em IS NOT NULL ORDER BY entregue_em ASC`,
     [id]
   );
   for (const p of pontos) {
-    eventos.push({ em: p.entregue_em, tipo: 'ponto_entregue', titulo: `Ponto ${p.ordem} entregue`, autor: 'Motoboy', origem: 'app', detalhe: { endereco: p.endereco, recebedor: p.recebedor } });
+    const linhas = [];
+    if (p.endereco) linhas.push(`Endereço: ${p.endereco}`);
+    if (p.recebedor) linhas.push(`Recebido por: ${p.recebedor}`);
+    eventos.push({ em: p.entregue_em, tipo: 'ponto_entregue', titulo: `Ponto ${p.ordem} entregue`, autor: mbAtual || 'Motoboy', origem: 'app', linhas });
   }
 
   // ordena por data

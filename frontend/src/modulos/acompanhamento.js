@@ -377,21 +377,38 @@ export async function montar(container) {
 
     corpo.innerHTML = '';
     if (!dados.eventos || !dados.eventos.length) { corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-tinta-2)' }, 'Sem registros para esta corrida.')); return; }
-    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:60vh;overflow:auto' });
+    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:62vh;overflow:auto' });
     dados.eventos.forEach((ev, i) => {
       const ultimo = i === dados.eventos.length - 1;
       const cor = corEvento(ev.tipo);
       const linha = el('div', { style: 'display:flex;gap:12px;align-items:stretch' });
       // coluna do marcador + linha vertical
       const trilho = el('div', { style: 'display:flex;flex-direction:column;align-items:center;width:14px;flex-shrink:0' },
-        el('span', { style: `width:11px;height:11px;border-radius:50%;background:${cor};margin-top:4px;flex-shrink:0` }),
+        el('span', { style: `width:11px;height:11px;border-radius:50%;background:${cor};margin-top:5px;flex-shrink:0` }),
         ultimo ? el('span', {}) : el('span', { style: 'flex:1;width:2px;background:var(--lx-linha);margin:2px 0' }));
-      const det = ev.detalhe && ev.detalhe.endereco ? ` · ${ev.detalhe.endereco}` : (ev.detalhe && ev.detalhe.recebedor ? ` · recebido por ${ev.detalhe.recebedor}` : '');
-      const conteudo = el('div', { style: 'padding-bottom:14px;min-width:0;flex:1' },
+
+      const conteudo = el('div', { style: 'padding-bottom:16px;min-width:0;flex:1' },
         el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
-          el('span', { style: `font-size:13px;font-weight:700;color:${cor}` }, ev.titulo),
+          el('span', { style: `font-size:13.5px;font-weight:700;color:${cor}` }, ev.titulo),
           origemTag(ev.origem)),
-        el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);margin-top:2px' }, `${fmt(ev.em)} · ${ev.autor || 'Sistema'}${det}`));
+        // data + autor
+        el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);margin-top:3px' }, `${fmt(ev.em)} · ${ev.autor || 'Sistema'}`));
+
+      // linhas de detalhe (motoboy, motivo, raio, endereço, recebedor…)
+      if (Array.isArray(ev.linhas) && ev.linhas.length) {
+        const box = el('div', { style: 'margin-top:6px;padding:8px 10px;background:var(--lx-superficie-2);border-radius:8px;display:flex;flex-direction:column;gap:3px' });
+        ev.linhas.forEach(l => {
+          const idx = l.indexOf(':');
+          if (idx > 0) {
+            box.append(el('div', { style: 'font-size:11.5px;display:flex;gap:6px' },
+              el('span', { style: 'color:var(--lx-tinta-3);font-weight:700;min-width:0' }, l.slice(0, idx + 1)),
+              el('span', { style: 'color:var(--lx-tinta);font-weight:600' }, l.slice(idx + 1).trim())));
+          } else {
+            box.append(el('div', { style: 'font-size:11.5px;color:var(--lx-tinta)' }, l));
+          }
+        });
+        conteudo.append(box);
+      }
       linha.append(trilho, conteudo);
       lista.append(linha);
     });
