@@ -7,11 +7,18 @@ const service = require('./motoboys.service');
 const rastreioRoutes = require('./rastreio.routes');
 const authRoutes = require('./motoboy-auth.routes');
 const appRoutes = require('./motoboy-app.routes');
+const { rotasPublicasCadastro, rotasAppCadastro, rotasCentralCadastro } = require('./cadastro.routes');
 
 function initMotoboysRoutes() {
   const router = express.Router();
   // Auth do motoboy (login/logout) não precisa de token de usuário — montar antes
   router.use('/', authRoutes());
+  // Cadastro PÚBLICO pelo app (sem login): /motoboys/cadastro/*
+  router.use('/cadastro', rotasPublicasCadastro());
+  // Rotas do app autenticado (token de motoboy): /motoboys/app/meu-cadastro, /app/reenviar-cadastro
+  router.use('/app', rotasAppCadastro());
+  // Cadastro pela CENTRAL — tem seus próprios middlewares (verificarToken+tenant) internamente.
+  router.use('/', rotasCentralCadastro());
   // Demais rotas exigem token de usuário ou motoboy
   router.use(verificarToken, resolverTenant);
   router.use('/', rastreioRoutes());

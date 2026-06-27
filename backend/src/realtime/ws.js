@@ -11,7 +11,10 @@ function iniciarWebSocket(server) {
     try {
       const url = new URL(req.url, 'http://localhost');
       const payload = jwt.verify(url.searchParams.get('token'), process.env.JWT_ACCESS_SECRET);
-      const sala = payload.empresaId || `admin:${payload.id}`;
+      // App do motoboy entra em sala própria (motoboy:<id>); demais na sala da empresa.
+      const sala = payload.perfil === 'motoboy'
+        ? `motoboy:${payload.id}`
+        : (payload.empresaId || `admin:${payload.id}`);
       ws.sala = sala;
       if (!salas.has(sala)) salas.set(sala, new Set());
       salas.get(sala).add(ws);
@@ -31,4 +34,12 @@ function emitirParaEmpresa(empresaId, evento, dados) {
   for (const ws of sala) if (ws.readyState === 1) ws.send(msg);
 }
 
-module.exports = { iniciarWebSocket, emitirParaEmpresa };
+// Emite um evento para o app de um motoboy específico.
+function emitirParaMotoboy(motoboyId, evento, dados) {
+  const sala = salas.get(`motoboy:${motoboyId}`);
+  if (!sala) return;
+  const msg = JSON.stringify({ evento, dados, em: new Date().toISOString() });
+  for (const ws of sala) if (ws.readyState === 1) ws.send(msg);
+}
+
+module.exports = { iniciarWebSocket, emitirParaEmpresa, emitirParaMotoboy };

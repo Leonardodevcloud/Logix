@@ -68,6 +68,49 @@ module.exports = function motoboyAuthRoutes() {
     } catch (e) { next(e); }
   });
 
+  // POST /motoboys/auth/login-email
+  // Body: { slug, email, senha } — login por e-mail/senha (cadastro pelo app).
+  router.post('/auth/login-email', limiteLogin, async (req, res, next) => {
+    try {
+      const { slug, email, senha } = req.body;
+      if (!email || !senha) throw AppError.validacao('E-mail e senha obrigatórios');
+      const mail = String(email).trim().toLowerCase();
+
+      // Resolve empresa pelo slug (white-label). Se não vier slug, busca o e-mail em qualquer empresa.
+      let where = `lower(email) = $1`;
+      const params = [mail];
+      if (slug) {
+        const emp = await query(`SELECT id FROM empresas WHERE lower(slug) = lower($1) AND ativo = TRUE`, [slug]);
+        if (!emp.rows[0]) throw AppError.naoEncontrado('Empresa não encontrada');
+        params.push(emp.rows[0].id);
+        where += ` AND empresa_id = $2`;
+      }
+
+      const { rows } = await query(
+        `SELECT id, empresa_id, nome_completo, status, online, foto_url, senha_hash, situacao_cadastro
+           FROM motoboys WHERE ${where} LIMIT 1`,
+        params
+      );
+      if (!rows[0]) throw AppError.naoAutorizado('E-mail não encontrado');
+      const m = rows[0];
+      if (!m.senha_hash) throw AppError.naoAutorizado('Senha não configurada. Use login por PIN ou fale com a central.');
+
+      const ok = await bcrypt.compare(String(senha), m.senha_hash);
+      if (!ok) throw AppError.naoAutorizado('Senha incorreta');
+
+      // Permite login mesmo pendente (o app mostra a tela de "aguardando aprovação").
+      if (m.situacao_cadastro !== 'recusado') {
+        await query(`UPDATE motoboys SET online = (situacao_cadastro = 'aprovado') WHERE id = $1`, [m.id]);
+      }
+
+      const token = gerarTokenApp(m);
+      res.json({
+        token,
+        motoboy: { id: m.id, nome_completo: m.nome_completo, empresa_id: m.empresa_id, foto_url: m.foto_url, situacao_cadastro: m.situacao_cadastro },
+      });
+    } catch (e) { next(e); }
+  });
+
   // POST /motoboys/auth/logout
   router.post('/auth/logout', async (req, res, next) => {
     try {
