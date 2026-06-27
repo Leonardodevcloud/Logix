@@ -291,7 +291,7 @@ export async function montar(container) {
     renderTabela();
     atualizarBarraSel();
   }
-  const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow:hidden' });
+  const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow-x:auto;overflow-y:hidden' });
 
   // ── Ações ───────────────────────────────────────────────────────
   async function carregarMotoboys() { if (_motoboys.length) return; try { _motoboys = await get('/filas/motoboys-ativos'); } catch { toast('Erro ao carregar motoboys', 'erro'); } }
@@ -731,11 +731,11 @@ export async function montar(container) {
   }
 
   function linha(c) {
-    // Colunas por aba. Todas têm Categoria e Valor (após Trajeto).
-    const cols = _aba === 'sem' ? '34px 64px 1fr 96px 96px 56px 78px 92px 210px'
-      : _aba === 'and' ? '64px 1fr 96px 100px 110px 84px 96px 210px'
-      : _aba === 'con' ? '64px 1fr 96px 100px 100px 84px 84px 96px 128px'
-      : '64px 1fr 96px 100px 106px 88px 88px 128px'; // canceladas
+    // Colunas por aba. Todas têm Categoria, Valor e Direção (após Trajeto).
+    const cols = _aba === 'sem' ? '40px 90px 1.4fr 130px 120px 90px 140px 150px 230px'
+      : _aba === 'and' ? '90px 1.4fr 130px 120px 90px 150px 140px 150px 200px'
+      : _aba === 'con' ? '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px 150px'
+      : '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -746,12 +746,12 @@ export async function montar(container) {
       celulas.push(el('div', { style: 'display:flex;justify-content:center' }, chk));
     }
     celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo));
-    celulas.push(enderecoEmpilhado(c)); // Trajeto (Coleta/Entrega) em TODAS as abas
-    celulas.push(celulaCategoria(c));   // Categoria (modalidade) em TODAS as abas
-    celulas.push(celulaValor(c));       // Valor (cliente/motoboy) em TODAS as abas
+    celulas.push(enderecoEmpilhado(c)); // Trajeto
+    celulas.push(celulaCategoria(c));   // Categoria
+    celulas.push(celulaValor(c));       // Valor
+    celulas.push(bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)); // Direção (TODAS as abas)
 
     if (_aba === 'sem') {
-      celulas.push(bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)); // Direção
       celulas.push(dataHora(c.criado_em));  // Solicitação
       celulas.push(slaBadge(c.sla));        // Status
     } else if (_aba === 'and') {
@@ -771,17 +771,17 @@ export async function montar(container) {
     celulas.push(acoes(c));
 
     const destaque = _aba === 'sem' && _sel.has(c.id) ? 'background:var(--lx-info-bg)' : 'background:var(--lx-superficie)';
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1200px;${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '34px 64px 1fr 96px 96px 56px 78px 92px 210px'
-      : _aba === 'and' ? '64px 1fr 96px 100px 110px 84px 96px 210px'
-      : _aba === 'con' ? '64px 1fr 96px 100px 100px 84px 84px 96px 128px'
-      : '64px 1fr 96px 100px 106px 88px 88px 128px';
+    const cols = _aba === 'sem' ? '40px 90px 1.4fr 130px 120px 90px 140px 150px 230px'
+      : _aba === 'and' ? '90px 1.4fr 130px 120px 90px 150px 140px 150px 200px'
+      : _aba === 'con' ? '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px 150px'
+      : '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
-      : ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
+      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
+      : ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
     const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
     if (_aba === 'sem') {
       const todas = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
@@ -790,7 +790,7 @@ export async function montar(container) {
       todas.onchange = () => { if (todas.checked) lista.forEach(c => _sel.add(c.id)); else _sel.clear(); renderTabela(); atualizarBarraSel(); };
       cels[0] = el('div', { style: 'display:flex;justify-content:center' }, todas);
     }
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:8px 14px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha)` }, ...cels);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha);min-width:1200px` }, ...cels);
   }
   function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }
 
