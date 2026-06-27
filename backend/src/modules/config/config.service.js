@@ -132,6 +132,7 @@ module.exports = {
   listarCategorias, obterCategoria, criarCategoria, atualizarCategoria,
   alternarCategoria, excluirCategoria,
   obterSla, salvarSla, removerSlaLoja, slaEfetivoCliente,
+  obterValores, salvarValores, removerValoresLoja, precificar,
 };
 
 // ── Configuração de SLA (global e por cliente) ───────────────────────
@@ -217,4 +218,99 @@ async function removerSlaLoja({ empresaId, lojaId, usuarioId, ip }) {
 async function slaEfetivoCliente({ empresaId, lojaId }) {
   const r = await obterSla({ empresaId, lojaId });
   return { faixas: r.faixas, minutos_atencao: r.minutos_atencao, minutos_iminente: r.minutos_iminente, sla_padrao_min: r.sla_padrao_min, tem_propria: !!r.tem_propria };
+}
+
+// ── Tabela de Valores (precificação por km) ──────────────────────
+// faixas: [{ ate_km, valor_cliente_cent, valor_motoboy_cent }] (centavos, inteiro).
+
+const FAIXAS_VALOR_PADRAO = [
+  { ate_km: 3, valor_cliente_cent: 900, valor_motoboy_cent: 700 },
+  { ate_km: 7, valor_cliente_cent: 1300, valor_motoboy_cent: 1000 },
+  { ate_km: 15, valor_cliente_cent: 1900, valor_motoboy_cent: 1500 },
+  { ate_km: 9999, valor_cliente_cent: 2900, valor_motoboy_cent: 2300 },
+];
+
+function normalizarFaixasValor(faixas) {
+  if (!Array.isArray(faixas)) return [];
+  return faixas
+    .map(f => ({
+      ate_km: Number(f.ate_km),
+      valor_cliente_cent: Math.max(0, Math.round(Number(f.valor_cliente_cent))),
+      valor_motoboy_cent: Math.max(0, Math.round(Number(f.valor_motoboy_cent))),
+    }))
+    .filter(f => Number.isFinite(f.ate_km) && f.ate_km > 0 && Number.isFinite(f.valor_cliente_cent) && Number.isFinite(f.valor_motoboy_cent))
+    .sort((a, b) => a.ate_km - b.ate_km);
+}
+
+// Obtém a tabela de valores. lojaId NULL = global. Para loja sem tabela própria,
+// retorna { tem_propria: false } + a global.
+async function obterValores({ empresaId, lojaId = null }) {
+  if (lojaId) {
+    const { rows } = await query(
+      `SELECT faixas, cobranca_ativa FROM valores_config WHERE empresa_id = $1 AND loja_id = $2`,
+      [empresaId, lojaId]
+    );
+    const global = await obterValores({ empresaId, lojaId: null });
+    if (rows[0]) return { tem_propria: true, faixas: rows[0].faixas, cobranca_ativa: rows[0].cobranca_ativa, global };
+    return { tem_propria: false, faixas: global.faixas, cobranca_ativa: true, global };
+  }
+  const { rows } = await query(
+    `SELECT faixas, cobranca_ativa FROM valores_config WHERE empresa_id = $1 AND loja_id IS NULL`,
+    [empresaId]
+  );
+  if (rows[0]) return { faixas: rows[0].faixas, cobranca_ativa: rows[0].cobranca_ativa };
+  return { faixas: FAIXAS_VALOR_PADRAO, cobranca_ativa: true };
+}
+
+// Salva a tabela de valores. lojaId NULL = global; com lojaId = sobrescreve o cliente.
+// cobrancaAtiva só é relevante no nível do cliente.
+async function salvarValores({ empresaId, lojaId = null, faixas, cobrancaAtiva = true, usuarioId, ip }) {
+  const cobra = cobrancaAtiva !== false;
+  const f = normalizarFaixasValor(faixas);
+  // Faixas só são obrigatórias quando a cobrança está ativa. Com cobrança desligada
+  // (só faz sentido por cliente), salvamos as faixas que vierem (mesmo vazias).
+  if (cobra && !f.length) throw AppError.validacao('Informe ao menos uma faixa de km com valores');
+
+  if (lojaId) {
+    const loja = await query(`SELECT id FROM lojas WHERE id = $1 AND empresa_id = $2`, [lojaId, empresaId]);
+    if (!loja.rows[0]) throw AppError.naoEncontrado('Cliente não encontrado');
+    await query(
+      `INSERT INTO valores_config (empresa_id, loja_id, faixas, cobranca_ativa, atualizado_em)
+       VALUES ($1,$2,$3,$4, now())
+       ON CONFLICT (empresa_id, loja_id) WHERE loja_id IS NOT NULL
+       DO UPDATE SET faixas = $3, cobranca_ativa = $4, atualizado_em = now()`,
+      [empresaId, lojaId, JSON.stringify(f), cobra]
+    );
+  } else {
+    await query(
+      `INSERT INTO valores_config (empresa_id, loja_id, faixas, cobranca_ativa, atualizado_em)
+       VALUES ($1, NULL, $2, TRUE, now())
+       ON CONFLICT (empresa_id) WHERE loja_id IS NULL
+       DO UPDATE SET faixas = $2, atualizado_em = now()`,
+      [empresaId, JSON.stringify(f)]
+    );
+  }
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'config', acao: lojaId ? 'salvar_valores_cliente' : 'salvar_valores_global', detalhe: { lojaId, cobra }, ip }).catch(() => {});
+  return { ok: true, faixas: f, cobranca_ativa: cobra };
+}
+
+// Remove a tabela de valores de um cliente (volta a usar a global).
+async function removerValoresLoja({ empresaId, lojaId, usuarioId, ip }) {
+  await query(`DELETE FROM valores_config WHERE empresa_id = $1 AND loja_id = $2`, [empresaId, lojaId]);
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'config', acao: 'remover_valores_cliente', detalhe: { lojaId }, ip }).catch(() => {});
+  return { ok: true };
+}
+
+// Calcula o valor (cliente e motoboy) de uma corrida dado o km e o cliente.
+// Respeita a tabela própria do cliente e o toggle de cobrança. Usado ao criar entrega.
+async function precificar({ empresaId, lojaId, km }) {
+  const cfg = await obterValores({ empresaId, lojaId: lojaId || null });
+  // Cliente com cobrança desligada → tudo zero.
+  if (lojaId && cfg.tem_propria && cfg.cobranca_ativa === false) {
+    return { valor_cliente_cent: 0, valor_motoboy_cent: 0, cobranca_ativa: false };
+  }
+  const faixas = normalizarFaixasValor(cfg.faixas);
+  if (!faixas.length || km == null) return { valor_cliente_cent: 0, valor_motoboy_cent: 0, cobranca_ativa: true };
+  const faixa = faixas.find(f => km <= f.ate_km) || faixas[faixas.length - 1];
+  return { valor_cliente_cent: faixa.valor_cliente_cent, valor_motoboy_cent: faixa.valor_motoboy_cent, cobranca_ativa: true };
 }

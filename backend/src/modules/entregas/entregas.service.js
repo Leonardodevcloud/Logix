@@ -37,16 +37,28 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     ? STATUS_ENTREGA.AGUARDANDO_COLETA
     : STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO;
 
+  // Precificação por km (tabela do cliente ou global; respeita toggle de cobrança).
+  let valorClienteCent = null, valorMotoboyCent = null;
+  try {
+    const configService = require('../config/config.service');
+    const preco = await configService.precificar({ empresaId, lojaId, km: distanciaKm });
+    valorClienteCent = preco.valor_cliente_cent;
+    valorMotoboyCent = preco.valor_motoboy_cent;
+  } catch (e) {
+    console.warn('[entregas] precificação indisponível:', e.message);
+  }
+
   const cliente = await pool.connect();
   try {
     await cliente.query('BEGIN');
     const { rows } = await cliente.query(
       `INSERT INTO entregas (empresa_id, loja_id, protocolo, motoboy_id, status, distribuicao,
          coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por,
-         modalidade_id, centro_custo_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+         modalidade_id, centro_custo_id, valor_cliente_cent, valor_motoboy_cent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
-       coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null]
+       coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null,
+       valorClienteCent, valorMotoboyCent]
     );
     const entregaId = rows[0].id;
     let posicao = 1;

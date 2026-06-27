@@ -1,6 +1,7 @@
 import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import { EditorSla } from './sla-editor.js';
+import { EditorValores } from './valores-editor.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -48,6 +49,7 @@ export function abrirGestaoCliente(loja, aoFechar) {
     { id: 'regras', rotulo: 'Regras de acionamento' },
     { id: 'motos', rotulo: 'Atribuição de motos' },
     { id: 'sla', rotulo: 'SLA' },
+    { id: 'valores', rotulo: 'Valores' },
   ];
   let _aba = 'centros';
   const nav = el('div', { style: 'display:flex;gap:2px;padding:0 26px;border-bottom:1px solid var(--lx-linha);overflow-x:auto' });
@@ -71,6 +73,7 @@ export function abrirGestaoCliente(loja, aoFechar) {
     else if (_aba === 'regras') corpo.append(abaRegras(loja));
     else if (_aba === 'motos') corpo.append(abaMotos(loja));
     else if (_aba === 'sla') corpo.append(abaSlaCliente(loja));
+    else if (_aba === 'valores') corpo.append(abaValoresCliente(loja));
   }
   function fechar() { overlay.remove(); if (aoFechar) aoFechar(); }
 
@@ -445,6 +448,91 @@ function abaSlaCliente(loja) {
       await del(`/config/sla/cliente/${loja.id}`);
       _temPropria = false; sw.checked = false; sw.onchange();
       toast('SLA próprio removido — usando o global');
+    }, 'Remover', true);
+  }
+  carregar();
+  return wrap;
+}
+
+// ── Aba: Tabela de Valores do cliente (sobrescreve a global) ──────
+function abaValoresCliente(loja) {
+  const wrap = el('div', {});
+  wrap.append(secHead('Valores do cliente', 'Por padrão, este cliente usa a tabela de valores global. Ative uma tabela própria para preços exclusivos, ou desligue a cobrança para não cobrar do cliente nem pagar ao motoboy.'));
+
+  // Toggle 1: usar tabela própria?
+  const swPropria = el('input', { type: 'checkbox', style: 'width:38px;height:20px;cursor:pointer;accent-color:var(--lx-ok);flex:none' });
+  const lblPropria = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);margin-bottom:12px' },
+    el('div', {},
+      el('div', { style: 'font-size:13.5px;font-weight:700' }, 'Tabela de valores própria'),
+      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, 'Quando desligado, vale a tabela global.')),
+    swPropria);
+
+  // Toggle 2: cobrança/pagamento ativos?
+  const swCobranca = el('input', { type: 'checkbox', style: 'width:38px;height:20px;cursor:pointer;accent-color:var(--lx-ok);flex:none' });
+  const lblCobranca = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);margin-bottom:18px' },
+    el('div', {},
+      el('div', { style: 'font-size:13.5px;font-weight:700' }, 'Cobrança e pagamento ativos'),
+      el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, 'Se desligado, as corridas deste cliente saem com valor zero — sem cobrar do cliente nem pagar ao motoboy.')),
+    swCobranca);
+
+  const editor = EditorValores();
+  const editorWrap = el('div', { style: 'display:none' }, editor);
+  const aviso = el('div', { style: 'display:none;font-size:12.5px;color:var(--lx-tinta-2);padding:10px 14px;background:var(--lx-info-bg);border-radius:8px;margin-bottom:16px' });
+
+  const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:20px;display:none', onClick: salvar }, 'Salvar valores do cliente');
+  const btnRemover = el('button', { class: 'lx-btn lx-btn-secundario', style: 'margin-top:20px;margin-left:10px;display:none;color:var(--lx-erro)', onClick: remover }, 'Remover tabela própria');
+
+  wrap.append(lblPropria, lblCobranca, aviso, editorWrap, el('div', { style: 'display:flex' }, btnSalvar, btnRemover));
+
+  let _temPropria = false;
+
+  function aplicarEstado() {
+    const propria = swPropria.checked;
+    const cobra = swCobranca.checked;
+    // Editor só faz sentido com tabela própria E cobrança ativa.
+    editorWrap.style.display = (propria && cobra) ? 'block' : 'none';
+    editor.setHabilitado(cobra);
+    btnSalvar.style.display = propria ? 'inline-flex' : 'none';
+    btnRemover.style.display = (propria && _temPropria) ? 'inline-flex' : 'none';
+    if (!propria) {
+      aviso.style.display = 'block';
+      aviso.textContent = 'Este cliente está usando a tabela de valores global. Ative acima para definir preços próprios.';
+    } else if (!cobra) {
+      aviso.style.display = 'block';
+      aviso.textContent = 'Cobrança desligada: as corridas deste cliente sairão com valor zero (sem cobrança nem pagamento).';
+    } else {
+      aviso.style.display = 'none';
+    }
+  }
+  swPropria.onchange = aplicarEstado;
+  swCobranca.onchange = aplicarEstado;
+
+  async function carregar() {
+    try {
+      const r = await get(`/config/valores/cliente/${loja.id}`);
+      _temPropria = !!r.tem_propria;
+      swPropria.checked = _temPropria;
+      swCobranca.checked = r.cobranca_ativa !== false;
+      editor.preencher(_temPropria ? r.faixas : (r.global ? r.global.faixas : r.faixas));
+      aplicarEstado();
+    } catch (e) { toast(e.message || 'Erro ao carregar valores', 'erro'); }
+  }
+  async function salvar() {
+    const faixas = editor.obterValor();
+    const cobra = swCobranca.checked;
+    if (cobra && !faixas.length) { toast('Adicione ao menos uma faixa ou desligue a cobrança', 'erro'); return; }
+    try {
+      btnSalvar.disabled = true;
+      await put(`/config/valores/cliente/${loja.id}`, { faixas, cobranca_ativa: cobra });
+      _temPropria = true; btnRemover.style.display = 'inline-flex';
+      toast('Valores do cliente salvos');
+    } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
+  }
+  function remover() {
+    confirmar('Remover tabela própria', 'O cliente voltará a usar a tabela de valores global. Continuar?', async () => {
+      await del(`/config/valores/cliente/${loja.id}`);
+      _temPropria = false; swPropria.checked = false; swCobranca.checked = true; aplicarEstado();
+      toast('Tabela própria removida — usando a global');
     }, 'Remover', true);
   }
   carregar();

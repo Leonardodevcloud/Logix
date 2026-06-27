@@ -93,6 +93,36 @@ function initConfigRoutes() {
     try { res.json(await service.removerSlaLoja({ empresaId: req.empresaId, lojaId: req.params.lojaId, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
   });
 
+  // ── Tabela de valores global ───────────────────────────────────
+  router.get('/valores', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.obterValores({ empresaId: req.empresaId, lojaId: null })); } catch (e) { next(e); }
+  });
+  router.put('/valores', exigirCentral, async (req, res, next) => {
+    try {
+      res.json(await service.salvarValores({
+        empresaId: req.empresaId, lojaId: null,
+        faixas: req.body.faixas, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  // ── Tabela de valores por cliente (sobrescreve a global) ───────
+  router.get('/valores/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.obterValores({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }
+  });
+  router.put('/valores/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try {
+      res.json(await service.salvarValores({
+        empresaId: req.empresaId, lojaId: req.params.lojaId,
+        faixas: req.body.faixas, cobrancaAtiva: req.body.cobranca_ativa,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+  router.delete('/valores/cliente/:lojaId', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.removerValoresLoja({ empresaId: req.empresaId, lojaId: req.params.lojaId, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
+  });
+
   return router;
 }
 

@@ -2,6 +2,7 @@ import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import { EditorSla } from './sla-editor.js';
+import { EditorValores } from './valores-editor.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -33,6 +34,7 @@ export async function montar(container) {
   const ABAS = [
     { id: 'fretes', rotulo: 'Categorias de Frete' },
     { id: 'sla', rotulo: 'SLA Global' },
+    { id: 'valores', rotulo: 'Tabela de Valores Global' },
   ];
   let _aba = 'fretes';
 
@@ -53,6 +55,7 @@ export async function montar(container) {
     painel.innerHTML = '';
     if (_aba === 'fretes') painel.append(abaCategoriasFrete());
     else if (_aba === 'sla') painel.append(abaSlaGlobal());
+    else if (_aba === 'valores') painel.append(abaValoresGlobal());
   }
 
   conteudo.append(navAbas, painel);
@@ -195,6 +198,32 @@ function abaSlaGlobal() {
     const v = editor.obterValor();
     if (!v.faixas.length) { toast('Adicione ao menos uma faixa', 'erro'); return; }
     try { btnSalvar.disabled = true; await put('/config/sla', v); toast('SLA global salvo'); }
+    catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
+  }
+  carregar();
+  return wrap;
+}
+
+// ── Aba: Tabela de Valores Global ─────────────────────────────────
+function abaValoresGlobal() {
+  const wrap = el('div', {});
+  wrap.append(
+    el('div', { style: 'margin-bottom:18px' },
+      el('h3', { style: 'font-size:16px;font-weight:800;margin:0 0 2px' }, 'Tabela de Valores Global'),
+      el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0' }, 'Valores cobrados do cliente e pagos ao motoboy por faixa de distância. Vale para todos os clientes — exceto os que tiverem uma tabela própria em “Gerir cliente → Valores”.')));
+
+  const editor = EditorValores();
+  const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', style: 'margin-top:20px', onClick: salvar }, 'Salvar tabela global');
+  wrap.append(editor, btnSalvar);
+
+  async function carregar() {
+    try { const r = await get('/config/valores'); editor.preencher(r.faixas); }
+    catch (e) { toast(e.message || 'Erro ao carregar valores', 'erro'); }
+  }
+  async function salvar() {
+    const faixas = editor.obterValor();
+    if (!faixas.length) { toast('Adicione ao menos uma faixa', 'erro'); return; }
+    try { btnSalvar.disabled = true; await put('/config/valores', { faixas }); toast('Tabela de valores salva'); }
     catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
   }
   carregar();
