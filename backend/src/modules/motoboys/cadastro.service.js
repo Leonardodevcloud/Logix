@@ -9,6 +9,20 @@ try { emitirParaMotoboy = require('../../realtime/ws').emitirParaMotoboy; } catc
 
 const TIPOS_DOC = ['selfie', 'habilitacao', 'comprovante_endereco', 'antecedentes'];
 
+// Converte data para o formato AAAA-MM-DD que o Postgres aceita.
+// Aceita "DD/MM/AAAA" (padrão BR do app) e "AAAA-MM-DD" (já no formato).
+function normalizarData(valor) {
+  if (!valor) return null;
+  const s = String(valor).trim();
+  // DD/MM/AAAA
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  // AAAA-MM-DD (ou ISO com hora)
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return null; // formato desconhecido → não grava (evita erro)
+}
+
 // ── Config de cadastro (campos obrigatórios) ──────────────────────
 const CONFIG_PADRAO = {
   nome_completo: true, cpf: true, data_nascimento: true, telefone_principal: true,
@@ -99,6 +113,7 @@ async function cadastrarPeloApp({ empresaId, dados }) {
   const cpf = String(d.cpf || '').replace(/\D/g, '');
   const tel = String(d.telefone_principal || '').replace(/\D/g, '');
   const email = String(d.email || '').trim().toLowerCase();
+  const nascimento = normalizarData(d.data_nascimento);
 
   if (cfg.cpf && cpf.length !== 11) throw AppError.validacao('CPF inválido');
   if (cfg.email && !/^[^@]+@[^@]+\.[^@]+$/.test(email)) throw AppError.validacao('E-mail inválido');
@@ -128,7 +143,7 @@ async function cadastrarPeloApp({ empresaId, dados }) {
         modalidade_interesse_id, situacao_cadastro, origem_cadastro, status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pendente','app','inativo')
      RETURNING id, codigo`,
-    [empresaId, d.nome_completo, cpf, d.data_nascimento || null, tel, String(d.telefone_emergencia || '').replace(/\D/g, '') || null,
+    [empresaId, d.nome_completo, cpf, nascimento, tel, String(d.telefone_emergencia || '').replace(/\D/g, '') || null,
      email, senhaHash, String(d.cep || '').replace(/\D/g, '') || null, d.logradouro || null, d.numero || null,
      d.complemento || null, d.bairro || null, d.cidade || null, (d.estado || '').toUpperCase().slice(0, 2) || null,
      d.modalidade_interesse_id || null]
@@ -277,7 +292,7 @@ async function editarCadastro({ empresaId, motoboyId, dados, usuarioId }) {
 
   if (d.nome_completo !== undefined) set('nome_completo', d.nome_completo);
   if (d.cpf !== undefined) set('cpf', String(d.cpf).replace(/\D/g, ''));
-  if (d.data_nascimento !== undefined) set('data_nascimento', d.data_nascimento || null);
+  if (d.data_nascimento !== undefined) set('data_nascimento', normalizarData(d.data_nascimento));
   if (d.telefone_principal !== undefined) set('telefone_principal', String(d.telefone_principal).replace(/\D/g, ''));
   if (d.telefone_emergencia !== undefined) set('telefone_emergencia', String(d.telefone_emergencia || '').replace(/\D/g, '') || null);
   if (d.email !== undefined) set('email', String(d.email).trim().toLowerCase());
