@@ -253,28 +253,68 @@ function abaModalidades(loja) {
 // ── Aba 4: Regras de acionamento ──────────────────────────────────
 function abaRegras(loja) {
   const wrap = el('div', {});
-  wrap.append(secHead('Regras de acionamento', 'Parâmetros que controlam como as corridas deste cliente são oferecidas aos motoboys.'));
-  const form = el('div', { style: 'display:flex;flex-direction:column;gap:18px;max-width:420px' });
+  wrap.append(secHead('Regras de acionamento', 'Parâmetros e permissões que controlam como as corridas deste cliente são oferecidas e geridas.'));
+  const form = el('div', { style: 'display:flex;flex-direction:column;gap:22px;max-width:560px' });
   wrap.append(form);
 
   const inpMax = el('input', { class: 'lx-input', type: 'number', min: '1', step: '1' });
   const inpRaio = el('input', { class: 'lx-input', type: 'number', min: '0.5', step: '0.5' });
-  const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'align-self:flex-start' }, 'Salvar regras');
 
-  form.append(
+  // Bloco de números
+  const blocoNum = el('div', { style: 'display:flex;flex-direction:column;gap:18px' },
     el('div', { class: 'lx-field' }, el('label', {}, 'Máximo de corridas simultâneas por motoboy'), inpMax,
       el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Quantas corridas um motoboy pode ter/aceitar ao mesmo tempo.')),
     el('div', { class: 'lx-field' }, el('label', {}, 'Raio de aparição (km)'), inpRaio,
-      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Distância máxima em que a corrida aparece para um motoboy.')),
-    btn);
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Distância máxima em que a corrida aparece para um motoboy.')));
+
+  // Toggles de permissão (cada um é um switch sim/não).
+  const toggles = {};
+  function linhaToggle(chave, titulo, descricao) {
+    const sw = el('input', { type: 'checkbox', style: 'width:38px;height:20px;cursor:pointer;accent-color:var(--lx-ok);flex-shrink:0' });
+    toggles[chave] = sw;
+    return el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio)' },
+      el('div', { style: 'min-width:0' },
+        el('div', { style: 'font-size:13.5px;font-weight:700' }, titulo),
+        descricao ? el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, descricao) : el('span', {})),
+      sw);
+  }
+
+  const blocoPerm = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+    el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px' }, 'Permissões do cliente'),
+    linhaToggle('pode_cancelar_associada', 'Loja pode cancelar corrida já associada', 'Permite à loja cancelar uma corrida que já foi atribuída a um motoboy.'),
+    linhaToggle('pode_alterar_profissional', 'Cliente pode alterar o profissional do serviço', 'Permite trocar o motoboy de uma corrida.'),
+    linhaToggle('pode_editar_servico', 'Cliente pode editar o serviço', 'Permite editar endereços e dados da corrida.'),
+    linhaToggle('pode_escolher_profissional', 'Cliente pode escolher o profissional', 'Se desligado, o sistema envia para o mais próximo ou o primeiro da fila.'),
+    linhaToggle('somente_online', 'Enviar somente para profissionais online', 'A corrida só é oferecida a motoboys que estiverem online.'));
+
+  const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'align-self:flex-start' }, 'Salvar regras');
+  form.append(blocoNum, blocoPerm, btn);
 
   async function carregar() {
-    try { const r = await get(`/clientes/${loja.id}/regras`); inpMax.value = r.max_corridas_motoboy ?? 3; inpRaio.value = r.raio_km ?? 5; }
-    catch (e) { toast(e.message || 'Erro', 'erro'); }
+    try {
+      const r = await get(`/clientes/${loja.id}/regras`);
+      inpMax.value = r.max_corridas_motoboy ?? 3;
+      inpRaio.value = r.raio_km ?? 5;
+      toggles.pode_cancelar_associada.checked = r.pode_cancelar_associada !== false;
+      toggles.pode_alterar_profissional.checked = r.pode_alterar_profissional !== false;
+      toggles.pode_editar_servico.checked = r.pode_editar_servico !== false;
+      toggles.pode_escolher_profissional.checked = r.pode_escolher_profissional !== false;
+      toggles.somente_online.checked = r.somente_online !== false;
+    } catch (e) { toast(e.message || 'Erro', 'erro'); }
   }
   btn.onclick = async () => {
-    try { btn.disabled = true; await put(`/clientes/${loja.id}/regras`, { maxCorridas: Number(inpMax.value), raioKm: Number(inpRaio.value) }); toast('Regras salvas'); }
-    catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btn.disabled = false; }
+    try {
+      btn.disabled = true;
+      await put(`/clientes/${loja.id}/regras`, {
+        maxCorridas: Number(inpMax.value), raioKm: Number(inpRaio.value),
+        pode_cancelar_associada: toggles.pode_cancelar_associada.checked,
+        pode_alterar_profissional: toggles.pode_alterar_profissional.checked,
+        pode_editar_servico: toggles.pode_editar_servico.checked,
+        pode_escolher_profissional: toggles.pode_escolher_profissional.checked,
+        somente_online: toggles.somente_online.checked,
+      });
+      toast('Regras salvas');
+    } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btn.disabled = false; }
   };
   carregar();
   return wrap;

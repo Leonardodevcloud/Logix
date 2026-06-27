@@ -52,6 +52,12 @@ async function initClienteHubTables() {
       raio_km           NUMERIC(6,2) NOT NULL DEFAULT 5, -- raio em que a corrida aparece
       atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+  // Regras booleanas (padrão: ligado / permissivo).
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_cancelar_associada BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_alterar_profissional BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_editar_servico BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_escolher_profissional BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS somente_online BOOLEAN NOT NULL DEFAULT TRUE`);
 
   // ── Motoboys exclusivos do cliente (por modalidade) ─────────────
   // Um motoboy pode ser atribuído ao cliente em uma ou mais modalidades.

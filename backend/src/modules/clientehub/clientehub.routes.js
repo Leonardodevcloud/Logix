@@ -67,7 +67,18 @@ function initClienteHubRoutes() {
     try { res.json(await service.obterRegras({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }
   });
   router.put('/:lojaId/regras', async (req, res, next) => {
-    try { res.json(await service.salvarRegras({ ...base(req), maxCorridas: req.body.maxCorridas, raioKm: req.body.raioKm })); } catch (e) { next(e); }
+    try {
+      res.json(await service.salvarRegras({
+        ...base(req), maxCorridas: req.body.maxCorridas, raioKm: req.body.raioKm,
+        booleanos: {
+          pode_cancelar_associada: req.body.pode_cancelar_associada,
+          pode_alterar_profissional: req.body.pode_alterar_profissional,
+          pode_editar_servico: req.body.pode_editar_servico,
+          pode_escolher_profissional: req.body.pode_escolher_profissional,
+          somente_online: req.body.somente_online,
+        },
+      }));
+    } catch (e) { next(e); }
   });
 
   // ── 6) Motoboys exclusivos ─────────────────────────────────────
