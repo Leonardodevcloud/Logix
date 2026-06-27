@@ -2,10 +2,20 @@ const express = require('express');
 const AppError = require('../../shared/AppError');
 const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
+const storage = require('../../shared/storage');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 let geocodificar = null;
 try { geocodificar = require('../../integracoes/openrouteservice').geocodificar; } catch {}
+
+// Gera a URL assinada fresca da selfie do motoboy (a foto não é persistida como URL).
+async function fotoSelfie(motoboyId) {
+  try {
+    const { rows } = await query(`SELECT storage_key FROM motoboy_documentos WHERE motoboy_id = $1 AND tipo = 'selfie' LIMIT 1`, [motoboyId]);
+    if (rows[0]) return await storage.urlDe(rows[0].storage_key);
+  } catch {}
+  return null;
+}
 
 // Haversine entre dois pontos {lat,lng} em km.
 function _haversineKm(pts) {
@@ -94,6 +104,7 @@ module.exports = function motoboyAppRoutes() {
       );
       if (!rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
       const m = rows[0];
+      m.foto_url = await fotoSelfie(id);
 
       // Estatísticas: concluídas e ganhos (hoje, mês, total). Em centavos.
       const { rows: stat } = await query(
@@ -123,6 +134,7 @@ module.exports = function motoboyAppRoutes() {
         [req.motoboy.id]
       );
       if (!rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
+      rows[0].foto_url = await fotoSelfie(req.motoboy.id);
       res.json(rows[0]);
     } catch (e) { next(e); }
   });

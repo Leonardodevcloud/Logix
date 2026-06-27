@@ -160,7 +160,7 @@ async function cadastrarPeloApp({ empresaId, dados }) {
            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
           [empresaId, motoboyId, tipo, key, mime, tamanho]
         );
-        if (tipo === 'selfie') await query(`UPDATE motoboys SET foto_url = $1 WHERE id = $2`, [await storage.urlDe(key), motoboyId]);
+        // foto_url derivada da selfie em tempo de leitura (URL assinada nao pode ser persistida; expira).
       } catch (e) {
         // Se o storage falhar, removemos o cadastro para não deixar lixo.
         await query(`DELETE FROM motoboys WHERE id = $1`, [motoboyId]);
@@ -192,9 +192,10 @@ async function listarCadastros({ empresaId, situacao = null, busca = null }) {
   if (situacao) { params.push(situacao); cond.push(`m.situacao_cadastro = $${params.length}`); }
   if (busca) { params.push('%' + busca + '%'); cond.push(`(m.nome_completo ILIKE $${params.length} OR m.cpf ILIKE $${params.length} OR m.email ILIKE $${params.length})`); }
   const { rows } = await query(
-    `SELECT m.id, m.codigo, m.nome_completo, m.cpf, m.email, m.telefone_principal, m.foto_url,
+    `SELECT m.id, m.codigo, m.nome_completo, m.cpf, m.email, m.telefone_principal,
             m.situacao_cadastro, m.origem_cadastro, m.criado_em, m.modalidade_interesse_id,
             mi.nome AS modalidade_nome,
+            (SELECT d.storage_key FROM motoboy_documentos d WHERE d.motoboy_id = m.id AND d.tipo = 'selfie' LIMIT 1) AS selfie_key,
             (SELECT count(*)::int FROM motoboy_documentos d WHERE d.motoboy_id = m.id) AS qtd_documentos
        FROM motoboys m
        LEFT JOIN motoboy_modalidades_interesse mi ON mi.id = m.modalidade_interesse_id
@@ -202,6 +203,11 @@ async function listarCadastros({ empresaId, situacao = null, busca = null }) {
       ORDER BY CASE m.situacao_cadastro WHEN 'pendente' THEN 0 WHEN 'reenvio' THEN 1 ELSE 2 END, m.criado_em DESC`,
     params
   );
+  // Gera a URL assinada fresca da selfie (não pode ser persistida; expira).
+  for (const r of rows) {
+    if (r.selfie_key) { try { r.foto_url = await storage.urlDe(r.selfie_key); } catch { r.foto_url = null; } }
+    delete r.selfie_key;
+  }
   // Contadores por situação.
   const { rows: cont } = await query(
     `SELECT situacao_cadastro, count(*)::int AS qtd FROM motoboys WHERE empresa_id = $1 GROUP BY situacao_cadastro`,
@@ -352,7 +358,7 @@ async function reenviarCadastro({ empresaId, motoboyId, dados }) {
          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
         [empresaId, motoboyId, tipo, key, mime, tamanho]
       );
-      if (tipo === 'selfie') await query(`UPDATE motoboys SET foto_url = $1 WHERE id = $2`, [await storage.urlDe(key), motoboyId]);
+      // foto_url derivada da selfie em tempo de leitura (URL assinada nao pode ser persistida; expira).
     }
   }
   // Volta para pendente (re-análise).
