@@ -1,7 +1,8 @@
 import { casca } from '../core/layout.js';
 import { el, icones, secHeader, estadoVazio, campo } from '../core/ui.js';
-import { get, post, put, del } from '../core/api.js';
+import { get, post, put, patch, del } from '../core/api.js';
 import * as auth from '../core/auth.js';
+import { abrirGestaoCliente } from './cliente-gestao.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -41,19 +42,34 @@ export async function montar(container) {
   const resumo = el('span', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-left:auto' }, '');
 
   function linhaLoja(l) {
-    const badge = l.ativo
-      ? el('span', { class: 'lx-badge', style: 'background:var(--lx-ok-bg);color:var(--lx-ok)' }, 'Ativa')
-      : el('span', { class: 'lx-badge', style: 'background:var(--lx-erro-bg);color:var(--lx-erro)' }, 'Inativa');
-    return el('div', { class: 'lx-row', style: 'display:grid;grid-template-columns:1fr 120px 110px 90px 160px;gap:12px;align-items:center;padding:12px;border-bottom:1px solid var(--lx-linha)' },
+    // Toggle de status — desativar invalida os usuários do cliente.
+    const tgl = el('label', { style: 'display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none' });
+    const chk = el('input', { type: 'checkbox', style: 'width:34px;height:18px;cursor:pointer;accent-color:var(--lx-ok)' });
+    chk.checked = !!l.ativo;
+    chk.onchange = async () => {
+      const novo = chk.checked;
+      try {
+        await patch(`/clientes/${l.id}/status`, { ativo: novo });
+        l.ativo = novo;
+        txtStatus.textContent = novo ? 'Ativa' : 'Inativa';
+        txtStatus.style.color = novo ? 'var(--lx-ok)' : 'var(--lx-erro)';
+        toast(novo ? 'Cliente ativado' : 'Cliente desativado — usuários invalidados');
+      } catch (e) { toast(e.message || 'Erro', 'erro'); chk.checked = !novo; }
+    };
+    const txtStatus = el('span', { style: `font-size:12px;font-weight:700;color:${l.ativo ? 'var(--lx-ok)' : 'var(--lx-erro)'}` }, l.ativo ? 'Ativa' : 'Inativa');
+    tgl.append(chk, txtStatus);
+
+    return el('div', { class: 'lx-row', style: 'display:grid;grid-template-columns:1fr 110px 100px 96px 280px;gap:12px;align-items:center;padding:12px;border-bottom:1px solid var(--lx-linha)' },
       el('div', {},
         el('div', { style: 'font-weight:700;color:var(--lx-tinta)' }, l.nome_fantasia),
         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, l.cidade ? `${l.cidade}${l.estado ? '/' + l.estado : ''}` : (l.razao_social || '—'))),
       el('div', { style: 'font-size:13px;color:var(--lx-tinta-2)' }, `${l.total_entregas ?? 0} entregas`),
       el('div', { style: 'font-size:13px;color:var(--lx-tinta-2)' }, `${l.total_enderecos ?? 0} endereços`),
-      badge,
+      tgl,
       el('div', { style: 'display:flex;gap:6px;justify-content:flex-end' },
         el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:6px 10px;font-size:12px', onClick: () => abrirEnderecos(l) }, 'Endereços'),
-        el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:6px 10px;font-size:12px', onClick: () => abrirForm(l) }, 'Editar')));
+        el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:6px 10px;font-size:12px', onClick: () => abrirForm(l) }, 'Editar'),
+        el('button', { class: 'lx-btn lx-btn-primario', style: 'padding:6px 12px;font-size:12px', onClick: () => abrirGestao(l) }, 'Gerir cliente')));
   }
 
   function render() {
@@ -64,7 +80,7 @@ export async function montar(container) {
       return;
     }
     tabBody.append(
-      el('div', { style: 'display:grid;grid-template-columns:1fr 120px 110px 90px 160px;gap:12px;padding:10px 12px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;border-bottom:2px solid var(--lx-linha)' },
+      el('div', { style: 'display:grid;grid-template-columns:1fr 110px 100px 96px 280px;gap:12px;padding:10px 12px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;border-bottom:2px solid var(--lx-linha)' },
         el('div', {}, 'Loja'), el('div', {}, 'Entregas'), el('div', {}, 'Endereços'), el('div', {}, 'Status'), el('div', {})),
       ..._lojas.map(linhaLoja));
   }
@@ -72,6 +88,11 @@ export async function montar(container) {
   async function carregar() {
     try { _lojas = await get('/lojas'); render(); }
     catch (e) { toast(e.message || 'Erro ao carregar lojas', 'erro'); }
+  }
+
+  // Painel de gestão do cliente (centro de custo, usuários, modalidades, regras, motos).
+  function abrirGestao(loja) {
+    abrirGestaoCliente(loja, () => carregar());
   }
 
   // ── Formulário criar/editar loja ────────────────────────────────
