@@ -51,6 +51,15 @@ function initFilasRoutes() {
     } catch (e) { next(e); }
   });
 
+  // Dispara a oferta de uma corrida para os motoboys no raio (primeiro a aceitar leva).
+  router.post('/:entregaId/disparar', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
+    try {
+      res.json(await service.dispararOferta({
+        empresaId: req.empresaId, entregaId: req.params.entregaId, usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   router.post('/:entregaId/atribuir-auto', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
     try {
       res.json(await service.atribuirAutomatica({

@@ -352,8 +352,23 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
     params
   );
 
+  // Carrega config de SLA (geral da empresa + específicas por loja) para calcular o status.
+  const slaCfgs = await query(
+    `SELECT loja_id, faixas, minutos_atencao, minutos_iminente, sla_padrao_min
+       FROM sla_config WHERE empresa_id = $1 AND ativo = TRUE`,
+    [empresaId]
+  );
+  const slaGeral = slaCfgs.rows.find(c => c.loja_id == null) || null;
+  const slaPorLoja = new Map(slaCfgs.rows.filter(c => c.loja_id != null).map(c => [c.loja_id, c]));
+
   const semAssociacao = [], emAndamento = [], concluidas = [], canceladas = [];
   for (const r of rows) {
+    // status SLA (só faz sentido para corridas ainda não concluídas/canceladas)
+    if (!['entregue', 'cancelada'].includes(r.status)) {
+      r.sla = calcularStatusSla(r, slaPorLoja.get(r.loja_id) || slaGeral);
+    } else {
+      r.sla = null;
+    }
     if (r.status === 'aguardando_atribuicao') semAssociacao.push(r);
     else if (['aguardando_coleta', 'em_coleta', 'em_rota'].includes(r.status)) emAndamento.push(r);
     else if (r.status === 'cancelada') canceladas.push(r);
@@ -361,6 +376,33 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
   }
   return { semAssociacao, emAndamento, concluidas, canceladas, buscando: !!buscando,
     totais: { semAssociacao: semAssociacao.length, emAndamento: emAndamento.length, concluidas: concluidas.length, canceladas: canceladas.length } };
+}
+
+// Calcula o status de SLA de uma corrida com base na config (faixas por km).
+// Retorna { nivel, rotulo, vencimentoIso, minutosRestantes } ou null se sem config.
+// Níveis: 'no_prazo' | 'atencao' | 'iminente' | 'fora_prazo'.
+function calcularStatusSla(corrida, cfg) {
+  if (!cfg) return null;
+  const km = corrida.distancia_km != null ? Number(corrida.distancia_km) : null;
+  // descobre os minutos de SLA pela faixa de km (ou o padrão)
+  let minutos = cfg.sla_padrao_min || 90;
+  if (km != null && Array.isArray(cfg.faixas) && cfg.faixas.length) {
+    const faixa = [...cfg.faixas].sort((a, b) => a.ate_km - b.ate_km).find(f => km <= f.ate_km);
+    if (faixa && faixa.minutos) minutos = faixa.minutos;
+  }
+  const criado = new Date(corrida.criado_em).getTime();
+  const vencimento = criado + minutos * 60000;
+  const restanteMin = Math.round((vencimento - Date.now()) / 60000);
+  const atencao = cfg.minutos_atencao ?? 30;
+  const iminente = cfg.minutos_iminente ?? 15;
+
+  let nivel, rotulo;
+  if (restanteMin < 0) { nivel = 'fora_prazo'; rotulo = 'Fora do prazo'; }
+  else if (restanteMin <= iminente) { nivel = 'iminente'; rotulo = 'Atraso iminente'; }
+  else if (restanteMin <= atencao) { nivel = 'atencao'; rotulo = 'Atenção'; }
+  else { nivel = 'no_prazo'; rotulo = 'No prazo'; }
+
+  return { nivel, rotulo, vencimentoIso: new Date(vencimento).toISOString(), minutosRestantes: restanteMin };
 }
 
 // Trajeto GPS de uma entrega: pontos do rastreamento (ordenados) + coleta + destinos.

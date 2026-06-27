@@ -99,6 +99,99 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
   return { atribuidas: rows.length, protocolos: rows.map(r => r.protocolo), motoboy_nome: mb.rows[0].nome_completo };
 }
 
+// Dispara a OFERTA de uma corrida: oferece aos motoboys online dentro do raio
+// configurado. Não atribui ninguém ainda — o primeiro a aceitar leva.
+async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
+  const ent = await query(
+    `SELECT id, status, protocolo, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`,
+    [entregaId, empresaId]
+  );
+  if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const e = ent.rows[0];
+  if (e.status !== STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) throw AppError.validacao('Entrega não está disponível para disparo');
+  if (e.coleta_lat == null || e.coleta_lng == null) throw AppError.validacao('Coleta sem coordenadas — geocodifique antes de disparar');
+
+  // Config de raio/expiração (geral da empresa).
+  const cfg = await query(`SELECT raio_disparo_km, oferta_expira_seg FROM sla_config WHERE empresa_id = $1 AND loja_id IS NULL LIMIT 1`, [empresaId]);
+  const raioKm = cfg.rows[0]?.raio_disparo_km != null ? Number(cfg.rows[0].raio_disparo_km) : 5;
+  const expiraSeg = cfg.rows[0]?.oferta_expira_seg != null ? Number(cfg.rows[0].oferta_expira_seg) : 120;
+
+  // Motoboys online + ativos, com a última posição conhecida.
+  const disp = await listarDisponiveis(empresaId);
+  if (!disp.length) throw AppError.validacao('Nenhum motoboy online no momento');
+  const ids = disp.map(d => d.id);
+  const { rows: posicoes } = await query(
+    `SELECT DISTINCT ON (motoboy_id) motoboy_id, lat, lng FROM rastreamento
+      WHERE motoboy_id = ANY($1::uuid[]) ORDER BY motoboy_id, capturado_em DESC`,
+    [ids]
+  );
+  const posMap = new Map(posicoes.map(p => [p.motoboy_id, p]));
+
+  // Filtra quem está dentro do raio.
+  const candidatos = [];
+  for (const d of disp) {
+    const p = posMap.get(d.id);
+    if (!p) continue; // sem posição não dá pra saber o raio
+    const dist = distanciaKm(e, { lat: Number(p.lat), lng: Number(p.lng) });
+    if (dist <= raioKm) candidatos.push({ motoboy_id: d.id, distancia_km: Number(dist.toFixed(2)) });
+  }
+  if (!candidatos.length) throw AppError.validacao(`Nenhum motoboy dentro do raio de ${raioKm} km`);
+
+  // Cria a oferta + candidatos.
+  const expiraEm = new Date(Date.now() + expiraSeg * 1000).toISOString();
+  const ofe = await query(
+    `INSERT INTO entregas_ofertas (entrega_id, empresa_id, status, raio_km, expira_em)
+     VALUES ($1, $2, 'ofertada', $3, $4) RETURNING id`,
+    [entregaId, empresaId, raioKm, expiraEm]
+  );
+  const ofertaId = ofe.rows[0].id;
+  for (const c of candidatos) {
+    await query(`INSERT INTO entregas_ofertas_candidatos (oferta_id, motoboy_id, distancia_km) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [ofertaId, c.motoboy_id, c.distancia_km]);
+  }
+
+  // Marca a entrega como "ofertada" via campo distribuicao (mantém status na fila).
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm }, ip });
+  // Notifica os candidatos (app escuta esse evento por motoboy).
+  candidatos.forEach(c => emitirParaEmpresa(empresaId, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, motoboyId: c.motoboy_id, distanciaKm: c.distancia_km, expiraEm }));
+
+  return { ofertaId, candidatos: candidatos.length, raioKm, expiraEm };
+}
+
+// Motoboy aceita a oferta. Primeiro a aceitar leva (trava por UPDATE condicional).
+async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
+  const ofe = await query(`SELECT id, entrega_id, status, expira_em FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
+  if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
+  if (ofe.rows[0].status !== 'ofertada') throw AppError.validacao('Oferta já não está mais disponível');
+  if (new Date(ofe.rows[0].expira_em).getTime() < Date.now()) throw AppError.validacao('Oferta expirada');
+
+  // valida que o motoboy era candidato
+  const cand = await query(`SELECT 1 FROM entregas_ofertas_candidatos WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
+  if (!cand.rows.length) throw AppError.validacao('Você não está entre os candidatos desta oferta');
+
+  // TRAVA: só um aceita. Atualiza a oferta de 'ofertada' -> 'aceita' atomicamente.
+  const trava = await query(
+    `UPDATE entregas_ofertas SET status = 'aceita', aceita_por = $2, aceita_em = now()
+      WHERE id = $1 AND status = 'ofertada' RETURNING entrega_id`,
+    [ofertaId, motoboyId]
+  );
+  if (!trava.rows[0]) throw AppError.validacao('Outro motoboy já aceitou esta corrida');
+
+  const entregaId = trava.rows[0].entrega_id;
+  // Atribui a entrega ao motoboy que aceitou (se ainda estiver na fila).
+  const upd = await query(
+    `UPDATE entregas SET motoboy_id = $1, status = $2
+      WHERE id = $3 AND empresa_id = $4 AND status = $5 RETURNING protocolo`,
+    [motoboyId, STATUS_ENTREGA.AGUARDANDO_COLETA, entregaId, empresaId, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
+  );
+  if (!upd.rows[0]) {
+    // entrega saiu da fila no meio do caminho — desfaz a oferta
+    await query(`UPDATE entregas_ofertas SET status = 'cancelada' WHERE id = $1`, [ofertaId]);
+    throw AppError.validacao('A corrida não está mais disponível');
+  }
+  emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: upd.rows[0].protocolo, via: 'oferta' });
+  return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
+}
+
 
 async function atribuirAutomatica({ empresaId, entregaId, usuarioId, ip }) {
   const ent = await query(
@@ -164,4 +257,4 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };

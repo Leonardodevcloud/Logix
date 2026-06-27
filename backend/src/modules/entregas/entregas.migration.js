@@ -76,9 +76,78 @@ async function migrarColunasExtras() {
   }
 }
 
+// Configuração de SLA por empresa (geral) e por loja (opcional).
+// O prazo conta a partir da CRIAÇÃO da corrida. O tempo-base vem por FAIXA DE KM.
+// Estrutura pensada para ser editada na futura tela de configurações.
+async function initSlaConfig() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sla_config (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id         UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      loja_id            UUID REFERENCES lojas(id) ON DELETE CASCADE,  -- NULL = config geral da empresa
+      -- faixas de km -> minutos de SLA. Ex.: [{"ate_km":3,"minutos":60},{"ate_km":7,"minutos":90},...]
+      faixas             JSONB NOT NULL DEFAULT '[]'::jsonb,
+      -- minutos para entrar em cada alerta antes do vencimento
+      minutos_atencao    INTEGER NOT NULL DEFAULT 30,
+      minutos_iminente   INTEGER NOT NULL DEFAULT 15,
+      -- SLA fixo (minutos) usado quando não há faixa aplicável ou distância desconhecida
+      sla_padrao_min     INTEGER NOT NULL DEFAULT 90,
+      ativo              BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      atualizado_em      TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  // Garante no máximo uma config geral por empresa e uma por loja.
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sla_geral ON sla_config(empresa_id) WHERE loja_id IS NULL`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sla_loja ON sla_config(empresa_id, loja_id) WHERE loja_id IS NOT NULL`);
+
+  // Semeia uma config geral default para empresas que ainda não têm.
+  await query(`
+    INSERT INTO sla_config (empresa_id, loja_id, faixas, minutos_atencao, minutos_iminente, sla_padrao_min)
+    SELECT e.id, NULL,
+           '[{"ate_km":3,"minutos":60},{"ate_km":7,"minutos":90},{"ate_km":15,"minutos":120},{"ate_km":9999,"minutos":180}]'::jsonb,
+           30, 15, 90
+      FROM empresas e
+     WHERE NOT EXISTS (SELECT 1 FROM sla_config s WHERE s.empresa_id = e.id AND s.loja_id IS NULL)
+  `);
+
+  // Raio de disparo (km) para a oferta de corridas — configurável na tela futura.
+  await query(`ALTER TABLE sla_config ADD COLUMN IF NOT EXISTS raio_disparo_km NUMERIC(6,2) NOT NULL DEFAULT 5`);
+  // Tempo (segundos) que a oferta fica disponível antes de expirar.
+  await query(`ALTER TABLE sla_config ADD COLUMN IF NOT EXISTS oferta_expira_seg INTEGER NOT NULL DEFAULT 120`);
+}
+
+// Tabela de ofertas: quando uma corrida é "disparada", ela fica ofertada aos
+// motoboys do raio; o primeiro a aceitar leva (trava por status).
+async function initOfertasTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS entregas_ofertas (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entrega_id    UUID NOT NULL REFERENCES entregas(id) ON DELETE CASCADE,
+      empresa_id    UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL DEFAULT 'ofertada' CHECK (status IN ('ofertada','aceita','expirada','cancelada')),
+      raio_km       NUMERIC(6,2),
+      aceita_por    UUID REFERENCES motoboys(id) ON DELETE SET NULL,
+      aceita_em     TIMESTAMPTZ,
+      expira_em     TIMESTAMPTZ NOT NULL,
+      criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ofertas_entrega ON entregas_ofertas(entrega_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ofertas_status ON entregas_ofertas(empresa_id, status)`);
+  // candidatos da oferta (quais motoboys estavam no raio quando disparou)
+  await query(`
+    CREATE TABLE IF NOT EXISTS entregas_ofertas_candidatos (
+      oferta_id   UUID NOT NULL REFERENCES entregas_ofertas(id) ON DELETE CASCADE,
+      motoboy_id  UUID NOT NULL REFERENCES motoboys(id) ON DELETE CASCADE,
+      distancia_km NUMERIC(6,2),
+      PRIMARY KEY (oferta_id, motoboy_id)
+    )`);
+}
+
 async function initEntregasTablesComMigracoes() {
   await initEntregasTables();
   await migrarColunasExtras();
+  await initSlaConfig();
+  await initOfertasTable();
 }
 
 module.exports = { initEntregasTables: initEntregasTablesComMigracoes };
