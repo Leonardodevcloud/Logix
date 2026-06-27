@@ -360,6 +360,7 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
             l.nome_fantasia AS loja_nome, l.cidade AS loja_cidade, l.estado AS loja_uf,
             m.id AS motoboy_id, m.codigo AS motoboy_codigo, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
             cat.nome AS categoria_nome, cat.cor AS categoria_cor,
+            e.valor_cliente_cent, e.valor_motoboy_cent,
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco,
             (SELECT ep.lat FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lat,
             (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lng,
@@ -714,6 +715,38 @@ async function editarEnderecos({ empresaId, id, coleta, pontos, usuarioId, ip })
   return { ok: true };
 }
 
+// Edita manualmente os valores (cliente/motoboy) de uma corrida. Em centavos.
+// Registra a auditoria com os valores antigos e novos para a trilha de logs.
+async function editarValores({ empresaId, id, valorClienteCent, valorMotoboyCent, usuarioId, ip }) {
+  const { rows: ent } = await query(
+    `SELECT id, protocolo, valor_cliente_cent, valor_motoboy_cent FROM entregas WHERE id = $1 AND empresa_id = $2`,
+    [id, empresaId]
+  );
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+
+  const novoCli = valorClienteCent == null ? null : Math.max(0, Math.round(Number(valorClienteCent)));
+  const novoMb = valorMotoboyCent == null ? null : Math.max(0, Math.round(Number(valorMotoboyCent)));
+  if (novoCli == null && novoMb == null) throw AppError.validacao('Informe ao menos um valor');
+
+  const cliFinal = novoCli != null ? novoCli : ent[0].valor_cliente_cent;
+  const mbFinal = novoMb != null ? novoMb : ent[0].valor_motoboy_cent;
+
+  await query(
+    `UPDATE entregas SET valor_cliente_cent = $1, valor_motoboy_cent = $2 WHERE id = $3 AND empresa_id = $4`,
+    [cliFinal, mbFinal, id, empresaId]
+  );
+  registrarAuditoria({
+    empresaId, usuarioId, categoria: 'entregas', acao: 'editar_valores',
+    detalhe: {
+      id,
+      de_cliente_cent: ent[0].valor_cliente_cent, para_cliente_cent: cliFinal,
+      de_motoboy_cent: ent[0].valor_motoboy_cent, para_motoboy_cent: mbFinal,
+    }, ip,
+  }).catch(() => {});
+  emitirParaEmpresa(empresaId, 'entrega.status', { id });
+  return { ok: true, valor_cliente_cent: cliFinal, valor_motoboy_cent: mbFinal };
+}
+
 // Finaliza manualmente uma entrega (admin marca como entregue sem passar pelo app).
 async function finalizarManual({ empresaId, id, usuarioId, ip }) {
   const { rows: ent } = await query(`SELECT id, status, protocolo, iniciada_em, criado_em FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
@@ -855,6 +888,13 @@ async function logsEntrega({ empresaId, id }) {
       case 'editar_enderecos':
         titulo = 'Endereços editados';
         break;
+      case 'editar_valores': {
+        titulo = 'Valores editados';
+        const fmtR = c => (c == null ? '—' : 'R$ ' + (Number(c) / 100).toFixed(2).replace('.', ','));
+        if (d.de_cliente_cent !== d.para_cliente_cent) linhas.push(`Cliente: ${fmtR(d.de_cliente_cent)} → ${fmtR(d.para_cliente_cent)}`);
+        if (d.de_motoboy_cent !== d.para_motoboy_cent) linhas.push(`Motoboy: ${fmtR(d.de_motoboy_cent)} → ${fmtR(d.para_motoboy_cent)}`);
+        break;
+      }
       case 'cancelar':
         titulo = 'Corrida cancelada';
         if (d.motivo) linhas.push(`Motivo: ${d.motivo}`);
@@ -926,7 +966,7 @@ async function detalhesPontos({ empresaId, id }) {
 
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
+  listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

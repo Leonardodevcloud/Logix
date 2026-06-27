@@ -170,6 +170,8 @@ function dropMulti(titulo, itens, selecionados, onMudar) {
 export async function montar(container) {
   const podeGerenciar = auth.pode('filas.gerenciar');
   const podeEditar = auth.pode('entregas.editar');
+  const _acesso = auth.acessoAtual();
+  const _ehCentral = _acesso.perfil === 'super_admin' || _acesso.perfil === 'central_admin';
 
   let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], canceladas: [], totais: {}, buscando: false };
   let _lojas = [], _cidades = [], _categorias = [], _motoboys = [];
@@ -358,6 +360,30 @@ export async function montar(container) {
     btn.onclick = async () => { try { btn.disabled = true; await patch(`/entregas/${c.id}/reabrir`, {}); ov.remove(); toast('Corrida reaberta — voltou para Sem associação'); setAba('sem'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; } };
   }
 
+  // Editar valores (cliente/motoboy) de uma corrida — só central.
+  function abrirEditarValores(c) {
+    const toReais = cent => cent == null ? '' : (Number(cent) / 100).toFixed(2);
+    const inpCli = el('input', { class: 'lx-input', type: 'number', min: '0', step: '0.01', value: toReais(c.valor_cliente_cent) });
+    const inpMb = el('input', { class: 'lx-input', type: 'number', min: '0', step: '0.01', value: toReais(c.valor_motoboy_cent) });
+    const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar valores');
+    const ov = modal(`Editar valores — ${c.protocolo}`, el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
+      el('p', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin:0' }, 'Ajuste manualmente os valores desta corrida. A alteração fica registrada no histórico.'),
+      campo('Valor do cliente (R$)', inpCli),
+      campo('Valor do motoboy (R$)', inpMb)), [
+      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn,
+    ]);
+    btn.onclick = async () => {
+      const cli = inpCli.value === '' ? null : Math.round(Number(String(inpCli.value).replace(',', '.')) * 100);
+      const mb = inpMb.value === '' ? null : Math.round(Number(String(inpMb.value).replace(',', '.')) * 100);
+      if (cli == null && mb == null) { toast('Informe ao menos um valor', 'erro'); return; }
+      try {
+        btn.disabled = true;
+        await patch(`/entregas/${c.id}/valores`, { valor_cliente_cent: cli, valor_motoboy_cent: mb });
+        ov.remove(); toast('Valores atualizados'); carregar();
+      } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
+    };
+  }
+
   // Modal de logs: timeline completa da corrida.
   async function abrirLogs(c) {
     const corpo = el('div', { style: 'min-height:120px' }, el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Carregando histórico…'));
@@ -374,6 +400,7 @@ export async function montar(container) {
       if (['cancelar', 'cancelada'].includes(t)) return 'var(--lx-erro)';
       if (['reabrir'].includes(t)) return '#9333ea';
       if (['editar_enderecos'].includes(t)) return '#a16207';
+      if (['editar_valores'].includes(t)) return '#15803d';
       return 'var(--lx-tinta-2)';
     };
     const origemTag = o => o === 'app'
@@ -688,12 +715,27 @@ export async function montar(container) {
       el('span', { style: 'font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.categoria_nome));
   }
 
+  // Valor cliente / motoboy (R$). Clicável para editar (só admin da central).
+  function celulaValor(c) {
+    const fmt = cent => (cent == null ? '—' : 'R$ ' + (Number(cent) / 100).toFixed(2).replace('.', ','));
+    const semValor = c.valor_cliente_cent == null && c.valor_motoboy_cent == null;
+    const box = el('div', { style: `display:flex;flex-direction:column;line-height:1.35;min-width:0;cursor:${_ehCentral ? 'pointer' : 'default'};border-radius:6px;padding:2px 4px`, title: _ehCentral ? 'Clique para editar os valores' : '' },
+      el('span', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);white-space:nowrap' }, fmt(c.valor_cliente_cent)),
+      el('span', { style: 'font-size:11px;color:var(--lx-tinta-2);white-space:nowrap' }, fmt(c.valor_motoboy_cent)));
+    if (_ehCentral) {
+      box.addEventListener('mouseenter', () => box.style.background = 'var(--lx-info-bg)');
+      box.addEventListener('mouseleave', () => box.style.background = '');
+      box.addEventListener('click', () => abrirEditarValores(c));
+    }
+    return box;
+  }
+
   function linha(c) {
-    // Colunas por aba. Agora todas têm a coluna Categoria (após Trajeto).
-    const cols = _aba === 'sem' ? '34px 70px 1fr 110px 80px 88px 100px 230px'
-      : _aba === 'and' ? '72px 1.1fr 110px 120px 92px 106px 230px'
-      : _aba === 'con' ? '72px 1.2fr 110px 110px 92px 92px 104px 140px'
-      : '72px 1.2fr 110px 116px 96px 96px 140px'; // canceladas
+    // Colunas por aba. Todas têm Categoria e Valor (após Trajeto).
+    const cols = _aba === 'sem' ? '34px 64px 1fr 96px 96px 56px 78px 92px 210px'
+      : _aba === 'and' ? '64px 1fr 96px 100px 110px 84px 96px 210px'
+      : _aba === 'con' ? '64px 1fr 96px 100px 100px 84px 84px 96px 128px'
+      : '64px 1fr 96px 100px 106px 88px 88px 128px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -706,6 +748,7 @@ export async function montar(container) {
     celulas.push(el('div', { style: 'font-weight:700;font-size:13px;color:var(--lx-azul-primario)' }, c.protocolo));
     celulas.push(enderecoEmpilhado(c)); // Trajeto (Coleta/Entrega) em TODAS as abas
     celulas.push(celulaCategoria(c));   // Categoria (modalidade) em TODAS as abas
+    celulas.push(celulaValor(c));       // Valor (cliente/motoboy) em TODAS as abas
 
     if (_aba === 'sem') {
       celulas.push(bussola(c.coleta_lat, c.coleta_lng, c.destino_lat, c.destino_lng)); // Direção
@@ -731,14 +774,14 @@ export async function montar(container) {
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:10px;padding:11px 14px;align-items:center;border-bottom:0.5px solid var(--lx-linha);${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '34px 70px 1fr 110px 80px 88px 100px 230px'
-      : _aba === 'and' ? '72px 1.1fr 110px 120px 92px 106px 230px'
-      : _aba === 'con' ? '72px 1.2fr 110px 110px 92px 92px 104px 140px'
-      : '72px 1.2fr 110px 116px 96px 96px 140px';
-    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Direção', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Status', 'Ações']
-      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
-      : ['Protocolo', 'Trajeto', 'Categoria', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
+    const cols = _aba === 'sem' ? '34px 64px 1fr 96px 96px 56px 78px 92px 210px'
+      : _aba === 'and' ? '64px 1fr 96px 100px 110px 84px 96px 210px'
+      : _aba === 'con' ? '64px 1fr 96px 100px 100px 84px 84px 96px 128px'
+      : '64px 1fr 96px 100px 106px 88px 88px 128px';
+    const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Status', 'Ações']
+      : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
+      : ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Motoboy', 'Solicitação', 'Cancelada', 'Ações'];
     const cels = labels.map((l, i) => el('div', { style: i === labels.length - 1 ? 'text-align:right' : '' }, l));
     if (_aba === 'sem') {
       const todas = el('input', { type: 'checkbox', style: 'width:16px;height:16px;cursor:pointer;accent-color:var(--lx-azul-primario)' });

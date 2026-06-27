@@ -105,6 +105,20 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // PATCH /entregas/:id/valores — edita valor cliente/motoboy (só central)
+  router.patch('/:id/valores', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      // Usuário de loja não edita valores.
+      if (req.lojaId) throw AppError.proibido('Apenas a central pode editar valores');
+      res.json(await service.editarValores({
+        empresaId: req.empresaId, id: req.params.id,
+        valorClienteCent: req.body.valor_cliente_cent,
+        valorMotoboyCent: req.body.valor_motoboy_cent,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   // PATCH /entregas/:id/finalizar — finalização manual pela central
   router.patch('/:id/finalizar', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
     try {
