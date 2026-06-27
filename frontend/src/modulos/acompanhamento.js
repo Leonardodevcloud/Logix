@@ -526,7 +526,7 @@ export async function montar(container) {
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'and') {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
-      w.append(botaoIcone(P.mapa, 'Rastreio ao vivo', () => { location.hash = '/rastreio'; }));
+      w.append(botaoIcone(P.mapa, 'Rastreio ao vivo (nova guia)', () => { window.open(location.origin + location.pathname + '#/rastreio', '_blank'); }));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
@@ -931,15 +931,18 @@ export async function montar(container) {
     catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
   }
 
-  // Carrega lojas e cidades para os checkboxes.
-  try { _lojas = await get('/lojas?ativo=true'); } catch { _lojas = []; }
-  try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
-  preencherDrops(); atualizarBadge();
-
+  // Monta a casca IMEDIATAMENTE (transição suave, sem esperar a API).
   const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, barraSel, tabelaWrap);
   container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas'));
   setAba('sem');
   carregar();
+
+  // Lojas e cidades para os checkboxes — carregadas em background (não bloqueiam a tela).
+  (async () => {
+    try { _lojas = await get('/lojas?ativo=true'); } catch { _lojas = []; }
+    try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
+    preencherDrops(); atualizarBadge();
+  })();
 
   const timer = setInterval(carregar, 30000);
   const obs = new MutationObserver(() => { if (!document.body.contains(container)) { clearInterval(timer); obs.disconnect(); } });
