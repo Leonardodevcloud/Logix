@@ -62,8 +62,43 @@ export async function montar(container) {
     };
 
     const nomeInp = el('input', { class: 'lx-input', value: dados.nome_exibicao || '', placeholder: 'Nome exibido no painel do cliente' });
-    const logoInp = el('input', { class: 'lx-input', value: dados.logo_url || '', placeholder: 'https://…/logo.svg' });
+    const ehDataUri = (v) => typeof v === 'string' && v.startsWith('data:');
+    // Logo enviada por upload (data URI). Se a empresa já tem logo em base64, começa com ela.
+    let logoData = ehDataUri(dados.logo_url) ? dados.logo_url : null;
+    const logoInp = el('input', { class: 'lx-input', value: ehDataUri(dados.logo_url) ? '' : (dados.logo_url || ''), placeholder: 'https://…/logo.png (ou envie um arquivo)' });
     const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
+
+    // Upload de logo: lê o arquivo, reduz no navegador (máx 480px) e guarda como base64.
+    const fileInp = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
+    const thumb = el('div', { style: 'width:40px;height:40px;border-radius:8px;border:1px solid var(--lx-linha);background:#fff;display:grid;place-items:center;overflow:hidden;flex:none' });
+    function pintarThumb() {
+      thumb.innerHTML = '';
+      const fonte = logoData || logoInp.value.trim();
+      if (fonte) thumb.append(el('img', { src: fonte, style: 'width:100%;height:100%;object-fit:contain' }));
+      else thumb.append(el('span', { style: 'font-size:10px;color:var(--lx-tinta-2)' }, 'logo'));
+    }
+    const btnUpload = el('button', { class: 'lx-btn lx-btn-secundario', type: 'button', onClick: () => fileInp.click() }, 'Enviar arquivo');
+    const btnLimpar = el('button', { class: 'lx-btn lx-btn-secundario', type: 'button', onClick: () => { logoData = null; logoInp.value = ''; pintarThumb(); pintarPreview(); } }, 'Remover');
+    fileInp.addEventListener('change', () => {
+      const f = fileInp.files && fileInp.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          const escala = Math.min(1, 480 / Math.max(w, h));
+          w = Math.round(w * escala); h = Math.round(h * escala);
+          const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          logoData = cv.toDataURL('image/png');
+          logoInp.value = '';
+          pintarThumb(); pintarPreview();
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+    });
 
     // Preview ao vivo
     const preview = el('div', { class: 'lx-card', style: 'overflow:hidden' });
@@ -73,7 +108,7 @@ export async function montar(container) {
       const nomeCliente = nomeInp.value.trim() ||
         (empresas.find(e => String(e.id) === String(empresaId))?.razao_social || 'Cliente');
 
-      const logoUrl = logoInp.value.trim();
+      const logoUrl = logoData || logoInp.value.trim();
       const marcaBox = logoUrl
         ? el('div', { style: 'width:30px;height:30px;border-radius:8px;overflow:hidden;background:#fff;display:grid;place-items:center' },
             el('img', { src: logoUrl, style: 'width:100%;height:100%;object-fit:contain', onerror: function(){ this.style.display='none'; } }))
@@ -117,8 +152,9 @@ export async function montar(container) {
     }
 
     nomeInp.addEventListener('input', pintarPreview);
-    logoInp.addEventListener('input', pintarPreview);
+    logoInp.addEventListener('input', () => { pintarThumb(); pintarPreview(); });
     subdominioInp.addEventListener('input', pintarPreview);
+    pintarThumb();
     pintarPreview();
 
     function pickerCor(rotulo, chave) {
@@ -146,7 +182,7 @@ export async function montar(container) {
           ...valores,
           empresa_id: empresaId,
           nome_exibicao: nomeInp.value.trim() || undefined,
-          logo_url: logoInp.value.trim() || undefined,
+          logo_url: logoData || logoInp.value.trim() || undefined,
           subdominio: sub || undefined,
         }, { empresaId });
         msg.style.color = 'var(--lx-ok)';
@@ -161,6 +197,7 @@ export async function montar(container) {
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px' },
         campo('Nome de exibição', nomeInp),
         campo('URL do logo', logoInp),
+        campo('Logo por upload', el('div', { style: 'display:flex;align-items:center;gap:10px' }, thumb, btnUpload, btnLimpar, fileInp)),
         campo('Domínio do cliente (subdomínio)', subdominioInp),
         pickerCor('Cor primária (botões/ações)', 'cor_primaria'),
         pickerCor('Cor secundária (sidebar/fundo escuro)', 'cor_secundaria'),
