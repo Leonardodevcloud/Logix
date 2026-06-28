@@ -111,9 +111,24 @@ async function migrarMotoboys() {
   })]);
 }
 
+// Tokens de push (Expo) por aparelho. Um motoboy pode ter vários aparelhos.
+async function initPushTokens() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS motoboy_push_tokens (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id    UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      motoboy_id    UUID NOT NULL REFERENCES motoboys(id) ON DELETE CASCADE,
+      token         TEXT NOT NULL UNIQUE,
+      plataforma    TEXT,
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_tokens_motoboy ON motoboy_push_tokens(motoboy_id)`);
+}
+
 async function initMotoboysTablesAll() {
   await initMotoboysTables();
   await migrarMotoboys();
+  await initPushTokens();
 }
 
 module.exports = { initMotoboysTables: initMotoboysTablesAll };

@@ -3,6 +3,7 @@ const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { emitirParaEmpresa, emitirParaMotoboy } = require('../../realtime/ws');
+const { notificarMotoboy } = require('../../shared/push');
 
 const STATUS_ATIVOS = [STATUS_ENTREGA.AGUARDANDO_COLETA, STATUS_ENTREGA.EM_COLETA, STATUS_ENTREGA.EM_ROTA];
 
@@ -183,6 +184,11 @@ async function atribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir', detalhe: { entregaId, motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
+  notificarMotoboy(motoboyId, {
+    titulo: '📦 Corrida atribuída a você',
+    corpo: `A corrida ${rows[0].protocolo} é sua. Toque para abrir.`,
+    dados: { tipo: 'atribuida', entregaId },
+  }).catch(() => {});
   return { ...rows[0], motoboy_nome: mb.rows[0].nome_completo };
 }
 
@@ -204,6 +210,14 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
 
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir-lote', detalhe: { motoboyId, ids: rows.map(r => r.id) }, ip });
   rows.forEach(r => emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: r.id, motoboyId, protocolo: r.protocolo }));
+  // Uma notificação só, resumindo o lote, para não estourar o celular do motoboy.
+  notificarMotoboy(motoboyId, {
+    titulo: '📦 Corridas atribuídas a você',
+    corpo: rows.length === 1
+      ? `A corrida ${rows[0].protocolo} é sua. Toque para abrir.`
+      : `${rows.length} corridas foram atribuídas a você. Toque para abrir.`,
+    dados: { tipo: 'atribuida_lote', ids: rows.map(r => r.id) },
+  }).catch(() => {});
   return { atribuidas: rows.length, protocolos: rows.map(r => r.protocolo), motoboy_nome: mb.rows[0].nome_completo };
 }
 
@@ -285,6 +299,12 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
   // Notifica os candidatos (app escuta esse evento por motoboy).
   // Notifica cada candidato individualmente (na sala do próprio motoboy) e a central.
   candidatos.forEach(c => emitirParaMotoboy(c.motoboy_id, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, distanciaKm: c.distancia_km, expiraEm }));
+  // Push com app fechado: avisa cada candidato que há uma corrida disponível.
+  candidatos.forEach(c => notificarMotoboy(c.motoboy_id, {
+    titulo: '🛵 Nova corrida disponível!',
+    corpo: `Corrida ${e.protocolo} a ${c.distancia_km} km de você. Toque para ver.`,
+    dados: { tipo: 'oferta', ofertaId, entregaId },
+  }).catch(() => {}));
   emitirParaEmpresa(empresaId, 'oferta.disparada', { ofertaId, entregaId, protocolo: e.protocolo, candidatos: candidatos.length });
 
   return { ofertaId, candidatos: candidatos.length, raioKm, expiraEm };
@@ -453,6 +473,21 @@ async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'reatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id, para: motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
+  // Novo motoboy recebe a corrida.
+  notificarMotoboy(motoboyId, {
+    titulo: '📦 Corrida atribuída a você',
+    corpo: `A corrida ${rows[0].protocolo} é sua. Toque para abrir.`,
+    dados: { tipo: 'atribuida', entregaId },
+  }).catch(() => {});
+  // Motoboy anterior (se havia) é avisado de que perdeu a corrida.
+  if (ent.rows[0].motoboy_id && ent.rows[0].motoboy_id !== motoboyId) {
+    emitirParaMotoboy(ent.rows[0].motoboy_id, 'entrega.removida', { entregaId, protocolo: rows[0].protocolo });
+    notificarMotoboy(ent.rows[0].motoboy_id, {
+      titulo: 'Corrida transferida',
+      corpo: `A corrida ${rows[0].protocolo} foi passada para outro motoboy.`,
+      dados: { tipo: 'removida', entregaId },
+    }).catch(() => {});
+  }
   return { ...rows[0], motoboy_nome: mb.rows[0].nome_completo };
 }
 
@@ -493,7 +528,15 @@ async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
 
   emitirParaEmpresa(empresaId, 'entrega.status', { id: entregaId });
 
-  // Dispara nova oferta automaticamente (fire-and-forget, respeitando vínculos).
+  // Avisa o motoboy que foi removido (WS + push com app fechado).
+  if (ent.rows[0].motoboy_id) {
+    emitirParaMotoboy(ent.rows[0].motoboy_id, 'entrega.removida', { entregaId, protocolo: ent.rows[0].protocolo });
+    notificarMotoboy(ent.rows[0].motoboy_id, {
+      titulo: 'Corrida removida',
+      corpo: `A corrida ${ent.rows[0].protocolo} foi removida de você pela central.`,
+      dados: { tipo: 'removida', entregaId },
+    }).catch(() => {});
+  }
   setImmediate(() => {
     dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico: true }).catch(() => {});
   });

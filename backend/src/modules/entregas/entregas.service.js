@@ -4,6 +4,7 @@ const { AUDIT_CATEGORIES, ERRO_MSGS, STATUS_ENTREGA } = require('../../shared/co
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { geocodificar, otimizarRota, tracarRota } = require('../../integracoes/openrouteservice');
 const { emitirParaEmpresa } = require('../../realtime/ws');
+const { notificarMotoboy } = require('../../shared/push');
 const sh = require('./entregas.shared');
 
 // Garante coordenadas: usa lat/lng informadas ou geocodifica o endereço.
@@ -762,7 +763,7 @@ async function previewEdicao({ empresaId, id, coleta, pontos }) {
 // pontos: [{ id?, endereco, observacoes, numero_nf, nome_fantasia, complemento, lat, lng, _remover?, _novo?, eh_retorno? }]
 // aplicarValores: { distancia_km, valor_cliente_cent, valor_motoboy_cent } — valores confirmados pelo admin.
 async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, usuarioId, ip }) {
-  const { rows: ent } = await query(`SELECT id, status, coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, valor_cliente_cent, valor_motoboy_cent FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  const { rows: ent } = await query(`SELECT id, status, protocolo, motoboy_id, coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, valor_cliente_cent, valor_motoboy_cent FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (['entregue', 'cancelada'].includes(ent[0].status))
     throw AppError.validacao(`Entrega já está ${ent[0].status} — não pode ser editada`);
@@ -855,6 +856,15 @@ async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, 
       [id, 'Edição pela central: ' + (mudancas.join('; ') || 'sem alterações')]);
   } catch {}
   emitirParaEmpresa(empresaId, 'entrega.status', { id });
+  // Se há motoboy e algo realmente mudou, avisa o app dele (WS + push).
+  if (ent[0].motoboy_id && mudancas.length) {
+    emitirParaEmpresa(empresaId, 'entrega.editada', { id });
+    notificarMotoboy(ent[0].motoboy_id, {
+      titulo: '✏️ Corrida atualizada',
+      corpo: `A corrida ${ent[0].protocolo} foi alterada pela central. Confira os novos dados.`,
+      dados: { tipo: 'editada', entregaId: id },
+    }).catch(() => {});
+  }
   return { ok: true, mudancas };
 }
 

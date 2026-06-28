@@ -3,6 +3,7 @@ const AppError = require('../../shared/AppError');
 const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
 const storage = require('../../shared/storage');
+const push = require('../../shared/push');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 let geocodificar = null;
@@ -541,6 +542,29 @@ module.exports = function motoboyAppRoutes() {
         emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
       }
 
+    } catch (e) { next(e); }
+  });
+
+  // Registra o token de push (Expo) do aparelho. Chamado pelo app no login/abertura.
+  router.post('/app/push/registrar', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { token, plataforma } = req.body || {};
+      const r = await push.registrarToken({
+        empresaId: req.motoboy.empresaId,
+        motoboyId: req.motoboy.id,
+        token,
+        plataforma: plataforma || null,
+      });
+      res.json(r);
+    } catch (e) { next(e); }
+  });
+
+  // Remove o token do aparelho (logout) — para de receber push neste celular.
+  router.post('/app/push/remover', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { token } = req.body || {};
+      await push.removerToken({ token: token || null });
+      res.json({ ok: true });
     } catch (e) { next(e); }
   });
 
