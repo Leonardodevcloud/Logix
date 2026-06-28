@@ -1147,8 +1147,9 @@ async function detalhesPontos({ empresaId, id }) {
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
 
   const { rows: pontos } = await query(
-    `SELECT ordem, nome, nome_fantasia, endereco, complemento, telefone, numero_nf,
-            observacoes, status, recebedor, entregue_em, lat, lng
+    `SELECT id, ordem, nome, nome_fantasia, endereco, complemento, telefone, numero_nf,
+            observacoes, status, recebedor, entregue_em, lat, lng,
+            liberado, liberacao_solicitada_em, liberacao_motivo, liberado_em
        FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`,
     [id]
   );
@@ -1160,7 +1161,31 @@ async function detalhesPontos({ empresaId, id }) {
   };
 }
 
-module.exports = { cancelarEntrega,
+// Central libera a marcação de um ponto (quando o motoboy está fora do raio).
+// Também serve como liberação preventiva (a central pode liberar qualquer ponto).
+async function liberarPonto({ empresaId, entregaId, pontoId, usuarioId, ip }) {
+  const { rows } = await query(
+    `UPDATE entregas_pontos ep SET liberado = TRUE, liberado_por = $3, liberado_em = now()
+       FROM entregas e
+      WHERE ep.id = $1 AND ep.entrega_id = $2 AND e.id = ep.entrega_id AND e.empresa_id = $4
+      RETURNING ep.id, e.motoboy_id`,
+    [pontoId, entregaId, usuarioId, empresaId]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Ponto não encontrado');
+
+  await query(
+    `INSERT INTO entregas_logs (entrega_id, ponto_id, tipo, descricao, criado_em)
+     VALUES ($1, $2, 'liberacao_concedida', $3, now())`,
+    [entregaId, pontoId, 'Central liberou a marcação deste ponto (fora do raio)']
+  );
+  registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'liberar_ponto', detalhe: { entregaId, pontoId }, ip }).catch(() => {});
+
+  emitirParaEmpresa(empresaId, 'entrega.status', { id: entregaId });
+  if (rows[0].motoboy_id) emitirParaMotoboy(rows[0].motoboy_id, 'ponto.liberado', { entregaId, pontoId });
+  return { ok: true };
+}
+
+module.exports = { cancelarEntrega, liberarPonto,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
   listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };

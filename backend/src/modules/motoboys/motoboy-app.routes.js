@@ -367,6 +367,48 @@ module.exports = function motoboyAppRoutes() {
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
+      // GEOFENCE: a loja pode exigir que o motoboy esteja dentro de um raio do
+      // ponto para marcar. Pulado se o ponto já foi LIBERADO pela central, se a
+      // loja está em "raio livre", ou se não há como saber a posição.
+      {
+        const { rows: pinfo } = await query(
+          `SELECT ep.lat AS plat, ep.lng AS plng, ep.liberado, e.loja_id
+             FROM entregas_pontos ep JOIN entregas e ON e.id = ep.entrega_id
+            WHERE ep.id = $1 AND ep.entrega_id = $2`,
+          [pontoId, entregaId]
+        );
+        const p = pinfo[0];
+        if (p && !p.liberado && p.plat != null && p.plng != null && p.loja_id) {
+          const { rows: rg } = await query(
+            `SELECT marcacao_raio_livre, marcacao_raio_km FROM cliente_regras_acionamento WHERE loja_id = $1`,
+            [p.loja_id]
+          );
+          const raioLivre = rg[0] ? rg[0].marcacao_raio_livre : true;
+          const raioKm = rg[0] ? Number(rg[0].marcacao_raio_km) : 0.3;
+          if (!raioLivre) {
+            let mlat = req.body.lat, mlng = req.body.lng;
+            if (mlat == null || mlng == null) {
+              const { rows: pos } = await query(
+                `SELECT lat, lng FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`,
+                [req.motoboy.id]
+              );
+              if (pos[0]) { mlat = Number(pos[0].lat); mlng = Number(pos[0].lng); }
+            }
+            if (mlat != null && mlng != null) {
+              const dist = _haversineKm([{ lat: Number(mlat), lng: Number(mlng) }, { lat: Number(p.plat), lng: Number(p.plng) }]);
+              if (dist > raioKm) {
+                return res.status(422).json({
+                  erro: 'FORA_DO_RAIO',
+                  mensagem: `Você está a ${Math.round(dist * 1000)}m do ponto. É preciso estar a até ${Math.round(raioKm * 1000)}m para marcar, ou solicitar liberação à central.`,
+                  distancia_m: Math.round(dist * 1000),
+                  raio_m: Math.round(raioKm * 1000),
+                });
+              }
+            }
+          }
+        }
+      }
+
       // 0. Resolver a ocorrência escolhida (tipo + comportamento).
       let ocorrencia = null;
       if (ocorrencia_id) {
@@ -564,6 +606,32 @@ module.exports = function motoboyAppRoutes() {
     try {
       const { token } = req.body || {};
       await push.removerToken({ token: token || null });
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+
+  // Motoboy solicita liberação de um ponto (quando está fora do raio).
+  // A central recebe o sinal na corrida e pode liberar.
+  router.post('/app/entregas/:entregaId/pontos/:pontoId/solicitar-liberacao', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { entregaId, pontoId } = req.params;
+      const empresaId = req.motoboy.empresaId;
+      const motivo = _lerObservacao(req.body) || (req.body && req.body.motivo) || null;
+
+      const { rows } = await query(
+        `UPDATE entregas_pontos SET liberacao_solicitada_em = now(), liberacao_motivo = $3
+          WHERE id = $1 AND entrega_id = $2 AND liberado = FALSE
+          RETURNING id`,
+        [pontoId, entregaId, motivo]
+      );
+      if (!rows[0]) return res.json({ ok: true, ja_liberado: true });
+
+      await query(
+        `INSERT INTO entregas_logs (entrega_id, ponto_id, tipo, descricao, criado_em)
+         VALUES ($1, $2, 'liberacao_solicitada', $3, now())`,
+        [entregaId, pontoId, `Motoboy solicitou liberação de ponto (fora do raio)${motivo ? ' — ' + motivo : ''}`]
+      );
+      emitirParaEmpresa(empresaId, 'ponto.liberacao_solicitada', { entregaId, pontoId });
       res.json({ ok: true });
     } catch (e) { next(e); }
   });

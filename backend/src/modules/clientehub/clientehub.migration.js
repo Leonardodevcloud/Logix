@@ -58,6 +58,11 @@ async function initClienteHubTables() {
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_editar_servico BOOLEAN NOT NULL DEFAULT TRUE`);
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS pode_escolher_profissional BOOLEAN NOT NULL DEFAULT TRUE`);
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS somente_online BOOLEAN NOT NULL DEFAULT TRUE`);
+  // Geofence de marcação: o motoboy só conclui um ponto dentro do raio configurado.
+  // marcacao_raio_livre = TRUE (padrão) => sem restrição (não quebra operações atuais).
+  // Quando FALSE, vale marcacao_raio_km (em km) como distância máxima até o ponto.
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_raio_livre BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_raio_km NUMERIC(6,2) NOT NULL DEFAULT 0.3`);
 
   // ── Motoboys exclusivos do cliente (por modalidade) ─────────────
   // Um motoboy pode ser atribuído ao cliente em uma ou mais modalidades.

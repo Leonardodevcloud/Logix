@@ -162,5 +162,16 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // POST /entregas/:id/pontos/:pontoId/liberar — central libera a marcação de um
+  // ponto (aprova a solicitação do motoboy OU libera preventivamente).
+  router.post('/:id/pontos/:pontoId/liberar', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      res.json(await service.liberarPonto({
+        empresaId: req.empresaId, entregaId: req.params.id, pontoId: req.params.pontoId,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   return router;
 };
