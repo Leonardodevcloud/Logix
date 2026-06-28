@@ -16,7 +16,6 @@ function gruposNav() {
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
         { rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' },
         { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
-        { rota: '/filas', rotulo: 'Filas', icone: 'filas' },
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
@@ -27,7 +26,13 @@ function gruposNav() {
   const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
   // Central tem a tela de Acompanhamento (visão de todas as lojas).
   if (a.perfil === 'central_admin' && auth.temModulo('entregas'))
-    operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'rastreio' });
+    operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
+  // Rastreio logo abaixo de Acompanhamento.
+  if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
+    operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
+  // Mapa em tempo real logo abaixo do Rastreio (abre em aba dedicada).
+  if (a.perfil === 'central_admin')
+    operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'mapa', novaAba: true });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
   // Lojas: só para a administração da central (central_admin), não para usuários de loja.
@@ -35,13 +40,6 @@ function gruposNav() {
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
-  if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
-    operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
-  // Mapa em tempo real: abre em aba dedicada (tela cheia). Só central por enquanto.
-  if (a.perfil === 'central_admin')
-    operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'rastreio', novaAba: true });
-  if (auth.temModulo('filas') && auth.pode('filas.ver'))
-    operacao.push({ rota: '/filas', rotulo: 'Filas', icone: 'filas' });
   // Financeiro: faturamento de clientes e motoboys (só central).
   if (a.perfil === 'central_admin')
     operacao.push({ rota: '/financeiro', rotulo: 'Financeiro', icone: 'financeiro' });
