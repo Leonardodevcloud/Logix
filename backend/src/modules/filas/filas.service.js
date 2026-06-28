@@ -394,6 +394,9 @@ async function detalheOferta({ empresaId, motoboyId, ofertaId }) {
       const { tracarRota } = require('../../integracoes/openrouteservice');
       const r = await tracarRota(seq);
       rotaCoords = r.coordenadas || []; // [[lat,lng], ...]
+      // Usa a distância/tempo reais da rota traçada quando disponíveis (mais precisos).
+      if (r.distanciaKm > 0) oferta.rota_km = r.distanciaKm;
+      if (r.duracaoMin > 0) oferta.tempo_estimado_min = r.duracaoMin;
     }
   } catch { /* sem geometria: o app desenha linha reta como fallback */ }
   return { oferta, pontos: pts.rows, rota: rotaCoords };
