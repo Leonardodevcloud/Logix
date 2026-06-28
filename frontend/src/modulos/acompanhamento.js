@@ -610,7 +610,11 @@ export async function montar(container) {
       : null;
 
     return el('div', { style: 'display:flex;flex-direction:column;gap:4px;min-width:0' },
-      el('div', { style: 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px' }, c.loja_nome || '—'),
+      el('div', { style: 'display:flex;align-items:center;gap:6px;min-width:0;margin-bottom:1px' },
+        el('span', { style: 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'),
+        c.tem_retorno
+          ? el('span', { style: 'flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.3px;color:#b45309;background:#fef3c7;padding:2px 7px;border-radius:5px', title: 'Esta corrida teve uma ocorrência de retorno à coleta' }, '↩ COM RETORNO')
+          : null),
       ponto('var(--lx-azul-primario)', 'Coleta', c.coleta_endereco),
       ponto('var(--lx-ok)', rotuloEntrega, c.destino_endereco, verTodos ? el('div', {}, verTodos) : null));
   }
