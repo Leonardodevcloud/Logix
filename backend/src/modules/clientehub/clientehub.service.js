@@ -219,7 +219,8 @@ async function obterRegras({ empresaId, lojaId }) {
   await exigirLoja(empresaId, lojaId);
   const { rows } = await query(
     `SELECT max_corridas_motoboy, raio_km, pode_cancelar_associada, pode_alterar_profissional,
-            pode_editar_servico, pode_escolher_profissional, somente_online
+            pode_editar_servico, pode_escolher_profissional, somente_online,
+            marcacao_raio_livre, marcacao_raio_km
        FROM cliente_regras_acionamento WHERE loja_id = $1`,
     [lojaId]
   );
@@ -229,10 +230,11 @@ async function obterRegras({ empresaId, lojaId }) {
     max_corridas_motoboy: 3, raio_km: 5,
     pode_cancelar_associada: true, pode_alterar_profissional: true,
     pode_editar_servico: true, pode_escolher_profissional: true, somente_online: true,
+    marcacao_raio_livre: true, marcacao_raio_km: 0.3,
   };
 }
 
-async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos = {}, usuarioId, ip }) {
+async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos = {}, marcacaoRaioLivre, marcacaoRaioKm, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   const max = Number.isFinite(+maxCorridas) ? Math.max(1, Math.round(+maxCorridas)) : 3;
   const raio = Number.isFinite(+raioKm) ? Math.max(0.5, +raioKm) : 5;
@@ -244,21 +246,25 @@ async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos 
     pode_escolher_profissional: booleanos.pode_escolher_profissional !== false,
     somente_online: booleanos.somente_online !== false,
   };
+  // Geofence de marcação: raio livre (default true) e raio em km (default 0.3).
+  const marcLivre = marcacaoRaioLivre !== false;
+  const marcRaio = Number.isFinite(+marcacaoRaioKm) ? Math.max(0.05, +marcacaoRaioKm) : 0.3;
   await query(
     `INSERT INTO cliente_regras_acionamento
        (loja_id, empresa_id, max_corridas_motoboy, raio_km,
         pode_cancelar_associada, pode_alterar_profissional, pode_editar_servico,
-        pode_escolher_profissional, somente_online, atualizado_em)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+        pode_escolher_profissional, somente_online, marcacao_raio_livre, marcacao_raio_km, atualizado_em)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, now())
      ON CONFLICT (loja_id) DO UPDATE SET
        max_corridas_motoboy = $3, raio_km = $4,
        pode_cancelar_associada = $5, pode_alterar_profissional = $6, pode_editar_servico = $7,
-       pode_escolher_profissional = $8, somente_online = $9, atualizado_em = now()`,
+       pode_escolher_profissional = $8, somente_online = $9,
+       marcacao_raio_livre = $10, marcacao_raio_km = $11, atualizado_em = now()`,
     [lojaId, empresaId, max, raio, b.pode_cancelar_associada, b.pode_alterar_profissional,
-     b.pode_editar_servico, b.pode_escolher_profissional, b.somente_online]
+     b.pode_editar_servico, b.pode_escolher_profissional, b.somente_online, marcLivre, marcRaio]
   );
-  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'salvar_regras_acionamento', detalhe: { lojaId, max, raio, ...b }, ip }).catch(() => {});
-  return { ok: true, max_corridas_motoboy: max, raio_km: raio, ...b };
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'salvar_regras_acionamento', detalhe: { lojaId, max, raio, ...b, marcLivre, marcRaio }, ip }).catch(() => {});
+  return { ok: true, max_corridas_motoboy: max, raio_km: raio, ...b, marcacao_raio_livre: marcLivre, marcacao_raio_km: marcRaio };
 }
 
 // ── 6) Motoboys exclusivos do cliente (por modalidade) ────────────

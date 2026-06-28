@@ -294,7 +294,18 @@ function abaRegras(loja) {
     linhaToggle('somente_online', 'Enviar somente para profissionais online', 'A corrida só é oferecida a motoboys que estiverem online.'));
 
   const btn = el('button', { class: 'lx-btn lx-btn-primario', style: 'align-self:flex-start' }, 'Salvar regras');
-  form.append(blocoNum, blocoPerm, btn);
+
+  // Geofence de marcação: raio livre (on/off) + raio em metros.
+  const inpMarcRaio = el('input', { class: 'lx-input', type: 'number', min: '50', step: '50', placeholder: '300' });
+  function syncMarc() { inpMarcRaio.disabled = !!toggles.marcacao_raio_livre?.checked; inpMarcRaio.style.opacity = inpMarcRaio.disabled ? '0.5' : '1'; }
+  const blocoMarcacao = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+    el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px' }, 'Marcação de pontos (geofence)'),
+    linhaToggle('marcacao_raio_livre', 'Raio livre na marcação', 'Se ligado, o motoboy marca a entrega de qualquer lugar. Se desligado, ele só marca dentro do raio abaixo — ou solicita liberação à central.'),
+    el('div', { class: 'lx-field' }, el('label', {}, 'Raio de marcação (metros)'), inpMarcRaio,
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Distância máxima até o ponto para o motoboy conseguir marcar. Vale apenas quando o raio livre está desligado.')));
+  toggles.marcacao_raio_livre.addEventListener('change', syncMarc);
+
+  form.append(blocoNum, blocoPerm, blocoMarcacao, btn);
 
   async function carregar() {
     try {
@@ -306,6 +317,9 @@ function abaRegras(loja) {
       toggles.pode_editar_servico.checked = r.pode_editar_servico !== false;
       toggles.pode_escolher_profissional.checked = r.pode_escolher_profissional !== false;
       toggles.somente_online.checked = r.somente_online !== false;
+      toggles.marcacao_raio_livre.checked = r.marcacao_raio_livre !== false;
+      inpMarcRaio.value = Math.round((r.marcacao_raio_km ?? 0.3) * 1000);
+      syncMarc();
     } catch (e) { toast(e.message || 'Erro', 'erro'); }
   }
   btn.onclick = async () => {
@@ -318,6 +332,8 @@ function abaRegras(loja) {
         pode_editar_servico: toggles.pode_editar_servico.checked,
         pode_escolher_profissional: toggles.pode_escolher_profissional.checked,
         somente_online: toggles.somente_online.checked,
+        marcacao_raio_livre: toggles.marcacao_raio_livre.checked,
+        marcacao_raio_km: Math.max(0.05, (Number(inpMarcRaio.value) || 300) / 1000),
       });
       toast('Regras salvas');
     } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btn.disabled = false; }

@@ -84,6 +84,8 @@ function initClienteHubRoutes() {
     try {
       res.json(await service.salvarRegras({
         ...base(req), maxCorridas: req.body.maxCorridas, raioKm: req.body.raioKm,
+        marcacaoRaioLivre: req.body.marcacao_raio_livre,
+        marcacaoRaioKm: req.body.marcacao_raio_km,
         booleanos: {
           pode_cancelar_associada: req.body.pode_cancelar_associada,
           pode_alterar_profissional: req.body.pode_alterar_profissional,

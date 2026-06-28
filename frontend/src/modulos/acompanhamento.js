@@ -1,6 +1,6 @@
 import { casca } from '../core/layout.js';
 import { el, statusBadge, campo } from '../core/ui.js';
-import { get, post, put, patch } from '../core/api.js';
+import { get, post, put, patch, getToken } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
 const LS_KEY = 'logix_acomp_filtros';
@@ -719,35 +719,54 @@ export async function montar(container) {
   // Modal: todos os pontos da corrida com detalhes ricos (razão social, tel, nota, obs).
   async function abrirPontos(c) {
     const corpo = el('div', { style: 'min-height:120px' }, el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, 'Carregando pontos…'));
-    const ov = modal(`Pontos da corrida — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar')]);
+    const ov = modal(`Pontos da corrida — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => { window.__lxPontosAberto = null; ov.remove(); } }, 'Fechar')]);
     const box = ov.querySelector('div'); if (box) box.style.width = '600px';
-    let dados;
-    try { dados = await get(`/entregas/${c.id}/pontos`); } catch { corpo.innerHTML = ''; corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-erro)' }, 'Erro ao carregar os pontos.')); return; }
 
-    corpo.innerHTML = '';
-    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:62vh;overflow:auto' });
+    async function liberar(pontoId, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Liberando…'; }
+      try { await post(`/entregas/${c.id}/pontos/${pontoId}/liberar`, {}); toast('Ponto liberado'); render(); }
+      catch (e) { toast(e.message || 'Erro ao liberar', 'erro'); if (btn) { btn.disabled = false; btn.textContent = 'Liberar ponto'; } }
+    }
 
-    // Coleta
-    lista.append(cartaoPonto({
-      cor: 'var(--lx-azul-primario)', etiqueta: 'COLETA', titulo: dados.loja_nome || dados.coleta.nome || 'Ponto de coleta',
-      endereco: dados.coleta.endereco,
-    }, false));
+    async function render() {
+      let dados;
+      try { dados = await get(`/entregas/${c.id}/pontos`); }
+      catch { corpo.innerHTML = ''; corpo.append(el('div', { style: 'font-size:13px;color:var(--lx-erro)' }, 'Erro ao carregar os pontos.')); return; }
 
-    // Entregas
-    (dados.pontos || []).forEach((p, i) => {
+      corpo.innerHTML = '';
+      const lista = el('div', { style: 'display:flex;flex-direction:column;gap:0;max-height:62vh;overflow:auto' });
+
+      // Coleta
       lista.append(cartaoPonto({
-        cor: 'var(--lx-ok)', etiqueta: `ENTREGA ${i + 1}`,
-        titulo: p.nome_fantasia || p.nome || `Destino ${p.ordem}`,
-        endereco: p.endereco, complemento: p.complemento, telefone: p.telefone,
-        numero_nf: p.numero_nf, observacoes: p.observacoes,
-        status: p.status, recebedor: p.recebedor, entregue_em: p.entregue_em,
-      }, i < dados.pontos.length - 1));
-    });
-    corpo.append(lista);
+        cor: 'var(--lx-azul-primario)', etiqueta: 'COLETA', titulo: dados.loja_nome || dados.coleta.nome || 'Ponto de coleta',
+        endereco: dados.coleta.endereco,
+      }, false, null));
+
+      // Entregas
+      (dados.pontos || []).forEach((p, i) => {
+        lista.append(cartaoPonto({
+          cor: 'var(--lx-ok)', etiqueta: `ENTREGA ${i + 1}`,
+          titulo: p.nome_fantasia || p.nome || `Destino ${p.ordem}`,
+          endereco: p.endereco, complemento: p.complemento, telefone: p.telefone,
+          numero_nf: p.numero_nf, observacoes: p.observacoes,
+          status: p.status, recebedor: p.recebedor, entregue_em: p.entregue_em,
+          id: p.id, liberado: p.liberado, liberacao_solicitada_em: p.liberacao_solicitada_em,
+          liberacao_motivo: p.liberacao_motivo, liberado_em: p.liberado_em,
+        }, i < dados.pontos.length - 1, liberar));
+      });
+      corpo.append(lista);
+    }
+
+    // Permite que o WS recarregue este modal quando chega/aprova liberação.
+    window.__lxPontosAberto = { entregaId: c.id, recarregar: render };
+    const obsModal = new MutationObserver(() => { if (!document.body.contains(ov)) { window.__lxPontosAberto = null; obsModal.disconnect(); } });
+    obsModal.observe(document.body, { childList: true, subtree: true });
+
+    await render();
   }
 
   // Cartão de um ponto, com os dados ricos inline embaixo do endereço.
-  function cartaoPonto(p, temProximo) {
+  function cartaoPonto(p, temProximo, onLiberar) {
     const linhaInfo = (rotulo, valor) => valor ? el('div', { style: 'display:flex;gap:6px;font-size:11.5px;margin-top:2px' },
       el('span', { style: 'color:var(--lx-tinta-3);font-weight:700;min-width:78px' }, rotulo),
       el('span', { style: 'color:var(--lx-tinta);min-width:0' }, valor)) : null;
@@ -756,11 +775,19 @@ export async function montar(container) {
       el('span', { style: `width:11px;height:11px;border-radius:50%;background:${p.cor};margin-top:4px;flex-shrink:0` }),
       temProximo ? el('span', { style: 'flex:1;width:2px;background:var(--lx-linha);margin:2px 0' }) : el('span', {}));
 
+    const solicitou = p.liberacao_solicitada_em && !p.liberado;
+    const entregue = p.status === 'entregue' || p.status === 'insucesso';
+
+    const badges = el('div', { style: 'display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap' },
+      p.status === 'entregue' ? el('span', { style: 'font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--lx-ok-bg);color:var(--lx-ok)' }, '✓ entregue') : el('span', {}),
+      solicitou ? el('span', { style: 'font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#ffedd5;color:#c2410c' }, '⚠ liberação solicitada') : el('span', {}),
+      p.liberado ? el('span', { style: 'font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;background:#ede9fe;color:#6d28d9' }, '🔓 liberado') : el('span', {}));
+
     const corpo = el('div', { style: 'padding-bottom:16px;min-width:0;flex:1' },
       el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px' },
         el('span', { style: `font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 7px;border-radius:999px;background:${p.cor}1a;color:${p.cor}` }, p.etiqueta),
         p.titulo ? el('span', { style: 'font-size:13px;font-weight:700' }, p.titulo) : el('span', {}),
-        p.status === 'entregue' ? el('span', { style: 'font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--lx-ok-bg);color:var(--lx-ok)' }, '✓ entregue') : el('span', {})),
+        badges),
       el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2);line-height:1.4' }, p.endereco || '—'));
 
     [
@@ -769,7 +796,18 @@ export async function montar(container) {
       linhaInfo('Nº da nota', p.numero_nf),
       linhaInfo('Observações', p.observacoes),
       linhaInfo('Recebedor', p.recebedor),
+      solicitou && p.liberacao_motivo ? linhaInfo('Motivo', p.liberacao_motivo) : null,
     ].filter(Boolean).forEach(x => corpo.append(x));
+
+    // Botão "Liberar ponto" — nativo por ponto (aprova solicitação ou libera preventivo).
+    if (onLiberar && p.id && !p.liberado && !entregue) {
+      const btn = el('button', {
+        class: 'lx-btn',
+        style: `margin-top:10px;height:32px;font-size:12.5px;padding:0 14px;${solicitou ? 'background:#ea580c;border-color:#ea580c;color:#fff' : ''}`,
+        onClick: () => onLiberar(p.id, btn),
+      }, solicitou ? 'Aprovar liberação' : 'Liberar ponto');
+      corpo.append(btn);
+    }
 
     return el('div', { style: 'display:flex;gap:12px;align-items:stretch' }, trilho, corpo);
   }
@@ -1123,6 +1161,31 @@ export async function montar(container) {
   })();
 
   const timer = setInterval(carregar, 30000);
-  const obs = new MutationObserver(() => { if (!document.body.contains(container)) { clearInterval(timer); obs.disconnect(); } });
+
+  // WebSocket: sinalização em tempo real de liberação de ponto.
+  let _ws = null;
+  try {
+    const token = getToken();
+    if (token) {
+      const base = (window.LOGIX_API || '/api/v1');
+      const httpBase = base.startsWith('http') ? base : (location.origin + base);
+      const wsUrl = httpBase.replace(/^http/, 'ws').replace('/api/v1', '') + '/ws?token=' + token;
+      _ws = new WebSocket(wsUrl);
+      _ws.onmessage = (ev) => {
+        try {
+          const { evento, dados: d } = JSON.parse(ev.data);
+          if (evento === 'ponto.liberacao_solicitada') {
+            toast('⚠ Um motoboy solicitou liberação de ponto', 'erro');
+            carregar();
+            if (window.__lxPontosAberto && window.__lxPontosAberto.entregaId === d?.entregaId) window.__lxPontosAberto.recarregar();
+          } else if (evento === 'entrega.status') {
+            if (window.__lxPontosAberto && window.__lxPontosAberto.entregaId === d?.id) window.__lxPontosAberto.recarregar();
+          }
+        } catch {}
+      };
+    }
+  } catch {}
+
+  const obs = new MutationObserver(() => { if (!document.body.contains(container)) { clearInterval(timer); try { _ws?.close(); } catch {} obs.disconnect(); } });
   obs.observe(document.body, { childList: true, subtree: true });
 }
