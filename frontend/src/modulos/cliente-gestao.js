@@ -297,13 +297,43 @@ function abaRegras(loja) {
 
   // Geofence de marcação: raio livre (on/off) + raio em metros.
   const inpMarcRaio = el('input', { class: 'lx-input', type: 'number', min: '50', step: '50', placeholder: '300' });
-  function syncMarc() { inpMarcRaio.disabled = !!toggles.marcacao_raio_livre?.checked; inpMarcRaio.style.opacity = inpMarcRaio.disabled ? '0.5' : '1'; }
+  // Modalidades às quais o geofence se aplica (vazio = todas).
+  const boxMods = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+  const campoMods = el('div', { class: 'lx-field' },
+    el('label', {}, 'Aplicar somente nas modalidades'),
+    boxMods,
+    el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Marque as modalidades em que o raio vale. Nenhuma marcada = vale para todas.'));
+  function syncMarc() {
+    const livre = !!toggles.marcacao_raio_livre?.checked;
+    inpMarcRaio.disabled = livre; inpMarcRaio.style.opacity = livre ? '0.5' : '1';
+    campoMods.style.opacity = livre ? '0.5' : '1';
+    campoMods.style.pointerEvents = livre ? 'none' : 'auto';
+  }
   const blocoMarcacao = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
     el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px' }, 'Marcação de pontos (geofence)'),
     linhaToggle('marcacao_raio_livre', 'Raio livre na marcação', 'Se ligado, o motoboy marca a entrega de qualquer lugar. Se desligado, ele só marca dentro do raio abaixo — ou solicita liberação à central.'),
     el('div', { class: 'lx-field' }, el('label', {}, 'Raio de marcação (metros)'), inpMarcRaio,
-      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Distância máxima até o ponto para o motoboy conseguir marcar. Vale apenas quando o raio livre está desligado.')));
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Distância máxima até o ponto para o motoboy conseguir marcar. Vale apenas quando o raio livre está desligado.')),
+    campoMods);
   toggles.marcacao_raio_livre.addEventListener('change', syncMarc);
+
+  // Renderiza os checkboxes de modalidades; marca os ids ativos.
+  const _modsSel = new Set();
+  function renderMods(modalidades, idsAtivos) {
+    _modsSel.clear(); (idsAtivos || []).forEach(id => _modsSel.add(id));
+    boxMods.innerHTML = '';
+    if (!modalidades || !modalidades.length) {
+      boxMods.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, 'Esta loja não tem modalidades cadastradas.'));
+      return;
+    }
+    modalidades.forEach(m => {
+      const cb = el('input', { type: 'checkbox', style: 'width:18px;height:18px;cursor:pointer;accent-color:var(--lx-azul-primario)' });
+      cb.checked = _modsSel.has(m.id);
+      cb.onchange = () => { if (cb.checked) _modsSel.add(m.id); else _modsSel.delete(m.id); };
+      boxMods.append(el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer' },
+        cb, el('span', { style: `display:inline-block;width:9px;height:9px;border-radius:50%;background:${m.cor || 'var(--lx-azul-primario)'}` }), el('span', {}, m.nome)));
+    });
+  }
 
   form.append(blocoNum, blocoPerm, blocoMarcacao, btn);
 
@@ -319,6 +349,11 @@ function abaRegras(loja) {
       toggles.somente_online.checked = r.somente_online !== false;
       toggles.marcacao_raio_livre.checked = r.marcacao_raio_livre !== false;
       inpMarcRaio.value = Math.round((r.marcacao_raio_km ?? 0.3) * 1000);
+      // Modalidades da loja + marca as que o geofence usa.
+      try {
+        const mods = await get(`/clientes/${loja.id}/modalidades`);
+        renderMods(mods || [], r.marcacao_modalidade_ids || []);
+      } catch { renderMods([], []); }
       syncMarc();
     } catch (e) { toast(e.message || 'Erro', 'erro'); }
   }
@@ -334,6 +369,7 @@ function abaRegras(loja) {
         somente_online: toggles.somente_online.checked,
         marcacao_raio_livre: toggles.marcacao_raio_livre.checked,
         marcacao_raio_km: Math.max(0.05, (Number(inpMarcRaio.value) || 300) / 1000),
+        marcacao_modalidade_ids: [..._modsSel],
       });
       toast('Regras salvas');
     } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btn.disabled = false; }
@@ -508,7 +544,10 @@ function abaValoresCliente(loja) {
     // Editor só faz sentido com tabela própria E cobrança ativa.
     editorWrap.style.display = (propria && cobra) ? 'block' : 'none';
     editor.setHabilitado(cobra);
-    btnSalvar.style.display = propria ? 'inline-flex' : 'none';
+    // Salvar aparece se há QUALQUER desvio do padrão (tabela própria OU cobrança
+    // desligada). Antes só aparecia com tabela própria, então desligar a cobrança
+    // sem tabela própria não tinha como ser salvo.
+    btnSalvar.style.display = (propria || !cobra) ? 'inline-flex' : 'none';
     btnRemover.style.display = (propria && _temPropria) ? 'inline-flex' : 'none';
     if (!propria) {
       aviso.style.display = 'block';
@@ -527,21 +566,27 @@ function abaValoresCliente(loja) {
     try {
       const r = await get(`/config/valores/cliente/${loja.id}`);
       _temPropria = !!r.tem_propria;
-      swPropria.checked = _temPropria;
+      // "Tabela própria" só liga visualmente se houver faixas próprias E cobrança
+      // ativa. Quando a cobrança está desligada, o registro do cliente existe só
+      // para guardar esse desligamento — não é uma tabela própria de fato.
+      const temFaixasProprias = _temPropria && r.cobranca_ativa !== false && Array.isArray(r.faixas) && r.faixas.length > 0;
+      swPropria.checked = temFaixasProprias;
       swCobranca.checked = r.cobranca_ativa !== false;
-      editor.preencher(_temPropria ? r.faixas : (r.global ? r.global.faixas : r.faixas));
+      editor.preencher(temFaixasProprias ? r.faixas : (r.global ? r.global.faixas : r.faixas));
       aplicarEstado();
     } catch (e) { toast(e.message || 'Erro ao carregar valores', 'erro'); }
   }
   async function salvar() {
-    const faixas = editor.obterValor();
+    const propria = swPropria.checked;
     const cobra = swCobranca.checked;
-    if (cobra && !faixas.length) { toast('Adicione ao menos uma faixa ou desligue a cobrança', 'erro'); return; }
+    // Sem tabela própria, não enviamos faixas (vazio) — só o estado de cobrança.
+    const faixas = propria ? editor.obterValor() : [];
+    if (propria && cobra && !faixas.length) { toast('Adicione ao menos uma faixa ou desligue a cobrança', 'erro'); return; }
     try {
       btnSalvar.disabled = true;
       await put(`/config/valores/cliente/${loja.id}`, { faixas, cobranca_ativa: cobra });
-      _temPropria = true; btnRemover.style.display = 'inline-flex';
-      toast('Valores do cliente salvos');
+      _temPropria = true; btnRemover.style.display = (propria) ? 'inline-flex' : 'none';
+      toast(cobra ? 'Valores do cliente salvos' : 'Cobrança desligada para este cliente');
     } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
   }
   function remover() {

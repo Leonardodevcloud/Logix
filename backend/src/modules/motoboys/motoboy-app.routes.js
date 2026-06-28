@@ -378,7 +378,7 @@ module.exports = function motoboyAppRoutes() {
       // loja está em "raio livre", ou se não há como saber a posição.
       {
         const { rows: pinfo } = await query(
-          `SELECT ep.lat AS plat, ep.lng AS plng, ep.liberado, e.loja_id
+          `SELECT ep.lat AS plat, ep.lng AS plng, ep.liberado, e.loja_id, e.modalidade_id
              FROM entregas_pontos ep JOIN entregas e ON e.id = ep.entrega_id
             WHERE ep.id = $1 AND ep.entrega_id = $2`,
           [pontoId, entregaId]
@@ -386,12 +386,16 @@ module.exports = function motoboyAppRoutes() {
         const p = pinfo[0];
         if (p && !p.liberado && p.plat != null && p.plng != null && p.loja_id) {
           const { rows: rg } = await query(
-            `SELECT marcacao_raio_livre, marcacao_raio_km FROM cliente_regras_acionamento WHERE loja_id = $1`,
+            `SELECT marcacao_raio_livre, marcacao_raio_km, marcacao_modalidade_ids FROM cliente_regras_acionamento WHERE loja_id = $1`,
             [p.loja_id]
           );
           const raioLivre = rg[0] ? rg[0].marcacao_raio_livre : true;
           const raioKm = rg[0] ? Number(rg[0].marcacao_raio_km) : 0.3;
-          if (!raioLivre) {
+          // Modalidades alvo: vazio = todas. Se há lista e a modalidade desta
+          // entrega não está nela, o geofence não se aplica (marca livre).
+          const mods = rg[0] && Array.isArray(rg[0].marcacao_modalidade_ids) ? rg[0].marcacao_modalidade_ids : [];
+          const aplicaModalidade = mods.length === 0 || (p.modalidade_id && mods.includes(p.modalidade_id));
+          if (!raioLivre && aplicaModalidade) {
             let mlat = req.body.lat, mlng = req.body.lng;
             if (mlat == null || mlng == null) {
               const { rows: pos } = await query(

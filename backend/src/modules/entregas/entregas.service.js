@@ -929,7 +929,7 @@ async function reabrirEntrega({ empresaId, id, usuarioId, ip }) {
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (!['entregue', 'cancelada'].includes(ent[0].status)) throw AppError.validacao('Só é possível reabrir corridas concluídas ou canceladas');
 
-  await query(`UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL WHERE entrega_id = $1`, [id]);
+  await query(`UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL, liberado = FALSE, liberacao_solicitada_em = NULL, liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL WHERE entrega_id = $1`, [id]);
   await query(
     `UPDATE entregas SET status = 'aguardando_atribuicao', motoboy_id = NULL,
         concluida_em = NULL, iniciada_em = NULL, tempo_total_min = NULL,

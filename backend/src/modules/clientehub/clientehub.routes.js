@@ -86,6 +86,7 @@ function initClienteHubRoutes() {
         ...base(req), maxCorridas: req.body.maxCorridas, raioKm: req.body.raioKm,
         marcacaoRaioLivre: req.body.marcacao_raio_livre,
         marcacaoRaioKm: req.body.marcacao_raio_km,
+        marcacaoModalidadeIds: req.body.marcacao_modalidade_ids,
         booleanos: {
           pode_cancelar_associada: req.body.pode_cancelar_associada,
           pode_alterar_profissional: req.body.pode_alterar_profissional,

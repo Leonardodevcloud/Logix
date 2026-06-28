@@ -474,6 +474,14 @@ async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
     `UPDATE entregas SET motoboy_id = $1, status = $2 WHERE id = $3 RETURNING id, protocolo, status, motoboy_id`,
     [motoboyId, novoStatus, entregaId]
   );
+  // Troca de motoboy zera qualquer liberação de ponto: o novo motoboy, se
+  // precisar marcar fora do raio, solicita liberação de novo.
+  await query(
+    `UPDATE entregas_pontos SET liberado = FALSE, liberacao_solicitada_em = NULL,
+            liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
+      WHERE entrega_id = $1 AND (liberado = TRUE OR liberacao_solicitada_em IS NOT NULL)`,
+    [entregaId]
+  );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'reatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id, para: motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
   // Novo motoboy recebe a corrida (tempo real no app + push).
@@ -522,6 +530,13 @@ async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
   const { rows } = await query(
     `UPDATE entregas SET motoboy_id = NULL, status = $2 WHERE id = $1 RETURNING id, protocolo, status`,
     [entregaId, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
+  );
+  // Volta à fila zera liberações de ponto — não persistem para o próximo motoboy.
+  await query(
+    `UPDATE entregas_pontos SET liberado = FALSE, liberacao_solicitada_em = NULL,
+            liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
+      WHERE entrega_id = $1 AND (liberado = TRUE OR liberacao_solicitada_em IS NOT NULL)`,
+    [entregaId]
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'desatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id }, ip });
 

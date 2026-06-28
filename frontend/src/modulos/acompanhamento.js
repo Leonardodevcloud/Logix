@@ -179,6 +179,7 @@ export async function montar(container) {
   let _busca = '';
   let _sel = new Set(); // IDs das corridas selecionadas (lote)
   const filtros = carregarFiltros();
+  _aba = filtros.aba || 'sem';
 
   // ── Busca (sempre visível) ──────────────────────────────────────
   const inpBusca = el('input', { class: 'lx-input', placeholder: 'Pesquisar protocolo, NF, endereço ou motoboy…', style: 'height:34px;width:100%;padding-left:34px' });
@@ -284,8 +285,11 @@ export async function montar(container) {
   const abaCon = abaEl('con', P.checkCirc, 'Concluídas', 'var(--lx-ok)');
   const abaCan = abaEl('can', P.x2, 'Canceladas', 'var(--lx-tinta-2)');
   const abas = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);flex-wrap:wrap' }, abaSem, abaAnd, abaCon, abaCan);
+  // Restaura o destaque da aba salva (sem zerar nada além do visual).
+  [abaSem, abaAnd, abaCon, abaCan].forEach(a => { const at = a._id === _aba; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
   function setAba(id) {
     _aba = id;
+    filtros.aba = id; salvarFiltros(filtros);
     _sel.clear(); // troca de aba zera a seleção em lote
     [abaSem, abaAnd, abaCon, abaCan].forEach(a => { const at = a._id === id; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
     renderTabela();

@@ -63,6 +63,8 @@ async function initClienteHubTables() {
   // Quando FALSE, vale marcacao_raio_km (em km) como distância máxima até o ponto.
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_raio_livre BOOLEAN NOT NULL DEFAULT TRUE`);
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_raio_km NUMERIC(6,2) NOT NULL DEFAULT 0.3`);
+  // Modalidades de frete às quais o geofence se aplica. Array vazio = todas.
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_modalidade_ids JSONB NOT NULL DEFAULT '[]'::jsonb`);
 
   // ── Motoboys exclusivos do cliente (por modalidade) ─────────────
   // Um motoboy pode ser atribuído ao cliente em uma ou mais modalidades.
