@@ -63,6 +63,7 @@ async function migrarColunasExtras() {
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS cancelado_por UUID REFERENCES usuarios(id)",
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS motivo_cancelamento TEXT",
     "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS concluida_em TIMESTAMPTZ",
+    "ALTER TABLE entregas ADD COLUMN IF NOT EXISTS chegada_coleta_em TIMESTAMPTZ",
     "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS chegou_em TIMESTAMPTZ",
     "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS finalizado_em TIMESTAMPTZ",
     "ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS numero_nf TEXT",

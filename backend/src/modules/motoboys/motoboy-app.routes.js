@@ -179,7 +179,7 @@ module.exports = function motoboyAppRoutes() {
   router.get('/app/fila', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
-        `SELECT e.id, e.protocolo, e.status, e.criado_em, e.iniciada_em, e.valor_motoboy_cent,
+        `SELECT e.id, e.protocolo, e.status, e.criado_em, e.iniciada_em, e.chegada_coleta_em, e.valor_motoboy_cent,
                 e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km,
                 l.nome_fantasia AS cliente_nome,
                 COALESCE(
@@ -189,7 +189,7 @@ module.exports = function motoboyAppRoutes() {
                       'lat', ep.lat, 'lng', ep.lng, 'nome_fantasia', ep.nome_fantasia,
                       'numero_nf', ep.numero_nf, 'complemento', ep.complemento,
                       'observacoes', ep.observacoes, 'telefone', ep.telefone,
-                      'status', ep.status, 'finalizado_em', ep.finalizado_em
+                      'status', ep.status, 'finalizado_em', ep.finalizado_em, 'chegou_em', ep.chegou_em
                     ) ORDER BY ep.ordem
                   ) FILTER (WHERE ep.id IS NOT NULL),
                   '[]'::json
@@ -342,7 +342,12 @@ module.exports = function motoboyAppRoutes() {
         return res.json({ ok: true, status: rows[0].status, jaAtualizado: true });
       }
 
-      const extra = status === 'entregue' ? `, concluida_em = now()` : '';
+      // Carimba o horário de cada etapa na corrida:
+      // em_coleta = chegou na coleta · em_rota = finalizou a coleta · entregue = concluiu.
+      let extra = '';
+      if (status === 'em_coleta')      extra = ', chegada_coleta_em = COALESCE(chegada_coleta_em, now())';
+      else if (status === 'em_rota')   extra = ', iniciada_em = COALESCE(iniciada_em, now())';
+      else if (status === 'entregue')  extra = ', concluida_em = now()';
       await query(`UPDATE entregas SET status = $1${extra} WHERE id = $2`, [status, req.params.id]);
 
       emitirParaEmpresa(req.motoboy.empresaId, 'entrega.status', {
@@ -352,7 +357,29 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /motoboys/app/ocorrencias — motivos ativos que o motoboy escolhe ao finalizar
+  // PATCH /motoboys/app/entregas/:id/pontos/:pontoId/chegada
+  // Carimba o horário de chegada no ponto de entrega (botão "Cheguei na entrega").
+  // Não muda o status da corrida — só registra a chegada para o protocolo/timeline.
+  router.patch('/app/entregas/:id/pontos/:pontoId/chegada', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { id, pontoId } = req.params;
+      const ent = await query(
+        `SELECT 1 FROM entregas WHERE id = $1 AND motoboy_id = $2 AND empresa_id = $3`,
+        [id, req.motoboy.id, req.motoboy.empresaId]
+      );
+      if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+      const upd = await query(
+        `UPDATE entregas_pontos SET chegou_em = COALESCE(chegou_em, now())
+          WHERE id = $1 AND entrega_id = $2 RETURNING chegou_em`,
+        [pontoId, id]
+      );
+      if (!upd.rows[0]) throw AppError.naoEncontrado('Ponto não encontrado');
+      emitirParaEmpresa(req.motoboy.empresaId, 'entrega.status', {
+        entregaId: id, status: 'em_rota', motoboyId: req.motoboy.id, chegadaPonto: pontoId,
+      });
+      res.json({ ok: true, chegou_em: upd.rows[0].chegou_em });
+    } catch (e) { next(e); }
+  });
   router.get('/app/ocorrencias', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
