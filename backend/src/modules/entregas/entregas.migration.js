@@ -32,7 +32,7 @@ async function initEntregasTables() {
       nome        TEXT, endereco TEXT NOT NULL,
       lat         NUMERIC(9,6), lng NUMERIC(9,6),
       telefone    TEXT, observacoes TEXT,
-      status      TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','entregue','falha')),
+      status      TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','entregue','falha','insucesso')),
       recebedor   TEXT, entregue_em TIMESTAMPTZ
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_pontos_entrega ON entregas_pontos(entrega_id)`);
@@ -78,6 +78,13 @@ async function migrarColunasExtras() {
   for (const sql of cols) {
     try { await query(sql); } catch {}
   }
+
+  // Atualiza a constraint de status do ponto para aceitar 'insucesso' (ocorrências).
+  try {
+    await query(`ALTER TABLE entregas_pontos DROP CONSTRAINT IF EXISTS entregas_pontos_status_check`);
+    await query(`ALTER TABLE entregas_pontos ADD CONSTRAINT entregas_pontos_status_check
+                 CHECK (status IN ('pendente','entregue','falha','insucesso'))`);
+  } catch {}
 }
 
 // Configuração de SLA por empresa (geral) e por loja (opcional).
