@@ -384,7 +384,8 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
             (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lng,
             (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS total_pontos,
             EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.eh_retorno = TRUE) AS tem_retorno,
-            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.liberacao_solicitada_em IS NOT NULL AND ep.liberado = FALSE) AS liberacao_pendente
+            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.liberacao_solicitada_em IS NOT NULL AND ep.liberado = FALSE) AS liberacao_pendente,
+            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.liberado = TRUE) AS tem_liberado
        FROM entregas e
        LEFT JOIN lojas l    ON l.id = e.loja_id
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
