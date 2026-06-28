@@ -25,6 +25,7 @@ const lojas = require('./src/modules/lojas');
 const config = require('./src/modules/config');
 const clientehub = require('./src/modules/clientehub');
 const financeiro = require('./src/modules/financeiro');
+const mapa = require('./src/modules/mapa');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -39,6 +40,7 @@ async function migrar() {
   await config.initConfigTables();  // depois de lojas (FK frete_categoria_lojas -> lojas)
   await clientehub.initClienteHubTables();  // depois de config (FK -> frete_categorias) e motoboys
   await branding.initBrandingTables();
+  await mapa.initMapaTables();    // depois de clientehub (coluna em cliente_regras_acionamento)
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -72,6 +74,7 @@ function montarApp() {
   api.use('/config', config.initConfigRoutes());
   api.use('/clientes', clientehub.initClienteHubRoutes());
   api.use('/financeiro', financeiro.initFinanceiroRoutes());
+  api.use('/mapa', mapa.initMapaRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último

@@ -37,6 +37,9 @@ function gruposNav() {
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
   if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
+  // Mapa em tempo real: abre em aba dedicada (tela cheia). Só central por enquanto.
+  if (a.perfil === 'central_admin')
+    operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'rastreio', novaAba: true });
   if (auth.temModulo('filas') && auth.pode('filas.ver'))
     operacao.push({ rota: '/filas', rotulo: 'Filas', icone: 'filas' });
   // Financeiro: faturamento de clientes e motoboys (só central).
@@ -102,7 +105,9 @@ export function casca(titulo, conteudo, subtitulo) {
     el('div', { class: 'lx-nav-lbl' }, g.titulo),
     ...g.itens.map((n) => el('button', {
       class: 'lx-nav-i' + (ativo === n.rota ? ' on' : ''),
-      onClick: () => navegar(n.rota),
+      onClick: () => n.novaAba
+        ? window.open(location.pathname + '#' + n.rota, '_blank')
+        : navegar(n.rota),
     }, el('span', { html: iconeNav(n.icone) }), n.rotulo)),
   ));
 

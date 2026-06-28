@@ -67,6 +67,7 @@ async function boot() {
   router.rota('/entregas',             () => import('./modulos/entregas.js'));
   router.rota('/motoboys',             () => import('./modulos/motoboys.js'));
   router.rota('/rastreio',             () => import('./modulos/rastreio.js'));
+  router.rota('/mapa',                 () => import('./modulos/mapa.js'));
   router.rota('/filas',                () => import('./modulos/filas.js'));
   router.rota('/financeiro',           () => import('./modulos/financeiro.js'));
   router.rota('/marca',                () => import('./modulos/branding.js'));
