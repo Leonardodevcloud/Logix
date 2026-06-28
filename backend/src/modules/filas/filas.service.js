@@ -323,6 +323,23 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
   const cand = await query(`SELECT 1 FROM entregas_ofertas_candidatos WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
   if (!cand.rows.length) throw AppError.validacao('Você não está entre os candidatos desta oferta');
 
+  // LIMITE de corridas simultâneas do cliente: bloqueia com aviso claro se já atingiu.
+  // (A oferta pode ter sido disparada antes do motoboy encher o limite aceitando outras.)
+  const entL = await query(`SELECT loja_id FROM entregas WHERE id = $1`, [ofe.rows[0].entrega_id]);
+  let maxCorridas = 3;
+  if (entL.rows[0] && entL.rows[0].loja_id) {
+    const rg = await query(`SELECT max_corridas_motoboy FROM cliente_regras_acionamento WHERE loja_id = $1`, [entL.rows[0].loja_id]);
+    if (rg.rows[0]) maxCorridas = Number(rg.rows[0].max_corridas_motoboy) || 3;
+  }
+  const cg = await query(
+    `SELECT count(*)::int AS carga FROM entregas WHERE empresa_id = $1 AND motoboy_id = $2 AND status = ANY($3)`,
+    [empresaId, motoboyId, STATUS_ATIVOS]
+  );
+  const cargaAtual = cg.rows[0] ? cg.rows[0].carga : 0;
+  if (cargaAtual >= maxCorridas) {
+    throw AppError.validacao(`Você já está com ${cargaAtual} corrida(s) em andamento — o limite para este cliente é ${maxCorridas}. Conclua uma corrida para poder aceitar outra.`);
+  }
+
   // TRAVA: só um aceita. Atualiza a oferta de 'ofertada' -> 'aceita' atomicamente.
   const trava = await query(
     `UPDATE entregas_ofertas SET status = 'aceita', aceita_por = $2, aceita_em = now()
