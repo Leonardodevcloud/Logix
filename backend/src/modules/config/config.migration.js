@@ -53,6 +53,42 @@ async function initConfigTables() {
       FROM empresas e
      WHERE NOT EXISTS (SELECT 1 FROM valores_config v WHERE v.empresa_id = e.id AND v.loja_id IS NULL)
   `);
+  // ── Ocorrências de marcação ──────────────────────────────────────
+  // Motivos que o motoboy escolhe ao finalizar um ponto.
+  // tipo: sucesso | insucesso ; comportamento: finalizar | retorno
+  await query(`
+    CREATE TABLE IF NOT EXISTS ocorrencias_marcacao (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id    UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      nome          TEXT NOT NULL,
+      tipo          TEXT NOT NULL DEFAULT 'sucesso' CHECK (tipo IN ('sucesso','insucesso')),
+      comportamento TEXT NOT NULL DEFAULT 'finalizar' CHECK (comportamento IN ('finalizar','retorno')),
+      ordem         INTEGER NOT NULL DEFAULT 0,
+      ativo         BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ocorrencias_empresa ON ocorrencias_marcacao(empresa_id, ativo)`);
+
+  // Vincula o ponto à ocorrência escolhida na finalização.
+  await query(`ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS ocorrencia_id UUID REFERENCES ocorrencias_marcacao(id) ON DELETE SET NULL`);
+  await query(`ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS ocorrencia_nome TEXT`);
+  // Marca um ponto como sendo de retorno (gerado por insucesso) e de qual ponto veio.
+  await query(`ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS eh_retorno BOOLEAN NOT NULL DEFAULT FALSE`);
+  await query(`ALTER TABLE entregas_pontos ADD COLUMN IF NOT EXISTS retorno_de_ponto_id UUID`);
+
+  // Semeia ocorrências padrão para empresas que ainda não têm nenhuma.
+  await query(`
+    INSERT INTO ocorrencias_marcacao (empresa_id, nome, tipo, comportamento, ordem)
+    SELECT e.id, v.nome, v.tipo, v.comportamento, v.ordem
+      FROM empresas e
+      CROSS JOIN (VALUES
+        ('Entregue', 'sucesso', 'finalizar', 0),
+        ('Cliente ausente', 'insucesso', 'retorno', 1),
+        ('Endereço incorreto', 'insucesso', 'retorno', 2),
+        ('Recusado pelo cliente', 'insucesso', 'retorno', 3)
+      ) AS v(nome, tipo, comportamento, ordem)
+     WHERE NOT EXISTS (SELECT 1 FROM ocorrencias_marcacao o WHERE o.empresa_id = e.id)
+  `);
 }
 
 module.exports = { initConfigTables };

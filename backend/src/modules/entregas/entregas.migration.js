@@ -149,11 +149,26 @@ async function initOfertasTable() {
   try { await query(`ALTER TABLE entregas_ofertas_candidatos ADD COLUMN IF NOT EXISTS recusada_em TIMESTAMPTZ`); } catch {}
 }
 
+// Logs da corrida: cada evento relevante (coleta, entrega, ocorrência, retorno).
+async function initEntregasLogs() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS entregas_logs (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entrega_id UUID NOT NULL REFERENCES entregas(id) ON DELETE CASCADE,
+      ponto_id   UUID REFERENCES entregas_pontos(id) ON DELETE SET NULL,
+      tipo       TEXT,
+      descricao  TEXT,
+      criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_entregas_logs_entrega ON entregas_logs(entrega_id, criado_em)`);
+}
+
 async function initEntregasTablesComMigracoes() {
   await initEntregasTables();
   await migrarColunasExtras();
   await initSlaConfig();
   await initOfertasTable();
+  await initEntregasLogs();
 }
 
 module.exports = { initEntregasTables: initEntregasTablesComMigracoes };

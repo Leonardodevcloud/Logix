@@ -128,11 +128,58 @@ async function vincularLojas(empresaId, categoriaId, lojaIds) {
   }
 }
 
+// ── Ocorrências de marcação ──────────────────────────────────────────
+async function listarOcorrencias({ empresaId, incluirInativas = true }) {
+  const cond = ['empresa_id = $1'];
+  if (!incluirInativas) cond.push('ativo = TRUE');
+  const { rows } = await query(
+    `SELECT id, nome, tipo, comportamento, ordem, ativo FROM ocorrencias_marcacao
+      WHERE ${cond.join(' AND ')} ORDER BY ordem, nome`,
+    [empresaId]
+  );
+  return rows;
+}
+
+async function criarOcorrencia({ empresaId, nome, tipo, comportamento, usuarioId, ip }) {
+  if (!nome || !nome.trim()) throw AppError.validacao('Nome é obrigatório');
+  const t = tipo === 'insucesso' ? 'insucesso' : 'sucesso';
+  // Sucesso sempre finaliza; insucesso pode finalizar ou gerar retorno.
+  const comp = t === 'sucesso' ? 'finalizar' : (comportamento === 'retorno' ? 'retorno' : 'finalizar');
+  const { rows: ord } = await query(`SELECT COALESCE(MAX(ordem),0)+1 AS prox FROM ocorrencias_marcacao WHERE empresa_id = $1`, [empresaId]);
+  const { rows } = await query(
+    `INSERT INTO ocorrencias_marcacao (empresa_id, nome, tipo, comportamento, ordem)
+     VALUES ($1,$2,$3,$4,$5) RETURNING id, nome, tipo, comportamento, ordem, ativo`,
+    [empresaId, nome.trim(), t, comp, ord[0].prox]
+  );
+  return rows[0];
+}
+
+async function atualizarOcorrencia({ empresaId, id, nome, tipo, comportamento, ativo, usuarioId, ip }) {
+  const t = tipo === 'insucesso' ? 'insucesso' : 'sucesso';
+  const comp = t === 'sucesso' ? 'finalizar' : (comportamento === 'retorno' ? 'retorno' : 'finalizar');
+  const { rows } = await query(
+    `UPDATE ocorrencias_marcacao SET nome = COALESCE($3, nome), tipo = $4, comportamento = $5,
+            ativo = COALESCE($6, ativo)
+      WHERE id = $1 AND empresa_id = $2
+      RETURNING id, nome, tipo, comportamento, ordem, ativo`,
+    [id, empresaId, nome ? nome.trim() : null, t, comp, typeof ativo === 'boolean' ? ativo : null]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Ocorrência não encontrada');
+  return rows[0];
+}
+
+async function excluirOcorrencia({ empresaId, id }) {
+  const { rowCount } = await query(`DELETE FROM ocorrencias_marcacao WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!rowCount) throw AppError.naoEncontrado('Ocorrência não encontrada');
+  return { ok: true };
+}
+
 module.exports = {
   listarCategorias, obterCategoria, criarCategoria, atualizarCategoria,
   alternarCategoria, excluirCategoria,
   obterSla, salvarSla, removerSlaLoja, slaEfetivoCliente,
   obterValores, salvarValores, removerValoresLoja, precificar,
+  listarOcorrencias, criarOcorrencia, atualizarOcorrencia, excluirOcorrencia,
 };
 
 // ── Configuração de SLA (global e por cliente) ───────────────────────

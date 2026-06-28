@@ -249,34 +249,89 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /motoboys/app/ocorrencias — motivos ativos que o motoboy escolhe ao finalizar
+  router.get('/app/ocorrencias', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { rows } = await query(
+        `SELECT id, nome, tipo, comportamento FROM ocorrencias_marcacao
+          WHERE empresa_id = $1 AND ativo = TRUE ORDER BY ordem, nome`,
+        [req.motoboy.empresaId]
+      );
+      res.json(rows);
+    } catch (e) { next(e); }
+  });
+
   // POST /motoboys/app/entregas/:entregaId/pontos/:pontoId/concluir
   // Responde imediatamente e processa fotos em background (evita timeout no app)
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls } = req.body;
+      const { recebedor, fotos_urls, ocorrencia_id } = req.body;
       const observacao = _lerObservacao(req.body);
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
-      // 1. Atualizar ponto
+      // 0. Resolver a ocorrência escolhida (tipo + comportamento).
+      let ocorrencia = null;
+      if (ocorrencia_id) {
+        const { rows: oc } = await query(
+          `SELECT id, nome, tipo, comportamento FROM ocorrencias_marcacao WHERE id = $1 AND empresa_id = $2`,
+          [ocorrencia_id, empresaId]
+        );
+        ocorrencia = oc[0] || null;
+      }
+      const ehInsucesso = ocorrencia && ocorrencia.tipo === 'insucesso';
+      const geraRetorno = ehInsucesso && ocorrencia.comportamento === 'retorno';
+
+      // 1. Atualizar o ponto: marca status conforme o resultado e grava a ocorrência.
       await query(
         `UPDATE entregas_pontos
-         SET status = 'entregue', recebedor = $1, entregue_em = now(), finalizado_em = now(),
-             observacao_motoboy = $4
+         SET status = $5, recebedor = $1, entregue_em = now(), finalizado_em = now(),
+             observacao_motoboy = $4, ocorrencia_id = $6, ocorrencia_nome = $7
          WHERE id = $2 AND entrega_id = $3`,
-        [recebedor || null, pontoId, entregaId, observacao || null]
+        [recebedor || null, pontoId, entregaId, observacao || null,
+         ehInsucesso ? 'insucesso' : 'entregue', ocorrencia ? ocorrencia.id : null, ocorrencia ? ocorrencia.nome : null]
       );
 
-      // 2. Verificar se todos pontos foram entregues
+      // 2. Se insucesso com comportamento "retorno", cria um novo ponto = endereço da coleta.
+      let pontoRetornoCriado = false;
+      if (geraRetorno) {
+        const { rows: ent } = await query(
+          `SELECT coleta_nome, coleta_endereco, coleta_lat, coleta_lng FROM entregas WHERE id = $1`,
+          [entregaId]
+        );
+        const c = ent[0];
+        if (c) {
+          const { rows: maxOrd } = await query(`SELECT COALESCE(MAX(ordem),0)+1 AS prox FROM entregas_pontos WHERE entrega_id = $1`, [entregaId]);
+          await query(
+            `INSERT INTO entregas_pontos (entrega_id, ordem, nome, nome_fantasia, endereco, lat, lng, status, eh_retorno, retorno_de_ponto_id, observacoes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendente', TRUE, $8, $9)`,
+            [entregaId, maxOrd[0].prox, c.coleta_nome || 'Retorno à coleta', 'Retorno à coleta',
+             c.coleta_endereco, c.coleta_lat, c.coleta_lng, pontoId,
+             `Retorno gerado por: ${ocorrencia.nome}`]
+          );
+          pontoRetornoCriado = true;
+        }
+      }
+
+      // 3. Registrar nos logs da corrida (auditoria) e no histórico do ponto.
+      try {
+        await query(
+          `INSERT INTO entregas_logs (entrega_id, ponto_id, tipo, descricao, criado_em)
+           VALUES ($1, $2, $3, $4, now())`,
+          [entregaId, pontoId, ehInsucesso ? 'insucesso' : 'sucesso',
+           `${ocorrencia ? ocorrencia.nome : 'Entregue'}${observacao ? ' — ' + observacao : ''}${pontoRetornoCriado ? ' (retorno gerado)' : ''}`]
+        );
+      } catch (err) { /* tabela de logs pode não existir ainda; não bloqueia */ }
+
+      // 4. Verificar se todos os pontos (inclusive retornos) foram resolvidos.
       const { rows: pendentes } = await query(
         `SELECT count(*)::int AS qtd FROM entregas_pontos
-         WHERE entrega_id = $1 AND status != 'entregue'`,
+         WHERE entrega_id = $1 AND status NOT IN ('entregue','insucesso')`,
         [entregaId]
       );
-      const todosEntregues = pendentes[0].qtd === 0;
+      const todosResolvidos = pendentes[0].qtd === 0;
 
-      if (todosEntregues) {
-        // Calcular km via haversine se ORS não calculou (distancia_km null ou zero)
+      if (todosResolvidos) {
         const kmHaversine = await calcularKmEntrega(entregaId);
         await query(
           `UPDATE entregas
@@ -288,18 +343,18 @@ module.exports = function motoboyAppRoutes() {
         );
       }
 
-      // 3. Responder IMEDIATAMENTE ao app
-      res.json({ ok: true, todos_entregues: todosEntregues });
+      // 5. Responder imediatamente ao app.
+      res.json({ ok: true, todos_entregues: todosResolvidos, retorno_gerado: pontoRetornoCriado });
 
-      // 4. Fotos em background
+      // 6. Fotos em background, vinculadas ao protocolo do ponto.
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
         setImmediate(async () => {
           for (const url of fotos_urls) {
             if (!url) continue;
             try {
               await query(
-                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
-                [pontoId, url]
+                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, $2, $3)`,
+                [pontoId, ehInsucesso ? 'insucesso' : 'outro', url]
               );
             } catch (err) {
               console.error('[app:concluir] foto background:', err.message);
@@ -308,8 +363,10 @@ module.exports = function motoboyAppRoutes() {
         });
       }
 
-      if (todosEntregues) {
+      if (todosResolvidos) {
         emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
+      } else if (pontoRetornoCriado) {
+        emitirParaEmpresa(empresaId, 'entrega.retorno', { entregaId, ocorrencia: ocorrencia.nome });
       }
 
     } catch (e) { next(e); }

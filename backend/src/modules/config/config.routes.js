@@ -123,6 +123,20 @@ function initConfigRoutes() {
     try { res.json(await service.removerValoresLoja({ empresaId: req.empresaId, lojaId: req.params.lojaId, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
   });
 
+  // ── Ocorrências de marcação ──────────────────────────────────────
+  router.get('/ocorrencias', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.listarOcorrencias({ empresaId: req.empresaId })); } catch (e) { next(e); }
+  });
+  router.post('/ocorrencias', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.criarOcorrencia({ empresaId: req.empresaId, ...req.body, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
+  });
+  router.put('/ocorrencias/:id', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.atualizarOcorrencia({ empresaId: req.empresaId, id: req.params.id, ...req.body, usuarioId: req.usuario.id, ip: req.ip })); } catch (e) { next(e); }
+  });
+  router.delete('/ocorrencias/:id', exigirCentral, async (req, res, next) => {
+    try { res.json(await service.excluirOcorrencia({ empresaId: req.empresaId, id: req.params.id })); } catch (e) { next(e); }
+  });
+
   return router;
 }
 
