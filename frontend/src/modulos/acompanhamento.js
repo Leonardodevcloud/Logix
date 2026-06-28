@@ -112,6 +112,7 @@ const P = {
   rota: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
   reabrir: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   logs: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  liberar: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
 };
 
 function carregarFiltros() {
@@ -671,6 +672,7 @@ export async function montar(container) {
         w.append(bAtr, botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
+      if (podeEditar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
@@ -679,6 +681,7 @@ export async function montar(container) {
       w.append(botaoIcone(P.mapa, 'Rastreio ao vivo (nova guia)', () => { window.open(location.origin + location.pathname + '#/rastreio', '_blank'); }));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
+      if (podeEditar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'con') {
