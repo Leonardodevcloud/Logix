@@ -73,12 +73,18 @@ export async function montar(container) {
       const nomeCliente = nomeInp.value.trim() ||
         (empresas.find(e => String(e.id) === String(empresaId))?.razao_social || 'Cliente');
 
+      const logoUrl = logoInp.value.trim();
+      const marcaBox = logoUrl
+        ? el('div', { style: 'width:30px;height:30px;border-radius:8px;overflow:hidden;background:#fff;display:grid;place-items:center' },
+            el('img', { src: logoUrl, style: 'width:100%;height:100%;object-fit:contain', onerror: function(){ this.style.display='none'; } }))
+        : el('div', { style: `width:30px;height:30px;border-radius:8px;background:${valores.cor_destaque};color:#fff;display:grid;place-items:center;font-weight:900;font-size:12px` }, 'LX');
+
       const side = el('div', { style: `
         width:118px;padding:16px 12px;
         background:linear-gradient(185deg,${valores.cor_secundaria},#04203D);
         display:flex;flex-direction:column;gap:9px
       ` },
-        el('div', { style: `width:30px;height:30px;border-radius:8px;background:${valores.cor_destaque};color:#fff;display:grid;place-items:center;font-weight:900;font-size:12px` }, 'LX'),
+        marcaBox,
         el('div', { style: `margin-top:6px;height:8px;border-radius:4px;background:${valores.cor_destaque};opacity:.9;width:72%` }),
         el('div', { style: 'height:8px;border-radius:4px;background:rgba(181,212,244,.35);width:90%' }),
         el('div', { style: 'height:8px;border-radius:4px;background:rgba(181,212,244,.22);width:60%' }));
@@ -90,8 +96,9 @@ export async function montar(container) {
           el('span', { style: `display:inline-flex;padding:9px 16px;border-radius:10px;background:${valores.cor_primaria};color:#fff;font-weight:700;font-size:13px` }, 'Lançar entrega'),
           el('span', { style: `display:inline-flex;padding:6px 12px;border-radius:999px;background:${valores.cor_clara};color:${valores.cor_secundaria};font-weight:700;font-size:11px` }, 'No prazo')));
 
-      // Simulação da URL
-      const urlSlug = nomeCliente.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '').slice(0, 12);
+      // Simulação da URL (usa o subdomínio digitado; senão, deriva do nome)
+      const subDigitado = subdominioInp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      const urlSlug = subDigitado || nomeCliente.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '').slice(0, 12);
       const urlBar = el('div', { style: `
         background:#eef1f5;padding:8px 12px;display:flex;align-items:center;gap:8px;
         border-bottom:1px solid var(--lx-linha)
@@ -110,10 +117,8 @@ export async function montar(container) {
     }
 
     nomeInp.addEventListener('input', pintarPreview);
-    subdominioInp.addEventListener('input', () => {
-      const prev = document.getElementById('lx-sub-preview');
-      if (prev) prev.textContent = subdominioInp.value.trim() || 'pecasexpress';
-    });
+    logoInp.addEventListener('input', pintarPreview);
+    subdominioInp.addEventListener('input', pintarPreview);
     pintarPreview();
 
     function pickerCor(rotulo, chave) {
@@ -156,6 +161,7 @@ export async function montar(container) {
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px' },
         campo('Nome de exibição', nomeInp),
         campo('URL do logo', logoInp),
+        campo('Domínio do cliente (subdomínio)', subdominioInp),
         pickerCor('Cor primária (botões/ações)', 'cor_primaria'),
         pickerCor('Cor secundária (sidebar/fundo escuro)', 'cor_secundaria'),
         pickerCor('Cor de destaque', 'cor_destaque'),
