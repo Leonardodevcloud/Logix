@@ -196,7 +196,31 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // PATCH /motoboys/app/status
+  // GET /motoboys/app/historico?periodo=hoje|semana|mes  — corridas entregues do motoboy
+  router.get('/app/historico', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const periodo = req.query.periodo || 'mes';
+      let filtroData = '';
+      if (periodo === 'hoje') filtroData = `AND e.concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date`;
+      else if (periodo === 'semana') filtroData = `AND e.concluida_em >= (now() AT TIME ZONE 'America/Bahia') - interval '7 days'`;
+      else if (periodo === 'mes') filtroData = `AND date_trunc('month', e.concluida_em AT TIME ZONE 'America/Bahia') = date_trunc('month', now() AT TIME ZONE 'America/Bahia')`;
+
+      const { rows } = await query(
+        `SELECT e.id, e.protocolo, e.concluida_em, e.distancia_km, e.valor_motoboy_cent,
+                e.coleta_endereco, l.nome_fantasia AS cliente_nome,
+                (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS qtd_pontos,
+                (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem DESC LIMIT 1) AS ultimo_destino
+           FROM entregas e
+           LEFT JOIN lojas l ON l.id = e.loja_id
+          WHERE e.motoboy_id = $1 AND e.empresa_id = $2 AND e.status = 'entregue' ${filtroData}
+          ORDER BY e.concluida_em DESC
+          LIMIT 100`,
+        [req.motoboy.id, req.motoboy.empresaId]
+      );
+      const totalCent = rows.reduce((s, r) => s + (Number(r.valor_motoboy_cent) || 0), 0);
+      res.json({ corridas: rows, total_cent: totalCent, quantidade: rows.length });
+    } catch (e) { next(e); }
+  });
   router.patch('/app/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { online } = req.body;
