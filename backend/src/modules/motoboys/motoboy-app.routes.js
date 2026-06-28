@@ -273,7 +273,23 @@ module.exports = function motoboyAppRoutes() {
       }
       const paradasOrdenadas = ordem.map(i => pontos[i]).filter(Boolean);
 
-      res.json({ coleta: colObj, paradas: paradasOrdenadas, distancia_km: distanciaKm, duracao_min: duracaoMin });
+      // Traça a geometria real da rota (seguindo as ruas), na ordem coleta -> paradas.
+      let coordenadas = [];
+      try {
+        const { tracarRota } = require('../../integracoes/openrouteservice');
+        const seq = [];
+        if (colObj) seq.push({ lat: colObj.lat, lng: colObj.lng });
+        paradasOrdenadas.forEach(p => seq.push({ lat: p.lat, lng: p.lng }));
+        if (seq.length >= 2) {
+          const t = await tracarRota(seq);
+          coordenadas = t.coordenadas || [];
+          // Se a otimização não trouxe distância/duração, usa as do traçado real.
+          if (!distanciaKm && t.distanciaKm) distanciaKm = t.distanciaKm;
+          if (!duracaoMin && t.duracaoMin) duracaoMin = t.duracaoMin;
+        }
+      } catch { /* sem geometria: o app cai para a linha reta */ }
+
+      res.json({ coleta: colObj, paradas: paradasOrdenadas, coordenadas, distancia_km: distanciaKm, duracao_min: duracaoMin });
     } catch (e) { next(e); }
   });
 
