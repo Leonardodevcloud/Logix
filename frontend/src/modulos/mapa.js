@@ -47,6 +47,20 @@ function iniciais(nome) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'M';
 }
 
+// Avatar do motoboy (foto com borda colorida; iniciais como fallback).
+function avatarEl(m, size) {
+  const cor = m.ocupado ? COR.vermelho : COR.verde;
+  const box = el('div', { style: `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2.5px solid ${cor};background:${cor};color:#fff;font-weight:800;font-size:${Math.round(size * 0.34)}px;display:grid;place-items:center;flex-shrink:0` });
+  if (m.foto_url) {
+    const img = el('img', { src: m.foto_url, style: 'width:100%;height:100%;object-fit:cover' });
+    img.onerror = () => { box.textContent = iniciais(m.nome); };
+    box.append(img);
+  } else {
+    box.textContent = iniciais(m.nome);
+  }
+  return box;
+}
+
 function pinLoja() {
   return window.L.divIcon({
     className: '',
@@ -118,7 +132,7 @@ export async function montar(container) {
     selecionado = { tipo: 'motoboy', id: m.id };
     painelHead.innerHTML = '';
     painelHead.append(
-      el('div', { style: `width:38px;height:38px;border-radius:50%;background:${m.ocupado ? COR.vermelho : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800` }, iniciais(m.nome)),
+      avatarEl(m, 38),
       el('div', { style: 'min-width:0' },
         el('div', { style: 'font-weight:800;font-size:14px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.nome),
         el('div', { style: 'font-size:11px;color:#8ba5bc' }, m.ocupado ? `Em corrida · ${m.entregas_ativas} ativa(s)` : 'Disponível')),
@@ -175,7 +189,7 @@ export async function montar(container) {
     if (!prox.length) painelBody.append(el('div', { style: 'font-size:12px;color:#8ba5bc' }, 'Nenhum motoboy online no momento.'));
     prox.forEach(({ m, km, min }) => painelBody.append(
       el('div', { style: `display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${COR.linha}` },
-        el('div', { style: `width:30px;height:30px;border-radius:50%;background:${m.ocupado ? COR.vermelho : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800;font-size:10px;flex-shrink:0` }, iniciais(m.nome)),
+        avatarEl(m, 30),
         el('div', { style: 'flex:1;min-width:0' },
           el('div', { style: 'font-weight:700;font-size:13px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.nome),
           el('div', { style: 'font-size:11px;color:#8ba5bc' }, m.ocupado ? `Livre em ~${fmtMin(m.eta_conclusao_min)}` : 'Livre agora')),

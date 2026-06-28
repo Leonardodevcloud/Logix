@@ -116,8 +116,12 @@ async function motoboysOnline(empresaId, lojaId) {
 
   const lista = rows.filter(m => !lojaId || (m.corridas && m.corridas.length));
 
-  // Resolve a foto (selfie) de cada motoboy online — são poucos por vez.
-  await Promise.all(lista.map(async (m) => { if (!m.foto_url) m.foto_url = await fotoSelfie(m.id); }));
+  // Foto: SEMPRE gera a URL assinada fresca da selfie (a foto_url da tabela
+  // pode estar expirada). Só usa foto_url como último recurso.
+  await Promise.all(lista.map(async (m) => {
+    const fresca = await fotoSelfie(m.id);
+    m.foto_url = fresca || m.foto_url || null;
+  }));
 
   return lista.map(m => {
     const pos = { lat: Number(m.lat), lng: Number(m.lng) };
