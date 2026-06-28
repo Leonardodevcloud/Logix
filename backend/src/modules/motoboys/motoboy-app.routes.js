@@ -167,8 +167,9 @@ module.exports = function motoboyAppRoutes() {
   router.get('/app/fila', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { rows } = await query(
-        `SELECT e.id, e.protocolo, e.status, e.criado_em,
+        `SELECT e.id, e.protocolo, e.status, e.criado_em, e.iniciada_em, e.valor_motoboy_cent,
                 e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km,
+                l.nome_fantasia AS cliente_nome,
                 COALESCE(
                   json_agg(
                     json_build_object(
@@ -176,17 +177,18 @@ module.exports = function motoboyAppRoutes() {
                       'lat', ep.lat, 'lng', ep.lng, 'nome_fantasia', ep.nome_fantasia,
                       'numero_nf', ep.numero_nf, 'complemento', ep.complemento,
                       'observacoes', ep.observacoes, 'telefone', ep.telefone,
-                      'status', ep.status
+                      'status', ep.status, 'finalizado_em', ep.finalizado_em
                     ) ORDER BY ep.ordem
                   ) FILTER (WHERE ep.id IS NOT NULL),
                   '[]'::json
                 ) AS pontos
          FROM entregas e
          LEFT JOIN entregas_pontos ep ON ep.entrega_id = e.id
+         LEFT JOIN lojas l ON l.id = e.loja_id
          WHERE e.motoboy_id = $1
            AND e.empresa_id = $2
            AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
-         GROUP BY e.id
+         GROUP BY e.id, l.nome_fantasia
          ORDER BY e.criado_em`,
         [req.motoboy.id, req.motoboy.empresaId]
       );
