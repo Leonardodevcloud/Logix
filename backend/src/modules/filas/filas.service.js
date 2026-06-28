@@ -474,12 +474,14 @@ async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
     `UPDATE entregas SET motoboy_id = $1, status = $2 WHERE id = $3 RETURNING id, protocolo, status, motoboy_id`,
     [motoboyId, novoStatus, entregaId]
   );
-  // Troca de motoboy zera qualquer liberação de ponto: o novo motoboy, se
-  // precisar marcar fora do raio, solicita liberação de novo.
+  // Troca de motoboy descarta qualquer protocolo já registrado (fotos, recebedor,
+  // ocorrência, obs) e zera liberações: o novo motoboy gera tudo do zero.
+  await query(`DELETE FROM protocolos WHERE entrega_ponto_id IN (SELECT id FROM entregas_pontos WHERE entrega_id = $1)`, [entregaId]);
   await query(
-    `UPDATE entregas_pontos SET liberado = FALSE, liberacao_solicitada_em = NULL,
-            liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
-      WHERE entrega_id = $1 AND (liberado = TRUE OR liberacao_solicitada_em IS NOT NULL)`,
+    `UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL,
+            recebedor = NULL, observacao_motoboy = NULL, ocorrencia_id = NULL, ocorrencia_nome = NULL,
+            liberado = FALSE, liberacao_solicitada_em = NULL, liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
+      WHERE entrega_id = $1`,
     [entregaId]
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'reatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id, para: motoboyId }, ip });
@@ -531,11 +533,14 @@ async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
     `UPDATE entregas SET motoboy_id = NULL, status = $2 WHERE id = $1 RETURNING id, protocolo, status`,
     [entregaId, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
   );
-  // Volta à fila zera liberações de ponto — não persistem para o próximo motoboy.
+  // Volta à fila descarta protocolo já registrado e zera liberações —
+  // o próximo motoboy gera tudo do zero.
+  await query(`DELETE FROM protocolos WHERE entrega_ponto_id IN (SELECT id FROM entregas_pontos WHERE entrega_id = $1)`, [entregaId]);
   await query(
-    `UPDATE entregas_pontos SET liberado = FALSE, liberacao_solicitada_em = NULL,
-            liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
-      WHERE entrega_id = $1 AND (liberado = TRUE OR liberacao_solicitada_em IS NOT NULL)`,
+    `UPDATE entregas_pontos SET status = 'pendente', entregue_em = NULL, finalizado_em = NULL,
+            recebedor = NULL, observacao_motoboy = NULL, ocorrencia_id = NULL, ocorrencia_nome = NULL,
+            liberado = FALSE, liberacao_solicitada_em = NULL, liberacao_motivo = NULL, liberado_por = NULL, liberado_em = NULL
+      WHERE entrega_id = $1`,
     [entregaId]
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'desatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id }, ip });
