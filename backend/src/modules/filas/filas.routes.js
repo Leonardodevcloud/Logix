@@ -57,6 +57,18 @@ function initFilasRoutes() {
     } catch (e) { next(e); }
   });
 
+  // Remove o motoboy: volta para a fila e dispara nova oferta.
+  router.post('/:entregaId/desatribuir', exigirPermissao('filas.gerenciar'),
+    exigirPermissaoCliente('pode_alterar_profissional', 'Este cliente não tem permissão para alterar o profissional'),
+    async (req, res, next) => {
+    try {
+      res.json(await service.desatribuir({
+        empresaId: req.empresaId, entregaId: req.params.entregaId,
+        usuarioId: req.usuario.id, ip: req.ip,
+      }));
+    } catch (e) { next(e); }
+  });
+
   router.post('/:entregaId/atribuir', exigirPermissao('filas.gerenciar'), async (req, res, next) => {
     try {
       res.json(await service.atribuir({

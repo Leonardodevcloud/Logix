@@ -472,4 +472,33 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+// Remove o motoboy da entrega: volta para a fila (aguardando_atribuicao) e dispara nova oferta.
+async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
+  const ent = await query(`SELECT id, status, protocolo, motoboy_id FROM entregas WHERE id = $1 AND empresa_id = $2`, [entregaId, empresaId]);
+  if (!ent.rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const statusAtual = ent.rows[0].status;
+  if (['entregue', 'cancelada'].includes(statusAtual))
+    throw AppError.validacao(`Entrega já está ${statusAtual} — não é possível remover o motoboy`);
+
+  const { rows } = await query(
+    `UPDATE entregas SET motoboy_id = NULL, status = $2 WHERE id = $1 RETURNING id, protocolo, status`,
+    [entregaId, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
+  );
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'desatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id }, ip });
+
+  // Log na timeline da corrida.
+  try {
+    await query(`INSERT INTO entregas_logs (entrega_id, tipo, descricao) VALUES ($1, 'sistema', 'Motoboy removido — corrida devolvida à fila')`, [entregaId]);
+  } catch {}
+
+  emitirParaEmpresa(empresaId, 'entrega.status', { id: entregaId });
+
+  // Dispara nova oferta automaticamente (fire-and-forget, respeitando vínculos).
+  setImmediate(() => {
+    dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico: true }).catch(() => {});
+  });
+
+  return { ...rows[0], motoboy_nome: null };
+}
+
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, desatribuir, listarTodosAtivos };

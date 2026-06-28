@@ -330,7 +330,17 @@ export async function montar(container) {
 
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, troca ? 'Trocar' : 'Atribuir');
     const corpo = el('div', {}, el('label', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;display:block;margin-bottom:6px' }, troca ? 'Novo motoboy' : 'Motoboy'), busca, lista, el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:8px 0 0' }, '🟢 online · ⚪ offline · busca por nº ou nome'));
-    const ov = modal(troca ? `Trocar motoboy — ${c.protocolo}` : `Atribuir — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+
+    // Quando já há motoboy, oferece "deixar sem motoboy" (volta à fila + nova oferta).
+    const acoes = [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar')];
+    if (troca) {
+      acoes.push(el('button', { class: 'lx-btn lx-btn-secundario', style: 'color:var(--lx-erro);border-color:var(--lx-erro)', onClick: async () => {
+        try { await post(`/filas/${c.id}/desatribuir`, {}); ov.remove(); toast('Motoboy removido — corrida voltou à fila e nova oferta foi disparada'); carregar(); }
+        catch (e) { toast(e.message || 'Erro', 'erro'); }
+      } }, 'Deixar sem motoboy'));
+    }
+    acoes.push(btn);
+    const ov = modal(troca ? `Trocar motoboy — ${c.protocolo}` : `Atribuir — ${c.protocolo}`, corpo, acoes);
     btn.onclick = async () => {
       if (!escolhido) { toast('Selecione um motoboy', 'erro'); return; }
       try { btn.disabled = true; await post(`/filas/${c.id}/${troca ? 'reatribuir' : 'atribuir'}`, { motoboy_id: escolhido }); ov.remove(); toast(troca ? 'Motoboy trocado' : 'Atribuído'); carregar(); } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
@@ -496,20 +506,106 @@ export async function montar(container) {
 
   async function abrirEditar(c) {
     let d; try { d = await get('/entregas/' + c.id + '/detalhe'); } catch { toast('Erro ao carregar', 'erro'); return; }
+
     const campoColeta = campoGeo('Endereço de coleta', { endereco: d.coleta_endereco, lat: d.coleta_lat, lng: d.coleta_lng });
-    const pCampos = (d.pontos || []).map((p, i) => ({ id: p.id, campo: campoGeo(`Destino ${i + 1}`, { endereco: p.endereco, lat: p.lat, lng: p.lng }) }));
-    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:14px' }, campoColeta.wrap, ...pCampos.map(pc => pc.campo.wrap), el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'Digite e selecione um endereço da lista para geocodificar. Se não selecionar, o texto é re-geocodificado ao salvar.'));
-    const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar');
-    const ov = modal(`Editar — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+
+    // Estado dos pontos: cada item { id?, campo, entregue, eh_retorno, removido, novo }
+    const pontos = (d.pontos || []).map((p) => ({
+      id: p.id, entregue: p.status === 'entregue', eh_retorno: p.eh_retorno,
+      campo: campoGeo('', { endereco: p.endereco, lat: p.lat, lng: p.lng }),
+      removido: false, novo: false,
+    }));
+
+    const listaPontos = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+    const painelValor = el('div', { style: 'display:none;background:var(--lx-superficie-2);border-radius:var(--lx-raio);padding:14px 16px;margin-top:4px' });
+    let valoresConfirmados = null;
+
+    function renderPontos() {
+      listaPontos.innerHTML = '';
+      let n = 0;
+      pontos.forEach((pt) => {
+        if (pt.removido) return;
+        n++;
+        const numero = n;
+        const linha = el('div', { style: `display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:0.5px solid ${pt.eh_retorno ? 'var(--lx-erro)' : 'var(--lx-linha)'};border-radius:10px;background:${pt.eh_retorno ? 'var(--lx-erro-bg)' : 'var(--lx-superficie)'}` });
+        const badge = el('div', { style: `width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:${pt.eh_retorno ? 'var(--lx-erro)' : 'var(--lx-azul-primario)'};margin-top:1px` }, pt.eh_retorno ? '↩' : String(numero));
+        // Reaproveita o campo geo; injeta um rótulo dinâmico.
+        const wrapCampo = el('div', { style: 'flex:1;min-width:0' },
+          el('div', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:4px' }, pt.eh_retorno ? 'Retorno à coleta' : `Destino ${numero}${pt.entregue ? ' · já entregue' : ''}`),
+          pt.campo.wrap);
+        const acaoRemover = pt.entregue
+          ? el('span', { style: 'font-size:10px;color:var(--lx-tinta-3);margin-top:4px', title: 'Ponto já entregue não pode ser removido' }, '🔒')
+          : el('button', { style: 'background:none;border:none;cursor:pointer;color:var(--lx-erro);font-size:16px;margin-top:2px', title: 'Remover ponto', onClick: () => { pt.removido = true; renderPontos(); painelValor.style.display = 'none'; valoresConfirmados = null; } }, '🗑');
+        linha.append(badge, wrapCampo, acaoRemover);
+        listaPontos.append(linha);
+      });
+    }
+    renderPontos();
+
+    const btnAddPonto = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12.5px', onClick: () => {
+      pontos.push({ novo: true, campo: campoGeo('', { endereco: '' }), removido: false, eh_retorno: false, entregue: false });
+      renderPontos(); painelValor.style.display = 'none'; valoresConfirmados = null;
+    } }, '+ Adicionar ponto');
+    const btnAddRetorno = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12.5px', onClick: () => {
+      pontos.push({ novo: true, eh_retorno: true, campo: campoGeo('', { endereco: d.coleta_endereco, lat: d.coleta_lat, lng: d.coleta_lng }), removido: false, entregue: false });
+      renderPontos(); painelValor.style.display = 'none'; valoresConfirmados = null;
+    } }, '↩ Adicionar retorno à coleta');
+
+    function montarPayloadPontos() {
+      return pontos.filter(pt => !(pt.novo && pt.removido)).map(pt => {
+        const v = pt.campo.getValor();
+        if (pt.removido) return { id: pt.id, _remover: true, endereco: v.endereco };
+        if (pt.novo) return { _novo: true, eh_retorno: pt.eh_retorno, endereco: v.endereco, lat: v.lat, lng: v.lng };
+        return { id: pt.id, endereco: v.endereco, lat: v.lat, lng: v.lng };
+      });
+    }
+
+    const btnRecalcular = el('button', { class: 'lx-btn lx-btn-secundario', onClick: async () => {
+      try {
+        btnRecalcular.disabled = true; btnRecalcular.textContent = 'Calculando…';
+        const col = campoColeta.getValor();
+        const prev = await post(`/entregas/${c.id}/preview-edicao`, {
+          coleta: { endereco: col.endereco, lat: col.lat, lng: col.lng },
+          pontos: montarPayloadPontos(),
+        });
+        valoresConfirmados = prev.novo;
+        const reais = cent => 'R$ ' + ((cent || 0) / 100).toFixed(2).replace('.', ',');
+        const km = v => v != null ? Number(v).toFixed(1) + ' km' : '—';
+        painelValor.innerHTML = '';
+        painelValor.append(
+          el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px' },
+            el('span', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2)' }, 'Pré-visualização do recálculo'),
+            prev.mudou_distancia ? el('span', { style: 'font-size:10px;font-weight:800;color:#854f0b;background:#faeeda;padding:3px 9px;border-radius:5px' }, 'DISTÂNCIA ALTEROU') : el('span', {})),
+          el('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:12px' },
+            el('div', {}, el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Distância'), el('div', { style: 'font-size:14px;font-weight:700;color:var(--lx-tinta)' }, `${km(prev.atual.distancia_km)} → `, el('span', { style: 'color:var(--lx-azul-primario)' }, km(prev.novo.distancia_km)))),
+            el('div', {}, el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Valor cliente'), el('div', { style: 'font-size:14px;font-weight:700;color:var(--lx-tinta)' }, `${reais(prev.atual.valor_cliente_cent)} → `, el('span', { style: 'color:var(--lx-ok)' }, reais(prev.novo.valor_cliente_cent)))),
+            el('div', {}, el('div', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, 'Valor motoboy'), el('div', { style: 'font-size:14px;font-weight:700;color:var(--lx-tinta)' }, `${reais(prev.atual.valor_motoboy_cent)} → `, el('span', { style: 'color:var(--lx-ok)' }, reais(prev.novo.valor_motoboy_cent))))),
+          el('p', { style: 'font-size:11px;color:var(--lx-tinta-3);margin:10px 0 0' }, 'Valores sugeridos pela tabela de km do cliente. Confirme em “Salvar e recalcular”.'));
+        painelValor.style.display = 'block';
+      } catch (e) { toast(e.message || 'Erro ao calcular', 'erro'); }
+      finally { btnRecalcular.disabled = false; btnRecalcular.textContent = 'Recalcular valor'; }
+    } }, 'Recalcular valor');
+
+    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
+      el('div', {}, el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;display:block;margin-bottom:5px' }, 'Coleta'), campoColeta.wrap),
+      el('div', {}, el('label', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;display:block;margin-bottom:8px' }, 'Pontos de entrega'), listaPontos),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, btnAddPonto, btnAddRetorno, btnRecalcular),
+      painelValor,
+      el('p', { style: 'font-size:11px;color:var(--lx-tinta-3);margin:0' }, '🕘 Toda edição fica registrada nos logs da corrida.'));
+
+    const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar e recalcular');
+    const ov = modal(`Editar corrida — ${c.protocolo}`, corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+    const box = ov.querySelector('div'); if (box) box.style.width = '640px';
     btn.onclick = async () => {
       try {
         btn.disabled = true;
         const col = campoColeta.getValor();
         await put(`/entregas/${c.id}/enderecos`, {
           coleta: { endereco: col.endereco, lat: col.lat, lng: col.lng },
-          pontos: pCampos.map(pc => { const v = pc.campo.getValor(); return { id: pc.id, endereco: v.endereco, lat: v.lat, lng: v.lng }; }),
+          pontos: montarPayloadPontos(),
+          aplicarValores: valoresConfirmados || undefined,
         });
-        ov.remove(); toast('Atualizado'); carregar();
+        ov.remove(); toast(valoresConfirmados ? 'Atualizado e valor recalculado' : 'Atualizado'); carregar();
       } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
   }

@@ -182,7 +182,7 @@ async function detalharConcluida({ empresaId, id, lojaId = null }) {
   const { rows: pontos } = await query(
     `SELECT ep.id, ep.ordem, ep.nome, ep.endereco, ep.lat, ep.lng,
             ep.telefone, ep.observacoes, ep.observacao_motoboy, ep.status, ep.recebedor,
-            ep.entregue_em, ep.chegou_em, ep.finalizado_em,
+            ep.entregue_em, ep.chegou_em, ep.finalizado_em, ep.eh_retorno,
             ep.numero_nf, ep.nome_fantasia, ep.complemento,
             COALESCE(
               json_agg(
@@ -703,42 +703,153 @@ async function listarCategoriasFrete(empresaId) {
 
 // Edita os endereços/observações dos pontos e/ou da coleta de uma entrega ativa.
 // Só permite enquanto a entrega não foi concluída/cancelada.
-async function editarEnderecos({ empresaId, id, coleta, pontos, usuarioId, ip }) {
-  const { rows: ent } = await query(`SELECT id, status FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+// Calcula distância (ORS) e preço sugerido para uma sequência coleta -> pontos.
+// Retorna { distancia_km, valor_cliente_cent, valor_motoboy_cent }.
+async function calcularRotaEPreco({ empresaId, lojaId, coleta, pontos }) {
+  const seq = [];
+  if (coleta && coleta.lat != null && coleta.lng != null) seq.push({ lat: Number(coleta.lat), lng: Number(coleta.lng) });
+  for (const p of pontos) if (p.lat != null && p.lng != null) seq.push({ lat: Number(p.lat), lng: Number(p.lng) });
+  let distanciaKm = null;
+  if (seq.length >= 2) {
+    try { const r = await tracarRota(seq); if (r.distanciaKm > 0) distanciaKm = parseFloat(r.distanciaKm.toFixed(2)); } catch {}
+  }
+  const configService = require('../config/config.service');
+  const preco = await configService.precificar({ empresaId, lojaId: lojaId || null, km: distanciaKm });
+  return { distancia_km: distanciaKm, valor_cliente_cent: preco.valor_cliente_cent, valor_motoboy_cent: preco.valor_motoboy_cent };
+}
+
+// Geocodifica um endereço se faltar lat/lng.
+async function _garantirGeo(endereco, lat, lng) {
+  if (lat != null && lng != null) return { lat, lng };
+  if (endereco) { try { const g = await geocodificar(endereco); return { lat: g.lat, lng: g.lng }; } catch {} }
+  return { lat: null, lng: null };
+}
+
+// Pré-visualização do recálculo SEM salvar. Recebe o estado editado (coleta + pontos)
+// e devolve distância e valores atuais vs. recalculados, para o admin confirmar.
+async function previewEdicao({ empresaId, id, coleta, pontos }) {
+  const { rows: ent } = await query(
+    `SELECT id, status, loja_id, distancia_km, valor_cliente_cent, valor_motoboy_cent,
+            coleta_endereco, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+  const e = ent[0];
+
+  // Monta a coleta resultante (editada ou atual).
+  let colFinal = { endereco: e.coleta_endereco, lat: e.coleta_lat, lng: e.coleta_lng };
+  if (coleta && coleta.endereco) {
+    const g = await _garantirGeo(coleta.endereco, coleta.lat, coleta.lng);
+    colFinal = { endereco: coleta.endereco, lat: g.lat, lng: g.lng };
+  }
+
+  // Monta os pontos resultantes na ordem enviada (já geocodificando os novos).
+  const ptsFinal = [];
+  for (const p of (pontos || [])) {
+    if (p._remover) continue;
+    const g = await _garantirGeo(p.endereco, p.lat, p.lng);
+    ptsFinal.push({ ...p, lat: g.lat, lng: g.lng });
+  }
+
+  const novo = await calcularRotaEPreco({ empresaId, lojaId: e.loja_id, coleta: colFinal, pontos: ptsFinal });
+  return {
+    atual: { distancia_km: e.distancia_km, valor_cliente_cent: e.valor_cliente_cent, valor_motoboy_cent: e.valor_motoboy_cent },
+    novo,
+    mudou_distancia: novo.distancia_km != null && Number(novo.distancia_km) !== Number(e.distancia_km),
+  };
+}
+
+// Salva a edição: coleta, pontos (editar/adicionar/remover), retorno, e aplica o recálculo.
+// coleta: { nome, endereco, lat, lng }
+// pontos: [{ id?, endereco, observacoes, numero_nf, nome_fantasia, complemento, lat, lng, _remover?, _novo?, eh_retorno? }]
+// aplicarValores: { distancia_km, valor_cliente_cent, valor_motoboy_cent } — valores confirmados pelo admin.
+async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, usuarioId, ip }) {
+  const { rows: ent } = await query(`SELECT id, status, coleta_nome, coleta_endereco, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (['entregue', 'cancelada'].includes(ent[0].status))
     throw AppError.validacao(`Entrega já está ${ent[0].status} — não pode ser editada`);
 
-  // Atualiza coleta (se enviada). Re-geocodifica se vier endereço sem coordenada.
+  const mudancas = [];
+
+  // 1. Atualiza coleta (se enviada).
   if (coleta && coleta.endereco) {
-    let { lat, lng } = coleta;
-    if ((!lat || !lng)) { try { const g = await geocodificar(coleta.endereco); lat = g.lat; lng = g.lng; } catch {} }
+    const g = await _garantirGeo(coleta.endereco, coleta.lat, coleta.lng);
     await query(
       `UPDATE entregas SET coleta_nome = COALESCE($2, coleta_nome), coleta_endereco = $3, coleta_lat = $4, coleta_lng = $5 WHERE id = $1`,
-      [id, coleta.nome || null, coleta.endereco, lat || null, lng || null]
+      [id, coleta.nome || null, coleta.endereco, g.lat, g.lng]
     );
+    if (coleta.endereco !== ent[0].coleta_endereco) mudancas.push(`coleta → ${coleta.endereco}`);
   }
 
-  // Atualiza pontos individuais (cada item: { id, endereco, observacoes }).
+  // 2. Processa pontos: remover, editar existentes, adicionar novos.
   if (Array.isArray(pontos)) {
+    // Descobre a maior ordem atual para acrescentar novos no fim.
+    const { rows: mx } = await query(`SELECT COALESCE(MAX(ordem),0) AS m FROM entregas_pontos WHERE entrega_id = $1`, [id]);
+    let proxOrdem = mx[0].m + 1;
+
     for (const p of pontos) {
-      if (!p.id) continue;
-      let lat = p.lat, lng = p.lng;
-      if (p.endereco && (!lat || !lng)) { try { const g = await geocodificar(p.endereco); lat = g.lat; lng = g.lng; } catch {} }
+      // Remover ponto (não permite se já entregue).
+      if (p._remover && p.id) {
+        const { rows: st } = await query(`SELECT status FROM entregas_pontos WHERE id = $1 AND entrega_id = $2`, [p.id, id]);
+        if (st[0] && st[0].status === 'entregue') { mudancas.push('tentou remover ponto já entregue (ignorado)'); continue; }
+        await query(`DELETE FROM entregas_pontos WHERE id = $1 AND entrega_id = $2`, [p.id, id]);
+        mudancas.push(`ponto removido: ${p.endereco || p.id}`);
+        continue;
+      }
+
+      // Adicionar novo ponto (inclusive retorno).
+      if (p._novo || !p.id) {
+        let lat = p.lat, lng = p.lng, endereco = p.endereco, nome = p.nome_fantasia;
+        if (p.eh_retorno) {
+          // Retorno usa o endereço da coleta atual.
+          endereco = ent[0].coleta_endereco; lat = ent[0].coleta_lat; lng = ent[0].coleta_lng;
+          nome = 'Retorno à coleta';
+        } else {
+          const g = await _garantirGeo(endereco, lat, lng); lat = g.lat; lng = g.lng;
+        }
+        if (!endereco) continue;
+        await query(
+          `INSERT INTO entregas_pontos (entrega_id, ordem, nome, nome_fantasia, endereco, lat, lng, telefone, observacoes, numero_nf, complemento, status, eh_retorno)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pendente',$12)`,
+          [id, proxOrdem++, p.nome || null, nome || null, endereco, lat, lng, p.telefone || null,
+           p.observacoes || (p.eh_retorno ? 'Retorno adicionado pela central' : null), p.numero_nf || null, p.complemento || null, !!p.eh_retorno]
+        );
+        mudancas.push(p.eh_retorno ? 'retorno adicionado' : `ponto adicionado: ${endereco}`);
+        continue;
+      }
+
+      // Editar ponto existente.
+      const g = await _garantirGeo(p.endereco, p.lat, p.lng);
       await query(
         `UPDATE entregas_pontos SET
-           endereco = COALESCE($2, endereco),
-           lat = COALESCE($3, lat), lng = COALESCE($4, lng),
-           observacoes = COALESCE($5, observacoes)
-         WHERE id = $1 AND entrega_id = $6`,
-        [p.id, p.endereco || null, lat || null, lng || null, p.observacoes ?? null, id]
+           endereco = COALESCE($2, endereco), lat = COALESCE($3, lat), lng = COALESCE($4, lng),
+           observacoes = COALESCE($5, observacoes), numero_nf = COALESCE($6, numero_nf), complemento = COALESCE($7, complemento)
+         WHERE id = $1 AND entrega_id = $8`,
+        [p.id, p.endereco || null, g.lat, g.lng, p.observacoes ?? null, p.numero_nf ?? null, p.complemento ?? null, id]
       );
+      if (p.endereco) mudancas.push(`ponto editado: ${p.endereco}`);
     }
   }
 
-  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'editar_enderecos', detalhe: { id }, ip }).catch(() => {});
+  // 3. Aplica os valores recalculados confirmados pelo admin.
+  if (aplicarValores && (aplicarValores.distancia_km != null || aplicarValores.valor_cliente_cent != null)) {
+    await query(
+      `UPDATE entregas SET
+         distancia_km = COALESCE($2, distancia_km),
+         valor_cliente_cent = COALESCE($3, valor_cliente_cent),
+         valor_motoboy_cent = COALESCE($4, valor_motoboy_cent)
+       WHERE id = $1`,
+      [id, aplicarValores.distancia_km ?? null, aplicarValores.valor_cliente_cent ?? null, aplicarValores.valor_motoboy_cent ?? null]
+    );
+    mudancas.push(`valores recalculados (${aplicarValores.distancia_km} km · cliente R$ ${((aplicarValores.valor_cliente_cent||0)/100).toFixed(2)})`);
+  }
+
+  // 4. Registra na auditoria e nos logs da corrida.
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'editar_enderecos', detalhe: { id, mudancas }, ip }).catch(() => {});
+  try {
+    await query(`INSERT INTO entregas_logs (entrega_id, tipo, descricao) VALUES ($1, 'edicao', $2)`,
+      [id, 'Edição pela central: ' + (mudancas.join('; ') || 'sem alterações')]);
+  } catch {}
   emitirParaEmpresa(empresaId, 'entrega.status', { id });
-  return { ok: true };
+  return { ok: true, mudancas };
 }
 
 // Edita manualmente os valores (cliente/motoboy) de uma corrida. Em centavos.
@@ -992,7 +1103,7 @@ async function detalhesPontos({ empresaId, id }) {
 
 module.exports = { cancelarEntrega,
   criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
-  listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
+  listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 
 async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {

@@ -92,6 +92,16 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // POST /entregas/:id/preview-edicao — calcula distância/valor sem salvar (para confirmar)
+  router.post('/:id/preview-edicao', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+    try {
+      res.json(await service.previewEdicao({
+        empresaId: req.empresaId, id: req.params.id,
+        coleta: req.body.coleta, pontos: req.body.pontos,
+      }));
+    } catch (e) { next(e); }
+  });
+
   // PUT /entregas/:id/enderecos — editar coleta/pontos de uma entrega ativa
   router.put('/:id/enderecos', exigirTenant, exigirPermissao('entregas.editar'),
     exigirPermissaoCliente('pode_editar_servico', 'Este cliente não tem permissão para editar o serviço'),
@@ -100,6 +110,7 @@ module.exports = function acompanhamentoRoutes() {
       res.json(await service.editarEnderecos({
         empresaId: req.empresaId, id: req.params.id,
         coleta: req.body.coleta, pontos: req.body.pontos,
+        aplicarValores: req.body.aplicarValores,
         usuarioId: req.usuario.id, ip: req.ip,
       }));
     } catch (e) { next(e); }
