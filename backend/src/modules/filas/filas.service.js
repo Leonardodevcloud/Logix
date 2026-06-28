@@ -315,8 +315,14 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
 
 // Motoboy aceita a oferta. Primeiro a aceitar leva (trava por UPDATE condicional).
 async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
-  const ofe = await query(`SELECT id, entrega_id, status FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
+  const ofe = await query(`SELECT id, entrega_id, status, aceita_por FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
   if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
+  // Idempotência: se ESTE motoboy já aceitou (retry após resposta perdida na
+  // rede), devolve sucesso em vez de "não está mais disponível".
+  if (ofe.rows[0].status === 'aceita' && ofe.rows[0].aceita_por === motoboyId) {
+    const ent = await query(`SELECT protocolo FROM entregas WHERE id = $1`, [ofe.rows[0].entrega_id]);
+    return { entregaId: ofe.rows[0].entrega_id, protocolo: ent.rows[0] ? ent.rows[0].protocolo : null, ok: true, jaAceita: true };
+  }
   if (ofe.rows[0].status !== 'ofertada') throw AppError.validacao('Oferta já não está mais disponível');
 
   // valida que o motoboy era candidato

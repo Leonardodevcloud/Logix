@@ -19,6 +19,15 @@ function iniciarCron(origem = 'worker') {
       console.error(`[cron:${origem}] erro na limpeza diária:`, e.message);
     }
   });
+  // Keep-warm: a cada 4 min um SELECT trivial mantém o banco (Neon) acordado.
+  // O Neon suspende a computação após ~5 min ociosos; quando isso acontece, a
+  // 1a requisição "acorda" o banco e demora alguns segundos — tempo suficiente
+  // para o app estourar o timeout e mostrar "sem conexão" sem motivo real.
+  cron.schedule('*/4 * * * *', async () => {
+    try { await query('SELECT 1'); }
+    catch (e) { console.error(`[cron:${origem}] keep-warm falhou:`, e.message); }
+  });
+
   // TODO: reentrega de webhooks com falha (quando o módulo de integrações entrar).
   console.log(`[cron:${origem}] agendado (retenção rastreamento=${RETENCAO_DIAS}d)`);
 }
