@@ -66,7 +66,7 @@ async function notificarMotoboy(motoboyId, { titulo, corpo, dados = {}, som = 'd
     data: dados,
     sound: som,
     priority: 'high',
-    channelId: 'corridas_v2',
+    channelId: 'corridas_v3',
   }));
 
   try {
