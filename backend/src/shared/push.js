@@ -58,7 +58,7 @@ async function notificarMotoboy(motoboyId, { titulo, corpo, dados = {}, som = 'd
   if (!tokens.length) return { enviados: 0, motivo: 'sem_token' };
 
   // Uma mensagem por token. priority high + channelId garantem o pop-up com
-  // app fechado no Android. sound 'default' toca + vibra (canal HIGH).
+  // app fechado no Android. sound 'default' + canal MAX tocam e vibram.
   const mensagens = tokens.map(to => ({
     to,
     title: titulo,
@@ -66,7 +66,7 @@ async function notificarMotoboy(motoboyId, { titulo, corpo, dados = {}, som = 'd
     data: dados,
     sound: som,
     priority: 'high',
-    channelId: 'corridas',
+    channelId: 'corridas_v2',
   }));
 
   try {
