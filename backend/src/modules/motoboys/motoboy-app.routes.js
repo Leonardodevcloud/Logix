@@ -139,6 +139,22 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
+  // ── Ofertas de corrida ──────────────────────────────────────────
+  const filasService = require('../filas/filas.service');
+
+  // GET /motoboys/app/oferta-ativa — oferta pendente (ao abrir o app).
+  router.get('/app/oferta-ativa', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await filasService.ofertaAtivaDoMotoboy({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
+  });
+  // POST /motoboys/app/ofertas/:id/aceitar
+  router.post('/app/ofertas/:id/aceitar', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await filasService.aceitarOferta({ empresaId: req.motoboy.empresaId, ofertaId: req.params.id, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
+  });
+  // POST /motoboys/app/ofertas/:id/recusar
+  router.post('/app/ofertas/:id/recusar', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await filasService.recusarOferta({ empresaId: req.motoboy.empresaId, ofertaId: req.params.id, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
+  });
+
   // GET /motoboys/app/fila
   router.get('/app/fila', verificarTokenMotoboy, async (req, res, next) => {
     try {

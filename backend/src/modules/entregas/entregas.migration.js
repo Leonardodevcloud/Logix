@@ -143,8 +143,10 @@ async function initOfertasTable() {
       oferta_id   UUID NOT NULL REFERENCES entregas_ofertas(id) ON DELETE CASCADE,
       motoboy_id  UUID NOT NULL REFERENCES motoboys(id) ON DELETE CASCADE,
       distancia_km NUMERIC(6,2),
+      recusada_em  TIMESTAMPTZ,
       PRIMARY KEY (oferta_id, motoboy_id)
     )`);
+  try { await query(`ALTER TABLE entregas_ofertas_candidatos ADD COLUMN IF NOT EXISTS recusada_em TIMESTAMPTZ`); } catch {}
 }
 
 async function initEntregasTablesComMigracoes() {

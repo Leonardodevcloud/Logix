@@ -2,7 +2,7 @@ const { query } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
-const { emitirParaEmpresa } = require('../../realtime/ws');
+const { emitirParaEmpresa, emitirParaMotoboy } = require('../../realtime/ws');
 
 const STATUS_ATIVOS = [STATUS_ENTREGA.AGUARDANDO_COLETA, STATUS_ENTREGA.EM_COLETA, STATUS_ENTREGA.EM_ROTA];
 
@@ -274,7 +274,9 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   // Marca a entrega como "ofertada" via campo distribuicao (mantém status na fila).
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm }, ip });
   // Notifica os candidatos (app escuta esse evento por motoboy).
-  candidatos.forEach(c => emitirParaEmpresa(empresaId, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, motoboyId: c.motoboy_id, distanciaKm: c.distancia_km, expiraEm }));
+  // Notifica cada candidato individualmente (na sala do próprio motoboy) e a central.
+  candidatos.forEach(c => emitirParaMotoboy(c.motoboy_id, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, distanciaKm: c.distancia_km, expiraEm }));
+  emitirParaEmpresa(empresaId, 'oferta.disparada', { ofertaId, entregaId, protocolo: e.protocolo, candidatos: candidatos.length });
 
   return { ofertaId, candidatos: candidatos.length, raioKm, expiraEm };
 }
@@ -314,6 +316,33 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
   return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
 }
 
+
+// Motoboy recusa a oferta (marca o candidato como recusado; não cancela a oferta para os outros).
+async function recusarOferta({ empresaId, ofertaId, motoboyId }) {
+  const ofe = await query(`SELECT id FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
+  if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
+  await query(`UPDATE entregas_ofertas_candidatos SET recusada_em = now() WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
+  return { ok: true };
+}
+
+// Retorna a oferta ativa (ofertada e não expirada) para um motoboy, com detalhe da entrega.
+// Usado quando o app abre e precisa saber se há oferta pendente.
+async function ofertaAtivaDoMotoboy({ empresaId, motoboyId }) {
+  const { rows } = await query(
+    `SELECT o.id AS oferta_id, o.entrega_id, o.expira_em, c.distancia_km,
+            e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.valor_motoboy_cent,
+            (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS qtd_pontos,
+            (SELECT p.endereco FROM entregas_pontos p WHERE p.entrega_id = e.id ORDER BY p.ordem LIMIT 1) AS primeiro_destino
+       FROM entregas_ofertas o
+       JOIN entregas_ofertas_candidatos c ON c.oferta_id = o.id AND c.motoboy_id = $2
+       JOIN entregas e ON e.id = o.entrega_id
+      WHERE o.empresa_id = $1 AND o.status = 'ofertada' AND o.expira_em > now() AND c.recusada_em IS NULL
+      ORDER BY o.criado_em DESC LIMIT 1`,
+    [empresaId, motoboyId]
+  );
+  if (!rows[0]) return { oferta: null };
+  return { oferta: rows[0] };
+}
 
 async function atribuirAutomatica({ empresaId, entregaId, usuarioId, ip }) {
   const ent = await query(
@@ -379,4 +408,4 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
