@@ -35,6 +35,7 @@ export async function montar(container) {
     { id: 'fretes', rotulo: 'Categorias de Frete' },
     { id: 'sla', rotulo: 'SLA Global' },
     { id: 'valores', rotulo: 'Tabela de Valores Global' },
+    { id: 'ocorrencias', rotulo: 'Ocorrências de marcação' },
   ];
   let _aba = 'fretes';
 
@@ -56,6 +57,7 @@ export async function montar(container) {
     if (_aba === 'fretes') painel.append(abaCategoriasFrete());
     else if (_aba === 'sla') painel.append(abaSlaGlobal());
     else if (_aba === 'valores') painel.append(abaValoresGlobal());
+    else if (_aba === 'ocorrencias') painel.append(abaOcorrencias());
   }
 
   conteudo.append(navAbas, painel);
@@ -226,6 +228,134 @@ function abaValoresGlobal() {
     try { btnSalvar.disabled = true; await put('/config/valores', { faixas }); toast('Tabela de valores salva'); }
     catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btnSalvar.disabled = false; }
   }
+  carregar();
+  return wrap;
+}
+
+// ── Aba: Ocorrências de marcação ──────────────────────────────────
+// Motivos que o motoboy escolhe ao finalizar um ponto.
+// Sucesso → finaliza. Insucesso → finaliza ou gera retorno à coleta.
+function abaOcorrencias() {
+  const wrap = el('div', {});
+  wrap.append(
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px' },
+      el('div', {},
+        el('h3', { style: 'font-size:16px;font-weight:800;margin:0 0 2px' }, 'Ocorrências de marcação'),
+        el('p', { style: 'font-size:13px;color:var(--lx-tinta-2);margin:0;max-width:560px' },
+          'Motivos que o motoboy escolhe ao finalizar cada ponto. Sucesso finaliza a entrega; insucesso pode encerrar ou gerar um retorno automático à coleta.')),
+      el('button', { class: 'lx-btn-primario', style: 'white-space:nowrap', onClick: () => abrirForm() }, '+ Nova ocorrência')));
+
+  const lista = el('div', { style: 'margin-top:18px;display:flex;flex-direction:column;gap:8px' });
+  wrap.append(lista);
+
+  async function carregar() {
+    lista.innerHTML = '';
+    let dados = [];
+    try { dados = await get('/config/ocorrencias'); }
+    catch (e) { lista.append(el('p', { style: 'color:var(--lx-erro)' }, e.message || 'Erro ao carregar')); return; }
+    if (!dados.length) {
+      lista.append(el('p', { style: 'font-size:13px;color:var(--lx-tinta-3);padding:20px;text-align:center' }, 'Nenhuma ocorrência cadastrada ainda.'));
+      return;
+    }
+    dados.forEach(o => lista.append(linha(o)));
+  }
+
+  function badge(o) {
+    const insucesso = o.tipo === 'insucesso';
+    const retorno = o.comportamento === 'retorno';
+    const cor = insucesso ? 'var(--lx-erro)' : 'var(--lx-ok)';
+    const bg = insucesso ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)';
+    const rotulo = retorno ? 'RETORNO' : (insucesso ? 'INSUCESSO' : 'SUCESSO');
+    return el('span', { style: `font-size:10px;font-weight:800;letter-spacing:.4px;color:${cor};background:${bg};padding:3px 9px;border-radius:6px` }, rotulo);
+  }
+
+  function linha(o) {
+    const insucesso = o.tipo === 'insucesso';
+    const desc = insucesso
+      ? (o.comportamento === 'retorno' ? 'Insucesso · gera retorno à coleta' : 'Insucesso · finaliza sem retorno')
+      : 'Sucesso · finaliza a entrega';
+    return el('div', { style: 'display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--lx-linha);border-radius:12px;background:var(--lx-superficie)' },
+      el('div', { style: `width:10px;height:10px;border-radius:50%;background:${insucesso ? 'var(--lx-erro)' : 'var(--lx-ok)'};flex-shrink:0` }),
+      el('div', { style: 'flex:1' },
+        el('div', { style: 'font-size:14px;font-weight:700;color:var(--lx-tinta)' }, o.nome),
+        el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, desc)),
+      badge(o),
+      el('button', { style: 'background:none;border:none;cursor:pointer;color:var(--lx-azul-primario);font-size:13px;font-weight:700;padding:6px', onClick: () => abrirForm(o) }, 'Editar'),
+      el('button', { style: 'background:none;border:none;cursor:pointer;color:var(--lx-erro);font-size:13px;font-weight:700;padding:6px', onClick: () => excluir(o) }, 'Excluir'));
+  }
+
+  function abrirForm(o) {
+    const editando = !!o;
+    const inputNome = el('input', { class: 'lx-input', value: o?.nome || '', placeholder: 'Ex: Produto incorreto' });
+
+    const selTipo = el('select', { class: 'lx-input' },
+      el('option', { value: 'sucesso' }, 'Sucesso'),
+      el('option', { value: 'insucesso' }, 'Insucesso'));
+    selTipo.value = o?.tipo || 'sucesso';
+
+    const selComp = el('select', { class: 'lx-input' },
+      el('option', { value: 'finalizar' }, 'Finalizar a entrega'),
+      el('option', { value: 'retorno' }, 'Gerar retorno à coleta'));
+    selComp.value = o?.comportamento || 'finalizar';
+
+    const linhaComp = el('div', { style: 'margin-top:14px' },
+      el('label', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);display:block;margin-bottom:5px' }, 'Comportamento'),
+      selComp);
+
+    // Sucesso sempre finaliza: trava o comportamento.
+    function syncTipo() {
+      if (selTipo.value === 'sucesso') {
+        selComp.value = 'finalizar';
+        selComp.disabled = true;
+        linhaComp.style.opacity = '.5';
+      } else {
+        selComp.disabled = false;
+        linhaComp.style.opacity = '1';
+      }
+    }
+    selTipo.addEventListener('change', syncTipo);
+    syncTipo();
+
+    const corpo = el('div', {},
+      el('div', {},
+        el('label', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);display:block;margin-bottom:5px' }, 'Nome da ocorrência'),
+        inputNome),
+      el('div', { style: 'margin-top:14px' },
+        el('label', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);display:block;margin-bottom:5px' }, 'Tipo'),
+        selTipo),
+      linhaComp);
+
+    const btnSalvar = el('button', { class: 'lx-btn-primario', onClick: salvar }, editando ? 'Salvar' : 'Cadastrar');
+    const ov = modal(editando ? 'Editar ocorrência' : 'Nova ocorrência', corpo, [
+      el('button', { class: 'lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'),
+      btnSalvar,
+    ]);
+
+    async function salvar() {
+      const nome = inputNome.value.trim();
+      if (!nome) { toast('Informe o nome', 'erro'); return; }
+      const payload = { nome, tipo: selTipo.value, comportamento: selComp.value };
+      try {
+        btnSalvar.disabled = true;
+        if (editando) await put(`/config/ocorrencias/${o.id}`, payload);
+        else await post('/config/ocorrencias', payload);
+        toast(editando ? 'Ocorrência atualizada' : 'Ocorrência cadastrada');
+        ov.remove();
+        carregar();
+      } catch (e) { toast(e.message || 'Erro', 'erro'); btnSalvar.disabled = false; }
+    }
+  }
+
+  async function excluir(o) {
+    const ov = modal('Excluir ocorrência', el('p', { style: 'font-size:14px;color:var(--lx-tinta-2)' }, `Remover "${o.nome}"? Esta ação não pode ser desfeita.`), [
+      el('button', { class: 'lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'),
+      el('button', { class: 'lx-btn-primario', style: 'background:var(--lx-erro)', onClick: async () => {
+        try { await del(`/config/ocorrencias/${o.id}`); toast('Ocorrência removida'); ov.remove(); carregar(); }
+        catch (e) { toast(e.message || 'Erro', 'erro'); }
+      } }, 'Excluir'),
+    ]);
+  }
+
   carregar();
   return wrap;
 }
