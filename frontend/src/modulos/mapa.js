@@ -7,7 +7,7 @@ import { el } from '../core/ui.js';
 
 const COR = {
   navy: '#042C53', azul: '#185FA5', azulC: '#B5D4F4',
-  verde: '#1f9d6b', amarelo: '#FACC15', cinza: '#8ba5bc',
+  verde: '#1f9d6b', vermelho: '#e23b3b', amarelo: '#FACC15', cinza: '#8ba5bc',
   tinta: '#0e2138', linha: '#dde9f5', fundo: '#eef4fb', branco: '#fff',
 };
 
@@ -47,27 +47,28 @@ function iniciais(nome) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || 'M';
 }
 
-function pinLoja(nome) {
+function pinLoja() {
   return window.L.divIcon({
     className: '',
-    html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-4px)">
-      <div style="width:30px;height:30px;border-radius:8px;background:${COR.navy};border:3px solid #fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
-      </div></div>`,
-    iconSize: [30, 30], iconAnchor: [15, 15],
+    html: `<div style="width:34px;height:34px;border-radius:9px;background:#fff;border:2px solid ${COR.navy};display:grid;place-items:center;font-size:19px;box-shadow:0 2px 8px rgba(0,0,0,.28)">🏪</div>`,
+    iconSize: [34, 34], iconAnchor: [17, 17],
   });
 }
 function pinMotoboy(m) {
-  const cor = m.ocupado ? COR.azul : COR.verde;
+  const cor = m.ocupado ? COR.vermelho : COR.verde;
+  const ini = iniciais(m.nome);
+  const inner = m.foto_url
+    ? `<img src="${m.foto_url}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.style.background='${cor}';this.parentNode.style.color='#fff';this.parentNode.style.fontWeight='800';this.parentNode.style.fontSize='12px';this.parentNode.style.display='grid';this.parentNode.style.placeItems='center';this.parentNode.textContent='${ini}'">`
+    : ini;
   const badge = m.ocupado
-    ? `<div style="position:absolute;top:-6px;right:-8px;background:${COR.amarelo};color:#3D2200;border-radius:10px;padding:0 5px;font-size:9px;font-weight:800">${m.entregas_ativas}</div>`
+    ? `<div style="position:absolute;top:-5px;right:-6px;background:${cor};color:#fff;border:2px solid #fff;border-radius:10px;min-width:17px;height:17px;display:grid;place-items:center;font-size:9px;font-weight:800;padding:0 3px">${m.entregas_ativas}</div>`
     : '';
   return window.L.divIcon({
     className: '',
-    html: `<div style="position:relative;width:36px;height:36px">
-      <div style="width:34px;height:34px;border-radius:50%;background:${cor};border:3px solid #fff;display:grid;place-items:center;font-weight:800;font-size:11px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">${iniciais(m.nome)}</div>${badge}
+    html: `<div style="position:relative;width:42px;height:42px">
+      <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;border:3px solid ${cor};background:${cor};color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">${inner}</div>${badge}
     </div>`,
-    iconSize: [36, 36], iconAnchor: [18, 18],
+    iconSize: [42, 42], iconAnchor: [21, 21],
   });
 }
 
@@ -94,16 +95,17 @@ export async function montar(container) {
 
   const legenda = el('div', { style: `position:absolute;left:14px;bottom:14px;z-index:900;background:#fff;border:1px solid ${COR.linha};
     border-radius:12px;padding:10px 14px;box-shadow:0 2px 10px rgba(4,44,83,.08);font-size:11px;color:#46637f;display:flex;flex-direction:column;gap:5px` },
-    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:13px;height:13px;border-radius:4px;background:${COR.navy}` }), 'Loja'),
-    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:13px;height:13px;border-radius:50%;background:${COR.verde}` }), 'Motoboy livre'),
-    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:13px;height:13px;border-radius:50%;background:${COR.azul}` }), 'Motoboy em corrida'));
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: 'font-size:14px' }, '🏪'), 'Loja'),
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.verde};box-sizing:border-box` }), 'Motoboy livre'),
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box` }), 'Motoboy em corrida'));
 
   const wrap = el('div', { style: 'position:fixed;inset:0;background:#eef4fb' }, mapaDiv, titulo, legenda, painel);
   container.append(wrap);
 
-  const mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 12, zoomControl: true });
+  const mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 13, zoomControl: false });
+  window.L.control.zoom({ position: 'bottomright' }).addTo(mapa);
   window.L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', {
-    attribution: '© OpenStreetMap, © CARTO', maxZoom: 19,
+    attribution: '© OpenStreetMap, © CARTO', maxZoom: 20,
   }).addTo(mapa);
 
   let dados = { lojas: [], motoboys: [] };
@@ -116,7 +118,7 @@ export async function montar(container) {
     selecionado = { tipo: 'motoboy', id: m.id };
     painelHead.innerHTML = '';
     painelHead.append(
-      el('div', { style: `width:38px;height:38px;border-radius:50%;background:${m.ocupado ? COR.azul : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800` }, iniciais(m.nome)),
+      el('div', { style: `width:38px;height:38px;border-radius:50%;background:${m.ocupado ? COR.vermelho : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800` }, iniciais(m.nome)),
       el('div', { style: 'min-width:0' },
         el('div', { style: 'font-weight:800;font-size:14px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.nome),
         el('div', { style: 'font-size:11px;color:#8ba5bc' }, m.ocupado ? `Em corrida · ${m.entregas_ativas} ativa(s)` : 'Disponível')),
@@ -173,7 +175,7 @@ export async function montar(container) {
     if (!prox.length) painelBody.append(el('div', { style: 'font-size:12px;color:#8ba5bc' }, 'Nenhum motoboy online no momento.'));
     prox.forEach(({ m, km, min }) => painelBody.append(
       el('div', { style: `display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${COR.linha}` },
-        el('div', { style: `width:30px;height:30px;border-radius:50%;background:${m.ocupado ? COR.azul : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800;font-size:10px;flex-shrink:0` }, iniciais(m.nome)),
+        el('div', { style: `width:30px;height:30px;border-radius:50%;background:${m.ocupado ? COR.vermelho : COR.verde};color:#fff;display:grid;place-items:center;font-weight:800;font-size:10px;flex-shrink:0` }, iniciais(m.nome)),
         el('div', { style: 'flex:1;min-width:0' },
           el('div', { style: 'font-weight:700;font-size:13px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.nome),
           el('div', { style: 'font-size:11px;color:#8ba5bc' }, m.ocupado ? `Livre em ~${fmtMin(m.eta_conclusao_min)}` : 'Livre agora')),
