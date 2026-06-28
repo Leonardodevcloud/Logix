@@ -3,7 +3,7 @@ const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, ERRO_MSGS, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { geocodificar, otimizarRota, tracarRota } = require('../../integracoes/openrouteservice');
-const { emitirParaEmpresa } = require('../../realtime/ws');
+const { emitirParaEmpresa, emitirParaMotoboy } = require('../../realtime/ws');
 const { notificarMotoboy } = require('../../shared/push');
 const sh = require('./entregas.shared');
 
@@ -858,7 +858,7 @@ async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, 
   emitirParaEmpresa(empresaId, 'entrega.status', { id });
   // Se há motoboy e algo realmente mudou, avisa o app dele (WS + push).
   if (ent[0].motoboy_id && mudancas.length) {
-    emitirParaEmpresa(empresaId, 'entrega.editada', { id });
+    emitirParaMotoboy(ent[0].motoboy_id, 'entrega.editada', { entregaId: id, protocolo: ent[0].protocolo });
     notificarMotoboy(ent[0].motoboy_id, {
       titulo: '✏️ Corrida atualizada',
       corpo: `A corrida ${ent[0].protocolo} foi alterada pela central. Confira os novos dados.`,

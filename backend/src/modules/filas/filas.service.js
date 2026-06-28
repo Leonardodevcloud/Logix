@@ -184,6 +184,7 @@ async function atribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir', detalhe: { entregaId, motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
+  emitirParaMotoboy(motoboyId, 'entrega.atribuida', { entregaId, protocolo: rows[0].protocolo });
   notificarMotoboy(motoboyId, {
     titulo: '📦 Corrida atribuída a você',
     corpo: `A corrida ${rows[0].protocolo} é sua. Toque para abrir.`,
@@ -210,6 +211,8 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
 
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir-lote', detalhe: { motoboyId, ids: rows.map(r => r.id) }, ip });
   rows.forEach(r => emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: r.id, motoboyId, protocolo: r.protocolo }));
+  // Tempo real no app do motoboy: um evento por corrida atribuída.
+  rows.forEach(r => emitirParaMotoboy(motoboyId, 'entrega.atribuida', { entregaId: r.id, protocolo: r.protocolo }));
   // Uma notificação só, resumindo o lote, para não estourar o celular do motoboy.
   notificarMotoboy(motoboyId, {
     titulo: '📦 Corridas atribuídas a você',
@@ -473,7 +476,8 @@ async function reatribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
   );
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'reatribuir', detalhe: { entregaId, de: ent.rows[0].motoboy_id, para: motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
-  // Novo motoboy recebe a corrida.
+  // Novo motoboy recebe a corrida (tempo real no app + push).
+  emitirParaMotoboy(motoboyId, 'entrega.atribuida', { entregaId, protocolo: rows[0].protocolo });
   notificarMotoboy(motoboyId, {
     titulo: '📦 Corrida atribuída a você',
     corpo: `A corrida ${rows[0].protocolo} é sua. Toque para abrir.`,
