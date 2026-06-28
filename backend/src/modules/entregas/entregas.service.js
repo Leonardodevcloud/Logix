@@ -762,7 +762,7 @@ async function previewEdicao({ empresaId, id, coleta, pontos }) {
 // pontos: [{ id?, endereco, observacoes, numero_nf, nome_fantasia, complemento, lat, lng, _remover?, _novo?, eh_retorno? }]
 // aplicarValores: { distancia_km, valor_cliente_cent, valor_motoboy_cent } — valores confirmados pelo admin.
 async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, usuarioId, ip }) {
-  const { rows: ent } = await query(`SELECT id, status, coleta_nome, coleta_endereco, coleta_lat, coleta_lng FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  const { rows: ent } = await query(`SELECT id, status, coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, valor_cliente_cent, valor_motoboy_cent FROM entregas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
   if (!ent[0]) throw AppError.naoEncontrado('Entrega não encontrada');
   if (['entregue', 'cancelada'].includes(ent[0].status))
     throw AppError.validacao(`Entrega já está ${ent[0].status} — não pode ser editada`);
@@ -831,15 +831,21 @@ async function editarEnderecos({ empresaId, id, coleta, pontos, aplicarValores, 
 
   // 3. Aplica os valores recalculados confirmados pelo admin.
   if (aplicarValores && (aplicarValores.distancia_km != null || aplicarValores.valor_cliente_cent != null)) {
+    const fmtR = c => 'R$ ' + ((Number(c) || 0) / 100).toFixed(2).replace('.', ',');
+    const kmAntes = ent[0].distancia_km, kmDepois = aplicarValores.distancia_km;
+    const cliAntes = ent[0].valor_cliente_cent, cliDepois = aplicarValores.valor_cliente_cent;
+    const motAntes = ent[0].valor_motoboy_cent, motDepois = aplicarValores.valor_motoboy_cent;
     await query(
       `UPDATE entregas SET
          distancia_km = COALESCE($2, distancia_km),
          valor_cliente_cent = COALESCE($3, valor_cliente_cent),
          valor_motoboy_cent = COALESCE($4, valor_motoboy_cent)
        WHERE id = $1`,
-      [id, aplicarValores.distancia_km ?? null, aplicarValores.valor_cliente_cent ?? null, aplicarValores.valor_motoboy_cent ?? null]
+      [id, kmDepois ?? null, cliDepois ?? null, motDepois ?? null]
     );
-    mudancas.push(`valores recalculados (${aplicarValores.distancia_km} km · cliente R$ ${((aplicarValores.valor_cliente_cent||0)/100).toFixed(2)})`);
+    if (kmDepois != null && Number(kmDepois) !== Number(kmAntes)) mudancas.push(`Distância: ${kmAntes != null ? Number(kmAntes).toFixed(1) : '—'} km → ${Number(kmDepois).toFixed(1)} km`);
+    if (cliDepois != null && Number(cliDepois) !== Number(cliAntes)) mudancas.push(`Valor cliente: ${fmtR(cliAntes)} → ${fmtR(cliDepois)}`);
+    if (motDepois != null && Number(motDepois) !== Number(motAntes)) mudancas.push(`Valor motoboy: ${fmtR(motAntes)} → ${fmtR(motDepois)}`);
   }
 
   // 4. Registra na auditoria e nos logs da corrida.
@@ -1017,13 +1023,23 @@ async function logsEntrega({ empresaId, id }) {
         linhas.push(`De: ${nomeMb(d.de) || '—'}`);
         linhas.push(`Para: ${nomeMb(d.para) || '—'}`);
         break;
+      case 'desatribuir':
+        titulo = 'Motoboy removido';
+        linhas.push(`De: ${nomeMb(d.de) || '—'}`);
+        linhas.push('Corrida devolvida à fila');
+        break;
       case 'disparar-oferta':
         titulo = 'Oferta disparada (raio)';
         if (d.candidatos != null) linhas.push(`Motoboys alcançados: ${d.candidatos}`);
         if (d.raioKm != null) linhas.push(`Raio: ${d.raioKm} km`);
         break;
       case 'editar_enderecos':
-        titulo = 'Endereços editados';
+        titulo = 'Corrida editada';
+        if (Array.isArray(d.mudancas) && d.mudancas.length) {
+          d.mudancas.forEach(m => linhas.push(m));
+        } else {
+          linhas.push('Endereços/pontos atualizados');
+        }
         break;
       case 'editar_valores': {
         titulo = 'Valores editados';
@@ -1057,18 +1073,51 @@ async function logsEntrega({ empresaId, id }) {
   if (e.iniciada_em) eventos.push({ em: e.iniciada_em, tipo: 'iniciada', titulo: 'Coleta iniciada', autor: mbAtual || 'Motoboy', origem: 'app', linhas: [] });
   if (e.concluida_em) eventos.push({ em: e.concluida_em, tipo: 'concluida', titulo: 'Corrida concluída', autor: mbAtual || 'Motoboy', origem: 'app', linhas: [] });
 
-  // 4) Entregas de pontos (cada destino finalizado pelo motoboy).
+  // 4) Entregas de pontos (cada destino finalizado pelo motoboy, com a ocorrência).
   const { rows: pontos } = await query(
-    `SELECT ordem, endereco, status, entregue_em, recebedor FROM entregas_pontos
+    `SELECT ordem, endereco, status, entregue_em, recebedor, ocorrencia_nome, eh_retorno, observacao_motoboy
+       FROM entregas_pontos
       WHERE entrega_id = $1 AND entregue_em IS NOT NULL ORDER BY entregue_em ASC`,
     [id]
   );
   for (const p of pontos) {
     const linhas = [];
     if (p.endereco) linhas.push(`Endereço: ${p.endereco}`);
+    if (p.ocorrencia_nome) linhas.push(`Ocorrência: ${p.ocorrencia_nome}`);
     if (p.recebedor) linhas.push(`Recebido por: ${p.recebedor}`);
-    eventos.push({ em: p.entregue_em, tipo: 'ponto_entregue', titulo: `Ponto ${p.ordem} entregue`, autor: mbAtual || 'Motoboy', origem: 'app', linhas });
+    if (p.observacao_motoboy) linhas.push(`Obs. do motoboy: ${p.observacao_motoboy}`);
+    const insucesso = p.status === 'insucesso';
+    const titulo = insucesso
+      ? `Ponto ${p.ordem} — insucesso`
+      : (p.eh_retorno ? `Retorno (ponto ${p.ordem}) concluído` : `Ponto ${p.ordem} entregue`);
+    eventos.push({ em: p.entregue_em, tipo: insucesso ? 'ponto_insucesso' : 'ponto_entregue', titulo, autor: mbAtual || 'Motoboy', origem: 'app', linhas });
   }
+
+  // 5) Motoboys que visualizaram a corrida (receberam a oferta no raio).
+  try {
+    const { rows: vistos } = await query(
+      `SELECT DISTINCT mc.motoboy_id, m.nome_completo, m.codigo, mc.recusada_em,
+              MIN(o.criado_em) AS em
+         FROM entregas_ofertas o
+         JOIN entregas_ofertas_candidatos mc ON mc.oferta_id = o.id
+         LEFT JOIN motoboys m ON m.id = mc.motoboy_id
+        WHERE o.entrega_id = $1
+        GROUP BY mc.motoboy_id, m.nome_completo, m.codigo, mc.recusada_em
+        ORDER BY em ASC`,
+      [id]
+    );
+    if (vistos.length) {
+      const linhas = vistos.map(v => {
+        const nome = v.nome_completo ? `${v.nome_completo}${v.codigo ? ' (#' + String(v.codigo).padStart(3, '0') + ')' : ''}` : 'Motoboy';
+        return v.recusada_em ? `${nome} — recusou` : nome;
+      });
+      eventos.push({
+        em: vistos[0].em, tipo: 'oferta_vista',
+        titulo: `Oferta recebida por ${vistos.length} motoboy${vistos.length > 1 ? 's' : ''}`,
+        autor: 'Sistema', origem: 'central', linhas,
+      });
+    }
+  } catch { /* sem ofertas registradas */ }
 
   // ordena por data
   eventos.sort((a, b) => new Date(a.em) - new Date(b.em));

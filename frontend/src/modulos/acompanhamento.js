@@ -405,9 +405,10 @@ export async function montar(container) {
     const fmt = iso => { const d = new Date(iso); return d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
     const corEvento = t => {
       if (['criada'].includes(t)) return 'var(--lx-azul-primario)';
-      if (['atribuir', 'atribuir-lote', 'reatribuir', 'disparar-oferta'].includes(t)) return '#0891b2';
+      if (['atribuir', 'atribuir-lote', 'reatribuir', 'disparar-oferta', 'oferta_vista'].includes(t)) return '#0891b2';
+      if (['desatribuir'].includes(t)) return '#ea580c';
       if (['iniciada', 'ponto_entregue', 'concluida'].includes(t)) return 'var(--lx-ok)';
-      if (['cancelar', 'cancelada'].includes(t)) return 'var(--lx-erro)';
+      if (['cancelar', 'cancelada', 'ponto_insucesso'].includes(t)) return 'var(--lx-erro)';
       if (['reabrir'].includes(t)) return '#9333ea';
       if (['editar_enderecos'].includes(t)) return '#a16207';
       if (['editar_valores'].includes(t)) return '#15803d';
