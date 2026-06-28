@@ -334,7 +334,13 @@ module.exports = function motoboyAppRoutes() {
 
       const atualIdx = FLUXO.indexOf(rows[0].status);
       const novoIdx  = FLUXO.indexOf(status);
-      if (novoIdx <= atualIdx) throw AppError.validacao('Não é possível voltar o status');
+      // Idempotência: se a entrega já está nesse status (ou além), o pedido
+      // provavelmente é o retry de uma chamada que JÁ deu certo (a 1ª resposta
+      // se perdeu na rede). Em vez de erro, devolve sucesso com o status real,
+      // para o app sincronizar a tela sem mostrar "não é possível mudar".
+      if (novoIdx <= atualIdx) {
+        return res.json({ ok: true, status: rows[0].status, jaAtualizado: true });
+      }
 
       const extra = status === 'entregue' ? `, concluida_em = now()` : '';
       await query(`UPDATE entregas SET status = $1${extra} WHERE id = $2`, [status, req.params.id]);
