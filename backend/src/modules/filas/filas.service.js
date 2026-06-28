@@ -384,7 +384,19 @@ async function detalheOferta({ empresaId, motoboyId, ofertaId }) {
        FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`,
     [oferta.entrega_id]
   );
-  return { oferta, pontos: pts.rows };
+  // Geometria da rota pelas ruas (ORS): coleta -> cada ponto, na ordem.
+  let rotaCoords = [];
+  try {
+    const seq = [];
+    if (oferta.coleta_lat != null && oferta.coleta_lng != null) seq.push({ lat: Number(oferta.coleta_lat), lng: Number(oferta.coleta_lng) });
+    for (const p of pts.rows) if (p.lat != null && p.lng != null) seq.push({ lat: Number(p.lat), lng: Number(p.lng) });
+    if (seq.length >= 2) {
+      const { tracarRota } = require('../../integracoes/openrouteservice');
+      const r = await tracarRota(seq);
+      rotaCoords = r.coordenadas || []; // [[lat,lng], ...]
+    }
+  } catch { /* sem geometria: o app desenha linha reta como fallback */ }
+  return { oferta, pontos: pts.rows, rota: rotaCoords };
 }
 
 // Compat: retorna a oferta ativa mais recente (singular). Mantida para não quebrar chamadas antigas.
