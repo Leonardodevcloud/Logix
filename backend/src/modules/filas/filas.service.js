@@ -313,6 +313,14 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
     throw AppError.validacao('A corrida não está mais disponível');
   }
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: upd.rows[0].protocolo, via: 'oferta' });
+  // Avisa os OUTROS candidatos que a oferta saiu (para sumir da lista deles em tempo real).
+  try {
+    const { rows: outros } = await query(
+      `SELECT motoboy_id FROM entregas_ofertas_candidatos WHERE oferta_id = $1 AND motoboy_id <> $2`,
+      [ofertaId, motoboyId]
+    );
+    outros.forEach(o => emitirParaMotoboy(o.motoboy_id, 'oferta.encerrada', { ofertaId }));
+  } catch {}
   return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
 }
 
@@ -325,9 +333,9 @@ async function recusarOferta({ empresaId, ofertaId, motoboyId }) {
   return { ok: true };
 }
 
-// Retorna a oferta ativa (ofertada e não expirada) para um motoboy, com detalhe da entrega.
-// Usado quando o app abre e precisa saber se há oferta pendente.
-async function ofertaAtivaDoMotoboy({ empresaId, motoboyId }) {
+// Lista TODAS as ofertas ativas (ofertadas, não expiradas, não recusadas) de um motoboy,
+// com detalhe da entrega. Usado pela tela de "corridas disponíveis".
+async function ofertasDoMotoboy({ empresaId, motoboyId }) {
   const { rows } = await query(
     `SELECT o.id AS oferta_id, o.entrega_id, o.expira_em, c.distancia_km,
             e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.valor_motoboy_cent,
@@ -337,11 +345,16 @@ async function ofertaAtivaDoMotoboy({ empresaId, motoboyId }) {
        JOIN entregas_ofertas_candidatos c ON c.oferta_id = o.id AND c.motoboy_id = $2
        JOIN entregas e ON e.id = o.entrega_id
       WHERE o.empresa_id = $1 AND o.status = 'ofertada' AND o.expira_em > now() AND c.recusada_em IS NULL
-      ORDER BY o.criado_em DESC LIMIT 1`,
+      ORDER BY o.criado_em DESC`,
     [empresaId, motoboyId]
   );
-  if (!rows[0]) return { oferta: null };
-  return { oferta: rows[0] };
+  return { ofertas: rows };
+}
+
+// Compat: retorna a oferta ativa mais recente (singular). Mantida para não quebrar chamadas antigas.
+async function ofertaAtivaDoMotoboy({ empresaId, motoboyId }) {
+  const r = await ofertasDoMotoboy({ empresaId, motoboyId });
+  return { oferta: r.ofertas[0] || null };
 }
 
 async function atribuirAutomatica({ empresaId, entregaId, usuarioId, ip }) {
@@ -408,4 +421,4 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };

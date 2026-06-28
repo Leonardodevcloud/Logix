@@ -142,9 +142,13 @@ module.exports = function motoboyAppRoutes() {
   // ── Ofertas de corrida ──────────────────────────────────────────
   const filasService = require('../filas/filas.service');
 
-  // GET /motoboys/app/oferta-ativa — oferta pendente (ao abrir o app).
+  // GET /motoboys/app/oferta-ativa — oferta pendente (compat, singular).
   router.get('/app/oferta-ativa', verificarTokenMotoboy, async (req, res, next) => {
     try { res.json(await filasService.ofertaAtivaDoMotoboy({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
+  });
+  // GET /motoboys/app/ofertas — todas as ofertas disponíveis (lista).
+  router.get('/app/ofertas', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await filasService.ofertasDoMotoboy({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
   });
   // POST /motoboys/app/ofertas/:id/aceitar
   router.post('/app/ofertas/:id/aceitar', verificarTokenMotoboy, async (req, res, next) => {
