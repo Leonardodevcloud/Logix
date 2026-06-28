@@ -76,6 +76,23 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
       acao: 'criar', detalhe: { protocolo }, ip,
     });
     emitirParaEmpresa(empresaId, 'entrega.criada', { id: entregaId, protocolo, status });
+
+    // Disparo AUTOMÁTICO da oferta: se a entrega entrou na fila (aguardando atribuição),
+    // notifica os motoboys elegíveis (respeitando vínculo de loja/modalidade e raio).
+    // Fire-and-forget: nunca trava a criação. "Sem motoboy" / "fora do raio" não é erro —
+    // a entrega simplesmente fica na fila aguardando (ou um disparo manual depois).
+    if (status === STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) {
+      (async () => {
+        try {
+          const filasService = require('../filas/filas.service');
+          await filasService.dispararOferta({ empresaId, entregaId, usuarioId: criadoPor, ip, automatico: true });
+          console.log('[entregas] oferta automática disparada para', protocolo);
+        } catch (e) {
+          console.log('[entregas] oferta automática não disparada para', protocolo + ':', e.message);
+        }
+      })();
+    }
+
     return obter({ empresaId, id: entregaId });
   } catch (e) {
     await cliente.query('ROLLBACK');
@@ -375,6 +392,14 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
       LIMIT 500`,
     params
   );
+
+  // Anexa a selfie (foto de perfil) de cada motoboy, como motoboy_foto.
+  try {
+    const { anexarFotoSelfie } = require('../../shared/fotoMotoboy');
+    const comMotoboy = rows.filter(r => r.motoboy_id);
+    await anexarFotoSelfie(comMotoboy, 'motoboy_id');
+    comMotoboy.forEach(r => { r.motoboy_foto = r.foto_url; delete r.foto_url; });
+  } catch {}
 
   // Carrega config de SLA (geral da empresa + específicas por loja) para calcular o status.
   const slaCfgs = await query(

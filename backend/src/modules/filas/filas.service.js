@@ -209,7 +209,7 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
 
 // Dispara a OFERTA de uma corrida: oferece aos motoboys online dentro do raio
 // configurado. Não atribui ninguém ainda — o primeiro a aceitar leva.
-async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
+async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico = false }) {
   const ent = await query(
     `SELECT id, status, protocolo, coleta_lat, coleta_lng, loja_id, modalidade_id FROM entregas WHERE id = $1 AND empresa_id = $2`,
     [entregaId, empresaId]
@@ -218,6 +218,16 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   const e = ent.rows[0];
   if (e.status !== STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) throw AppError.validacao('Entrega não está disponível para disparo');
   if (e.coleta_lat == null || e.coleta_lng == null) throw AppError.validacao('Coleta sem coordenadas — geocodifique antes de disparar');
+
+  // Evita duplicar: se já há uma oferta ativa (ofertada e não expirada) para esta entrega, não dispara outra.
+  const jaTem = await query(
+    `SELECT 1 FROM entregas_ofertas WHERE entrega_id = $1 AND status = 'ofertada' AND expira_em > now() LIMIT 1`,
+    [entregaId]
+  );
+  if (jaTem.rows[0]) {
+    if (automatico) return { jaOfertada: true };
+    throw AppError.validacao('Esta corrida já tem uma oferta ativa.');
+  }
 
   // Regras efetivas do cliente (raio, máx corridas, exclusividade da modalidade).
   const regras = await regrasDaEntrega(empresaId, e);
@@ -272,7 +282,7 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip }) {
   }
 
   // Marca a entrega como "ofertada" via campo distribuicao (mantém status na fila).
-  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm }, ip });
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm, automatico }, ip });
   // Notifica os candidatos (app escuta esse evento por motoboy).
   // Notifica cada candidato individualmente (na sala do próprio motoboy) e a central.
   candidatos.forEach(c => emitirParaMotoboy(c.motoboy_id, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, distanciaKm: c.distancia_km, expiraEm }));
