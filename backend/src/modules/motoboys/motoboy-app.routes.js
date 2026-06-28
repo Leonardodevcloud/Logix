@@ -135,7 +135,18 @@ module.exports = function motoboyAppRoutes() {
       );
       if (!rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
       rows[0].foto_url = await fotoSelfie(req.motoboy.id);
-      res.json(rows[0]);
+
+      // Estatísticas de ganhos (hoje, mês, total). Em centavos.
+      const { rows: stat } = await query(
+        `SELECT
+            count(*) FILTER (WHERE status = 'entregue')::int AS total_entregues,
+            count(*) FILTER (WHERE status = 'entregue' AND concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date)::int AS entregues_hoje,
+            COALESCE(SUM(valor_motoboy_cent) FILTER (WHERE status = 'entregue' AND concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date), 0)::bigint AS ganhos_hoje_cent,
+            COALESCE(SUM(valor_motoboy_cent) FILTER (WHERE status = 'entregue' AND date_trunc('month', concluida_em AT TIME ZONE 'America/Bahia') = date_trunc('month', now() AT TIME ZONE 'America/Bahia')), 0)::bigint AS ganhos_mes_cent
+           FROM entregas WHERE motoboy_id = $1`,
+        [req.motoboy.id]
+      );
+      res.json({ ...rows[0], ...stat[0] });
     } catch (e) { next(e); }
   });
 
@@ -221,6 +232,51 @@ module.exports = function motoboyAppRoutes() {
       res.json({ corridas: rows, total_cent: totalCent, quantidade: rows.length });
     } catch (e) { next(e); }
   });
+
+  // GET /motoboys/app/minha-rota — junta as corridas ativas e sugere a sequência otimizada
+  router.get('/app/minha-rota', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { rows } = await query(
+        `SELECT e.id AS entrega_id, e.protocolo, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+                l.nome_fantasia AS cliente_nome,
+                ep.id AS ponto_id, ep.ordem, ep.endereco, ep.lat, ep.lng, ep.status AS ponto_status, ep.nome_fantasia
+           FROM entregas e
+           LEFT JOIN lojas l ON l.id = e.loja_id
+           JOIN entregas_pontos ep ON ep.entrega_id = e.id
+          WHERE e.motoboy_id = $1 AND e.empresa_id = $2
+            AND e.status IN ('aguardando_coleta','em_coleta','em_rota')
+            AND ep.status NOT IN ('entregue','insucesso')
+          ORDER BY e.criado_em, ep.ordem`,
+        [req.motoboy.id, req.motoboy.empresaId]
+      );
+      if (!rows.length) return res.json({ paradas: [], coleta: null, distancia_km: 0, duracao_min: 0 });
+
+      const coletaRow = rows.find(r => r.coleta_lat != null && r.coleta_lng != null);
+      const colObj = coletaRow ? { lat: Number(coletaRow.coleta_lat), lng: Number(coletaRow.coleta_lng), endereco: coletaRow.coleta_endereco, cliente_nome: coletaRow.cliente_nome } : null;
+
+      const pontos = rows
+        .filter(r => r.lat != null && r.lng != null)
+        .map(r => ({
+          ponto_id: r.ponto_id, entrega_id: r.entrega_id, protocolo: r.protocolo,
+          endereco: r.endereco, lat: Number(r.lat), lng: Number(r.lng),
+          cliente_nome: r.cliente_nome, nome_fantasia: r.nome_fantasia,
+        }));
+
+      let ordem = pontos.map((_, i) => i), distanciaKm = 0, duracaoMin = 0;
+      if (colObj && pontos.length >= 1) {
+        try {
+          const { otimizarRota } = require('../../integracoes/openrouteservice');
+          const r = await otimizarRota({ coleta: colObj, pontos });
+          if (Array.isArray(r.ordem) && r.ordem.length) ordem = r.ordem;
+          distanciaKm = r.distanciaKm || 0; duracaoMin = r.duracaoMin || 0;
+        } catch { /* sem otimização: mantém ordem natural */ }
+      }
+      const paradasOrdenadas = ordem.map(i => pontos[i]).filter(Boolean);
+
+      res.json({ coleta: colObj, paradas: paradasOrdenadas, distancia_km: distanciaKm, duracao_min: duracaoMin });
+    } catch (e) { next(e); }
+  });
+
   router.patch('/app/status', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const { online } = req.body;
