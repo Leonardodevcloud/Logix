@@ -631,6 +631,15 @@ module.exports = function motoboyAppRoutes() {
          VALUES ($1, $2, 'liberacao_solicitada', $3, now())`,
         [entregaId, pontoId, `Motoboy solicitou liberação de ponto (fora do raio)${motivo ? ' — ' + motivo : ''}`]
       );
+      // Também registra na auditoria, que é a fonte da timeline da central.
+      try {
+        const { registrarAuditoria } = require('../../shared/auditLogger');
+        registrarAuditoria({
+          empresaId, usuarioId: null, categoria: 'entregas', acao: 'solicitar_liberacao',
+          detalhe: { entregaId, pontoId, motivo: motivo || null, motoboyNome: req.motoboy.nome || null },
+          ip: req.ip,
+        }).catch(() => {});
+      } catch {}
       emitirParaEmpresa(empresaId, 'ponto.liberacao_solicitada', { entregaId, pontoId });
       res.json({ ok: true });
     } catch (e) { next(e); }

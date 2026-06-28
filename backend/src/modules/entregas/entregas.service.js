@@ -383,7 +383,8 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
             (SELECT ep.lat FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lat,
             (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_lng,
             (SELECT count(*)::int FROM entregas_pontos ep WHERE ep.entrega_id = e.id) AS total_pontos,
-            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.eh_retorno = TRUE) AS tem_retorno
+            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.eh_retorno = TRUE) AS tem_retorno,
+            EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.liberacao_solicitada_em IS NOT NULL AND ep.liberado = FALSE) AS liberacao_pendente
        FROM entregas e
        LEFT JOIN lojas l    ON l.id = e.loja_id
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
@@ -1068,6 +1069,16 @@ async function logsEntrega({ empresaId, id }) {
       case 'reabrir':
         titulo = 'Corrida reaberta';
         if (d.deStatus) linhas.push(`Reaberta de: ${d.deStatus === 'entregue' ? 'Concluída' : 'Cancelada'}`);
+        break;
+      case 'solicitar_liberacao':
+        titulo = 'Liberação de ponto solicitada';
+        if (d.motoboyNome) linhas.push(`Motoboy: ${d.motoboyNome}`);
+        linhas.push('Motoboy estava fora do raio de marcação');
+        if (d.motivo) linhas.push(`Motivo: ${d.motivo}`);
+        break;
+      case 'liberar_ponto':
+        titulo = 'Ponto liberado pela central';
+        linhas.push('Marcação liberada fora do raio');
         break;
       default:
         titulo = a.acao;

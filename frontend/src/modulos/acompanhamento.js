@@ -711,6 +711,9 @@ export async function montar(container) {
         el('span', { style: 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.loja_nome || '—'),
         c.tem_retorno
           ? el('span', { style: 'flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.3px;color:#b45309;background:#fef3c7;padding:2px 7px;border-radius:5px', title: 'Esta corrida teve uma ocorrência de retorno à coleta' }, '↩ COM RETORNO')
+          : null,
+        c.liberacao_pendente
+          ? el('span', { style: 'flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.3px;color:#fff;background:#ea580c;padding:2px 7px;border-radius:5px;cursor:pointer', title: 'Um motoboy solicitou liberação de ponto — clique para aprovar', onClick: (e) => { e.stopPropagation(); abrirPontos(c); } }, '🔓 LIBERAÇÃO PEDIDA')
           : null),
       ponto('var(--lx-azul-primario)', 'Coleta', c.coleta_endereco),
       ponto('var(--lx-ok)', rotuloEntrega, c.destino_endereco, verTodos ? el('div', {}, verTodos) : null));
