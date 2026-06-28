@@ -221,7 +221,7 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
 
   // Evita duplicar: se já há uma oferta ativa (ofertada e não expirada) para esta entrega, não dispara outra.
   const jaTem = await query(
-    `SELECT 1 FROM entregas_ofertas WHERE entrega_id = $1 AND status = 'ofertada' AND expira_em > now() LIMIT 1`,
+    `SELECT 1 FROM entregas_ofertas WHERE entrega_id = $1 AND status = 'ofertada' LIMIT 1`,
     [entregaId]
   );
   if (jaTem.rows[0]) {
@@ -233,9 +233,9 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
   const regras = await regrasDaEntrega(empresaId, e);
   const raioKm = regras.raioKm;
 
-  // Expiração da oferta (config geral da empresa).
-  const cfg = await query(`SELECT oferta_expira_seg FROM sla_config WHERE empresa_id = $1 AND loja_id IS NULL LIMIT 1`, [empresaId]);
-  const expiraSeg = cfg.rows[0]?.oferta_expira_seg != null ? Number(cfg.rows[0].oferta_expira_seg) : 120;
+  // A oferta NÃO expira por tempo: fica disponível até alguém aceitar ou a central cancelar.
+  // Mantemos expira_em (coluna NOT NULL) com data distante apenas para satisfazer o schema.
+  const expiraEm = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString(); // ~10 anos
 
   // Motoboys online + ativos, filtrados pelas regras (exclusividade + máx corridas).
   let disp = await listarDisponiveis(empresaId);
@@ -270,7 +270,6 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
   }
 
   // Cria a oferta + candidatos.
-  const expiraEm = new Date(Date.now() + expiraSeg * 1000).toISOString();
   const ofe = await query(
     `INSERT INTO entregas_ofertas (entrega_id, empresa_id, status, raio_km, expira_em)
      VALUES ($1, $2, 'ofertada', $3, $4) RETURNING id`,
@@ -293,10 +292,9 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
 
 // Motoboy aceita a oferta. Primeiro a aceitar leva (trava por UPDATE condicional).
 async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
-  const ofe = await query(`SELECT id, entrega_id, status, expira_em FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
+  const ofe = await query(`SELECT id, entrega_id, status FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
   if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
   if (ofe.rows[0].status !== 'ofertada') throw AppError.validacao('Oferta já não está mais disponível');
-  if (new Date(ofe.rows[0].expira_em).getTime() < Date.now()) throw AppError.validacao('Oferta expirada');
 
   // valida que o motoboy era candidato
   const cand = await query(`SELECT 1 FROM entregas_ofertas_candidatos WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
@@ -343,22 +341,50 @@ async function recusarOferta({ empresaId, ofertaId, motoboyId }) {
   return { ok: true };
 }
 
-// Lista TODAS as ofertas ativas (ofertadas, não expiradas, não recusadas) de um motoboy,
-// com detalhe da entrega. Usado pela tela de "corridas disponíveis".
+// Lista TODAS as ofertas ativas (ofertadas, não recusadas) de um motoboy.
+// SEM expiração por tempo: a oferta fica disponível até alguém aceitar ou a central cancelar.
 async function ofertasDoMotoboy({ empresaId, motoboyId }) {
   const { rows } = await query(
-    `SELECT o.id AS oferta_id, o.entrega_id, o.expira_em, c.distancia_km,
-            e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.valor_motoboy_cent,
+    `SELECT o.id AS oferta_id, o.entrega_id, o.expira_em, o.criado_em, c.distancia_km,
+            e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+            e.valor_motoboy_cent, e.distancia_km AS rota_km,
+            l.nome_fantasia AS cliente_nome,
             (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS qtd_pontos,
-            (SELECT p.endereco FROM entregas_pontos p WHERE p.entrega_id = e.id ORDER BY p.ordem LIMIT 1) AS primeiro_destino
+            (SELECT p.endereco FROM entregas_pontos p WHERE p.entrega_id = e.id ORDER BY p.ordem LIMIT 1) AS primeiro_destino,
+            (SELECT p.numero_nf FROM entregas_pontos p WHERE p.entrega_id = e.id ORDER BY p.ordem LIMIT 1) AS primeiro_nf
        FROM entregas_ofertas o
        JOIN entregas_ofertas_candidatos c ON c.oferta_id = o.id AND c.motoboy_id = $2
        JOIN entregas e ON e.id = o.entrega_id
-      WHERE o.empresa_id = $1 AND o.status = 'ofertada' AND o.expira_em > now() AND c.recusada_em IS NULL
+       LEFT JOIN lojas l ON l.id = e.loja_id
+      WHERE o.empresa_id = $1 AND o.status = 'ofertada' AND c.recusada_em IS NULL
       ORDER BY o.criado_em DESC`,
     [empresaId, motoboyId]
   );
   return { ofertas: rows };
+}
+
+// Detalhe completo de uma oferta (para a tela "Ver detalhes"): coleta + todos os pontos com NF, complemento, observações, telefone.
+async function detalheOferta({ empresaId, motoboyId, ofertaId }) {
+  const { rows } = await query(
+    `SELECT o.id AS oferta_id, o.entrega_id, o.status, o.criado_em, c.distancia_km,
+            e.protocolo, e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
+            e.valor_motoboy_cent, e.distancia_km AS rota_km, e.tempo_estimado_min,
+            l.nome_fantasia AS cliente_nome
+       FROM entregas_ofertas o
+       JOIN entregas_ofertas_candidatos c ON c.oferta_id = o.id AND c.motoboy_id = $3
+       JOIN entregas e ON e.id = o.entrega_id
+       LEFT JOIN lojas l ON l.id = e.loja_id
+      WHERE o.id = $2 AND o.empresa_id = $1 AND o.status = 'ofertada' AND c.recusada_em IS NULL`,
+    [empresaId, ofertaId, motoboyId]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Oferta não encontrada ou não disponível');
+  const oferta = rows[0];
+  const pts = await query(
+    `SELECT ordem, nome, endereco, lat, lng, telefone, observacoes, numero_nf, nome_fantasia, complemento
+       FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`,
+    [oferta.entrega_id]
+  );
+  return { oferta, pontos: pts.rows };
 }
 
 // Compat: retorna a oferta ativa mais recente (singular). Mantida para não quebrar chamadas antigas.
@@ -431,4 +457,4 @@ async function listarTodosAtivos(empresaId) {
   return rows;
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, listarTodosAtivos };

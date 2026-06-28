@@ -150,6 +150,10 @@ module.exports = function motoboyAppRoutes() {
   router.get('/app/ofertas', verificarTokenMotoboy, async (req, res, next) => {
     try { res.json(await filasService.ofertasDoMotoboy({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
   });
+  // GET /motoboys/app/ofertas/:id — detalhe completo de uma oferta (ver detalhes).
+  router.get('/app/ofertas/:id', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await filasService.detalheOferta({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, ofertaId: req.params.id })); } catch (e) { next(e); }
+  });
   // POST /motoboys/app/ofertas/:id/aceitar
   router.post('/app/ofertas/:id/aceitar', verificarTokenMotoboy, async (req, res, next) => {
     try { res.json(await filasService.aceitarOferta({ empresaId: req.motoboy.empresaId, ofertaId: req.params.id, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
