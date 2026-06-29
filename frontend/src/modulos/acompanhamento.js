@@ -665,10 +665,10 @@ export async function montar(container) {
     b.append(svgIcone(pIcon)); return b;
   }
   function acoes(c) {
-    const w = el('div', { style: 'display:flex;gap:4px;justify-content:flex-end;align-items:center;flex-wrap:nowrap' });
+    const w = el('div', { style: 'display:grid;grid-template-columns:repeat(4, max-content);gap:5px;justify-content:end;align-items:center;margin-left:auto;width:max-content' });
     if (_aba === 'sem') {
       if (podeGerenciar) {
-        const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;gap:4px', onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
+        const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px;grid-column:1 / -1;width:100%', onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
         w.append(bAtr, botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
