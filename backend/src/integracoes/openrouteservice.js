@@ -1,7 +1,11 @@
 const { httpRequest } = require('../shared/httpRequest');
 const AppError = require('../shared/AppError');
+const NodeCache = require('node-cache');
 
 const BASE = 'https://api.openrouteservice.org';
+// Cache curto da otimização: a ordem das paradas é estável para o mesmo conjunto
+// de pontos, então evita repetir a chamada (lenta) ao ORS a cada poll do app.
+const cacheRota = new NodeCache({ stdTTL: 120, checkperiod: 180 });
 
 // Geocodifica um endereço -> { lat, lng }.
 async function geocodificar(endereco) {
@@ -19,6 +23,15 @@ async function geocodificar(endereco) {
 // retornar=true fecha o ciclo (veículo volta à coleta), o que evita rotas que terminam longe.
 // Retorna { ordem: [indices], distanciaKm, duracaoMin }.
 async function otimizarRota({ coleta, pontos, retornar = false }) {
+  // Chave do cache: coleta + pontos (arredondados) + retornar. Mesmos pontos => mesma ordem.
+  const r5 = (n) => Math.round(Number(n) * 1e5) / 1e5;
+  const chave = JSON.stringify({
+    c: [r5(coleta.lng), r5(coleta.lat)],
+    p: pontos.map((p) => [r5(p.lng), r5(p.lat)]),
+    r: !!retornar,
+  });
+  const emCache = cacheRota.get(chave);
+  if (emCache) return emCache;
   const vehicle = { id: 1, profile: 'driving-car', start: [coleta.lng, coleta.lat] };
   if (retornar) vehicle.end = [coleta.lng, coleta.lat];
   const corpo = {
@@ -35,11 +48,13 @@ async function otimizarRota({ coleta, pontos, retornar = false }) {
   }
   const rota = dados.routes[0];
   const ordem = rota.steps.filter((s) => s.type === 'job').map((s) => s.job - 1);
-  return {
+  const resultado = {
     ordem,
     distanciaKm: Number((rota.distance / 1000).toFixed(2)),
     duracaoMin: Math.round(rota.duration / 60),
   };
+  cacheRota.set(chave, resultado);
+  return resultado;
 }
 
 // Traça a rota real pelas ruas entre uma sequência de pontos [{lat,lng}, ...].
