@@ -1,6 +1,7 @@
 import { el, icones } from './ui.js';
 import { navegar } from './router.js';
 import * as auth from './auth.js';
+import { reaplicarTema } from './tema.js';
 
 const iconeWhitelabel = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 22a10 10 0 1 1 0-20 8 8 0 0 1 0 16h-1.5a2.5 2.5 0 0 0 0 4z"/></svg>';
 
@@ -111,7 +112,7 @@ export function casca(titulo, conteudo, subtitulo) {
 
   const side = el('aside', { class: 'lx-side' },
     el('div', { class: 'lx-side-logo' },
-      el('div', { class: 'lx-mono' }, 'LX'),
+      el('div', { class: 'lx-mono', 'data-lx-logo': '' }, 'LX'),
       el('div', { class: 'wm' },
         el('b', { 'data-lx-nome': '' }, 'logix'),
         el('span', {}, 'Inteligência em cada rota'))),
@@ -131,5 +132,8 @@ export function casca(titulo, conteudo, subtitulo) {
       el('span', { class: 'lx-role-pill' }, perfilRotulo(u.perfil))),
     el('div', { class: 'lx-content' }, conteudo));
 
+  // A sidebar acabou de ser (re)criada; reaplica o tema do tenant (logo/nome/cores)
+  // no próximo tick, quando este elemento já estiver na DOM.
+  setTimeout(reaplicarTema, 0);
   return el('div', { class: 'lx-app' }, side, main);
 }
