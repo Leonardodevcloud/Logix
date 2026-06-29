@@ -20,6 +20,18 @@ function restaurarTemaPadrao() {
   document.title = 'logix';
 }
 
+// Resolve a marca pelo domínio atual (ex.: painel.ig-express.com → IG).
+// Em domínios sem cliente (logix-ochre.vercel.app) cai no tema padrão.
+async function aplicarTemaDoHost() {
+  try {
+    const resp = await fetch(`${BASE}/branding?host=${encodeURIComponent(window.location.hostname)}`);
+    const temaHost = await resp.json();
+    if (temaHost && temaHost.empresa_id) { aplicarTema(temaHost); return true; }
+  } catch { /* ignora */ }
+  restaurarTemaPadrao();
+  return false;
+}
+
 async function aplicarTemaDoUsuario() {
   const u = auth.usuarioAtual();
   if (!u) { restaurarTemaPadrao(); return; }
@@ -42,21 +54,8 @@ async function boot() {
   if (window.LOGIX_API) api.setBase(window.LOGIX_API);
   router.definirSaida(app);
 
-  // Boot: tenta resolver tema pelo host (para domínios white-label como pecasexpress.logix.com.br)
-  // Em logix-ochre.vercel.app não resolve nada e cai no padrão — comportamento correto
-  const hostAtual = window.location.hostname;
-  try {
-    const resp = await fetch(`${BASE}/branding?host=${encodeURIComponent(hostAtual)}`);
-    const temaHost = await resp.json();
-    if (temaHost && temaHost.empresa_id) {
-      // É um domínio white-label — aplica o tema do cliente já na tela de login
-      aplicarTema(temaHost);
-    } else {
-      restaurarTemaPadrao();
-    }
-  } catch {
-    restaurarTemaPadrao();
-  }
+  // Boot: resolve a marca pelo domínio (white-label como painel.ig-express.com)
+  await aplicarTemaDoHost();
 
   router.rota('/login',                () => import('./modulos/login.js'));
   router.rota('/',                     () => import('./modulos/dashboard.js'));
@@ -87,9 +86,9 @@ async function boot() {
 
   // Eventos de mudança de sessão
   document.addEventListener('logix:login',      () => aplicarTemaDoUsuario());
-  document.addEventListener('logix:logout',     () => restaurarTemaPadrao());
+  document.addEventListener('logix:logout',     () => aplicarTemaDoHost());
   document.addEventListener('logix:impersonar', () => aplicarTemaDoUsuario());
-  document.addEventListener('logix:voltar',     () => { restaurarTemaPadrao(); });
+  document.addEventListener('logix:voltar',     () => { aplicarTemaDoHost(); });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
