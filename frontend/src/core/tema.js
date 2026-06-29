@@ -23,17 +23,19 @@ export function aplicarTema(tema) {
   }
   document.querySelectorAll('[data-lx-nome]').forEach((e) => { if (tema.nome_exibicao) e.textContent = tema.nome_exibicao; });
   // Logo do tenant: troca o monograma "LX" pela imagem enviada (URL ou base64).
+  // A classe 'tem-logo' tira a caixinha e deixa a logo respirar (CSS).
   document.querySelectorAll('[data-lx-logo]').forEach((e) => {
     if (tema.logo_url) {
       e.innerHTML = '';
-      e.style.background = 'transparent';
-      e.style.padding = '0';
+      e.classList.add('tem-logo');
       const img = document.createElement('img');
       img.src = tema.logo_url;
       img.alt = tema.nome_exibicao || 'logo';
-      img.style.cssText = 'width:100%;height:100%;object-fit:contain';
-      img.onerror = () => { e.textContent = 'LX'; e.style.background = ''; };
+      img.onerror = () => { e.classList.remove('tem-logo'); e.textContent = 'LX'; };
       e.appendChild(img);
+    } else {
+      e.classList.remove('tem-logo');
+      if (!e.textContent) e.textContent = 'LX';
     }
   });
   document.dispatchEvent(new CustomEvent('logix:tema', { detail: tema }));
@@ -42,6 +44,9 @@ export function aplicarTema(tema) {
 // Reaplica o tema já carregado — usado quando a sidebar é (re)montada,
 // garantindo que logo/nome/cores peguem na DOM nova.
 export function reaplicarTema() { if (_temaAtual) aplicarTema(_temaAtual); }
+
+// Tema do tenant já carregado (logo, nome, cores, extra) — usado pela tela de login.
+export function temaAtual() { return _temaAtual; }
 
 export async function carregarTema({ base = '/api/v1', token } = {}) {
   try {

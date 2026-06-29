@@ -40,6 +40,12 @@ body {
 .lx-side-logo .wm b { font-weight: 800; font-size: 18px; letter-spacing: .01em; display: block; }
 .lx-side-logo .wm span { font-size: 9px; letter-spacing: .16em; color: var(--lx-azul-claro); text-transform: uppercase; }
 
+/* Logo do cliente (white-label): sem caixinha, com respiro. */
+.lx-mono.tem-logo { background: none !important; box-shadow: none !important; padding: 0; overflow: hidden; }
+.lx-mono.tem-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.lx-side-logo .lx-mono.tem-logo { width: 44px; height: 44px; border-radius: 10px; }
+.lx-login-hero .lx-mono.tem-logo { width: 76px; height: 76px; border-radius: 18px; }
+
 .lx-nav-lbl { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #5f81a8; font-weight: 700; padding: 16px 10px 6px; }
 .lx-nav-i {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--lx-raio-sm);
@@ -134,3 +140,22 @@ body {
 .lx-login-form h3 { font-size: 23px; font-weight: 800; letter-spacing: -.01em; }
 .lx-login-form .lead { color: var(--lx-tinta-2); font-size: 13.5px; margin: 8px 0 24px; }
 @media (max-width: 860px) { .lx-login { grid-template-columns: 1fr; } .lx-login-hero { display: none; } }
+
+/* ===== Login premium branded (efeitos + animações; repinta por cliente) ===== */
+.lx-login-hero .lx-speedlines { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.lx-login-hero .lx-speedlines i { position: absolute; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--lx-azul-vivo)); opacity: .5; animation: lxdash 4.5s linear infinite; }
+.lx-login-hero .lx-speedlines i:nth-child(1) { top: 22%; width: 160px; left: -160px; animation-delay: 0s; }
+.lx-login-hero .lx-speedlines i:nth-child(2) { top: 38%; width: 110px; left: -110px; animation-delay: 1.2s; opacity: .35; }
+.lx-login-hero .lx-speedlines i:nth-child(3) { top: 66%; width: 200px; left: -200px; animation-delay: .6s; opacity: .3; }
+.lx-login-hero .lx-speedlines i:nth-child(4) { top: 80%; width: 130px; left: -130px; animation-delay: 2.1s; opacity: .25; }
+@keyframes lxdash { 0% { transform: translateX(0); } 100% { transform: translateX(120vw); } }
+.lx-login-hero .lx-ghost { position: absolute; right: -90px; bottom: -90px; opacity: .08; z-index: 0; }
+.lx-login-hero .lx-mono.tem-logo { width: 84px; height: 84px; border-radius: 20px; }
+.lx-login-hero .lx-hero-row { display: flex; align-items: center; gap: 16px; position: relative; z-index: 2; }
+.lx-login-hero .lx-hero-name b { font-family: inherit; font-size: 24px; font-weight: 800; letter-spacing: -.02em; display: block; line-height: 1; color: #fff; }
+.lx-login-hero .lx-hero-name span { font-size: 10px; letter-spacing: .18em; color: var(--lx-azul-claro); text-transform: uppercase; }
+.lx-reveal { opacity: 0; transform: translateY(16px); animation: lxsurge .7s cubic-bezier(.22,.61,.36,1) forwards; }
+.lx-d1 { animation-delay: .05s; } .lx-d2 { animation-delay: .18s; } .lx-d3 { animation-delay: .3s; } .lx-d4 { animation-delay: .42s; } .lx-d5 { animation-delay: .52s; }
+@keyframes lxsurge { to { opacity: 1; transform: translateY(0); } }
+.lx-pop { opacity: 0; transform: scale(.82) rotate(-6deg); animation: lxpop .8s cubic-bezier(.34,1.56,.64,1) forwards; }
+@keyframes lxpop { to { opacity: 1; transform: scale(1) rotate(0); } }

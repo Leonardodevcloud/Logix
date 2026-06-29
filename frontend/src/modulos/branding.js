@@ -68,6 +68,11 @@ export async function montar(container) {
     const logoInp = el('input', { class: 'lx-input', value: ehDataUri(dados.logo_url) ? '' : (dados.logo_url || ''), placeholder: 'https://…/logo.png (ou envie um arquivo)' });
     const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
     const dominioInp = el('input', { class: 'lx-input', value: dados.dominio || '', placeholder: 'painel.ig-express.com (domínio próprio)' });
+    // Textos da tela de login (guardados em extra.login)
+    const exLogin = (dados.extra && dados.extra.login) || {};
+    const fraseInp = el('input', { class: 'lx-input', value: exLogin.frase || '', placeholder: 'Sua entrega, na velocidade certa.' });
+    const subtituloInp = el('input', { class: 'lx-input', value: exLogin.subtitulo || '', placeholder: 'Gestão de entregas e rastreamento em tempo real.' });
+    const difsInp = el('input', { class: 'lx-input', value: (Array.isArray(exLogin.diferenciais) ? exLogin.diferenciais.join(', ') : ''), placeholder: 'Tempo real, Rotas otimizadas, Protocolos digitais' });
 
     // Upload de logo: lê o arquivo, reduz no navegador (máx 480px) e guarda como base64.
     const fileInp = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
@@ -180,6 +185,15 @@ export async function montar(container) {
       try {
         const sub = subdominioInp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
         const dom = dominioInp.value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        const difs = difsInp.value.split(',').map(s => s.trim()).filter(Boolean);
+        const extra = {
+          ...(dados.extra || {}),
+          login: {
+            frase: fraseInp.value.trim() || undefined,
+            subtitulo: subtituloInp.value.trim() || undefined,
+            diferenciais: difs.length ? difs : undefined,
+          },
+        };
         await put('/branding/', {
           ...valores,
           empresa_id: empresaId,
@@ -187,6 +201,7 @@ export async function montar(container) {
           logo_url: logoData || logoInp.value.trim() || undefined,
           subdominio: sub || undefined,
           dominio: dom || undefined,
+          extra,
         }, { empresaId });
         msg.style.color = 'var(--lx-ok)';
         msg.textContent = 'Marca salva. Vale no próximo acesso do cliente.';
@@ -203,6 +218,9 @@ export async function montar(container) {
         campo('Logo por upload', el('div', { style: 'display:flex;align-items:center;gap:10px' }, thumb, btnUpload, btnLimpar, fileInp)),
         campo('Domínio do cliente (subdomínio)', subdominioInp),
         campo('Domínio próprio (host completo)', dominioInp),
+        campo('Login · frase de impacto', fraseInp),
+        campo('Login · subtítulo', subtituloInp),
+        campo('Login · diferenciais (separados por vírgula)', difsInp),
         pickerCor('Cor primária (botões/ações)', 'cor_primaria'),
         pickerCor('Cor secundária (sidebar/fundo escuro)', 'cor_secundaria'),
         pickerCor('Cor de destaque', 'cor_destaque'),

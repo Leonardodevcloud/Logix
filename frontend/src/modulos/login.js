@@ -1,6 +1,7 @@
 import * as auth from '../core/auth.js';
 import { el } from '../core/ui.js';
 import { navegar } from '../core/router.js';
+import { reaplicarTema, temaAtual } from '../core/tema.js';
 
 export async function montar(container) {
   const erro = el('div', { style: 'color:var(--lx-erro);min-height:18px;font-size:13px;font-weight:600' });
@@ -30,34 +31,32 @@ export async function montar(container) {
   }
   senha.addEventListener('keydown', ev => { if (ev.key === 'Enter') entrar(); });
 
+  // Textos do hero vêm da marca do tenant (campo extra.login); senão, padrões.
+  const t = temaAtual() || {};
+  const lx = (t.extra && t.extra.login) || {};
+  const frase = lx.frase || 'Sua entrega, na velocidade certa.';
+  const sub = lx.subtitulo || 'Gestão de entregas, roteirização inteligente e rastreamento em tempo real.';
+  const difs = (Array.isArray(lx.diferenciais) && lx.diferenciais.length)
+    ? lx.diferenciais : ['Tempo real', 'Rotas otimizadas', 'Protocolos digitais'];
+
   const hero = el('div', { class: 'lx-login-hero' },
-    // decoração
-    el('div', { style: 'position:absolute;top:46px;right:46px;display:flex;flex-direction:column;gap:9px;align-items:flex-end;opacity:.5' },
-      el('i', { style: 'height:3px;width:78px;background:var(--lx-azul-vivo);border-radius:2px;display:block' }),
-      el('i', { style: 'height:3px;width:120px;background:var(--lx-azul-vivo);border-radius:2px;display:block' }),
-      el('i', { style: 'height:3px;width:54px;background:var(--lx-azul-vivo);border-radius:2px;display:block' })),
-    // diamante fantasma
-    el('div', { html: `<svg style="position:absolute;right:-90px;bottom:-90px;opacity:.08" width="360" height="360" viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="22" fill="none" stroke="var(--lx-azul-vivo)" stroke-width="6"/></svg>` }),
-    // logo
-    el('div', { style: 'display:flex;align-items:center;gap:14px;position:relative;z-index:2' },
-      el('div', { class: 'lx-speed', style: 'display:flex;flex-direction:column;gap:5px' },
-        el('i'), el('i'), el('i')),
-      el('div', { class: 'lx-mono' }, 'LX'),
-      el('div', { style: 'color:#fff;line-height:1' },
-        el('b', { style: 'font-size:21px;font-weight:800;display:block', 'data-lx-nome': '' }, 'logix'),
-        el('div', { style: 'font-size:9.5px;letter-spacing:.18em;color:var(--lx-azul-claro);text-transform:uppercase;margin-top:3px' },
-          'Inteligência em cada rota'))),
+    // speedlines animadas
+    el('div', { class: 'lx-speedlines' }, el('i'), el('i'), el('i'), el('i')),
+    // losango fantasma (cor de destaque do cliente)
+    el('div', { class: 'lx-ghost', html: `<svg width="380" height="380" viewBox="0 0 120 120"><path d="M60 12 108 60 60 108 12 60Z" fill="none" stroke="var(--lx-azul-vivo)" stroke-width="5"/></svg>` }),
+    // logo + nome (repintam pela marca)
+    el('div', { class: 'lx-hero-row lx-reveal lx-d1' },
+      el('div', { class: 'lx-mono lx-pop', 'data-lx-logo': '' }, 'LX'),
+      el('div', { class: 'lx-hero-name' },
+        el('b', { 'data-lx-nome': '' }, 'logix'),
+        el('span', {}, 'Plataforma de entregas'))),
     // headline
     el('div', { style: 'position:relative;z-index:2;margin-top:auto' },
-      el('h2', { style: 'color:#fff;font-size:34px;font-weight:800;line-height:1.12;letter-spacing:-.02em;max-width:380px' },
-        'Sua entrega, na velocidade certa.'),
-      el('p', { style: 'color:var(--lx-azul-claro);font-size:15px;margin-top:16px;max-width:340px;line-height:1.6;font-weight:500' },
-        'Plataforma multiempresa de gestão de entregas, roteirização inteligente e rastreamento em tempo real.')),
-    // features
-    el('div', { class: 'feats' },
-      el('div', {}, '● Tempo real'),
-      el('div', {}, '● Rotas otimizadas'),
-      el('div', {}, '● Multi-tenant'))
+      el('h2', { class: 'lx-reveal lx-d2', style: 'color:#fff;font-size:34px;font-weight:800;line-height:1.12;letter-spacing:-.02em;max-width:14ch' }, frase),
+      el('p', { class: 'lx-reveal lx-d3', style: 'color:var(--lx-azul-claro);font-size:15px;margin-top:16px;max-width:42ch;line-height:1.6;font-weight:500' }, sub),
+      el('div', { class: 'feats lx-reveal lx-d4', style: 'display:flex;gap:22px;flex-wrap:wrap;margin-top:24px' },
+        ...difs.map(d => el('div', { style: 'display:flex;align-items:center;gap:7px;color:#cfe2f7;font-size:13px;font-weight:500' },
+          el('span', { style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-azul-vivo);display:inline-block' }), d))))
   );
 
   const form = el('div', { class: 'lx-login-form' },
@@ -74,4 +73,7 @@ export async function montar(container) {
   );
 
   container.append(el('div', { class: 'lx-login' }, hero, form));
+  // Se já houver tema de cliente carregado (acesso por domínio white-label),
+  // reaplica para pintar logo/nome/cores nesta tela de login.
+  setTimeout(reaplicarTema, 0);
 }
