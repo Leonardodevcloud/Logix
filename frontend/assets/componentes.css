@@ -159,3 +159,13 @@ body {
 @keyframes lxsurge { to { opacity: 1; transform: translateY(0); } }
 .lx-pop { opacity: 0; transform: scale(.82) rotate(-6deg); animation: lxpop .8s cubic-bezier(.34,1.56,.64,1) forwards; }
 @keyframes lxpop { to { opacity: 1; transform: scale(1) rotate(0); } }
+
+/* Logo gigante centralizada (preenche o vazio do hero) */
+.lx-login-hero.lx-hero-grande { justify-content: flex-start; }
+.lx-hero-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 16px; position: relative; z-index: 2; }
+.lx-hero-bigmark { width: 188px !important; height: 188px !important; border-radius: 40px !important; display: grid; place-items: center; }
+.lx-hero-bigmark.tem-logo { background: none !important; box-shadow: none !important; padding: 0; }
+.lx-hero-bigmark img { width: 100% !important; height: 100% !important; object-fit: contain; display: block; }
+.lx-hero-bigname { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: #fff; line-height: 1.12; max-width: 16ch; }
+.lx-hero-biglabel { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--lx-azul-claro); }
+.lx-hero-bottom { position: relative; z-index: 2; }

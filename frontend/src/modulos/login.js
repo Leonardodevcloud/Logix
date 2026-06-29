@@ -35,26 +35,28 @@ export async function montar(container) {
   const t = temaAtual() || {};
   const lx = (t.extra && t.extra.login) || {};
   const frase = lx.frase || 'Sua entrega, na velocidade certa.';
-  const sub = lx.subtitulo || 'Gestão de entregas, roteirização inteligente e rastreamento em tempo real.';
+  // Evita subtítulo repetido (igual à frase de impacto): usa um padrão diferente.
+  const subBruto = (lx.subtitulo || '').trim();
+  const sub = (subBruto && subBruto.toLowerCase() !== frase.trim().toLowerCase())
+    ? subBruto : 'Acompanhe motoboys, rotas e protocolos num só painel.';
   const difs = (Array.isArray(lx.diferenciais) && lx.diferenciais.length)
     ? lx.diferenciais : ['Tempo real', 'Rotas otimizadas', 'Protocolos digitais'];
 
-  const hero = el('div', { class: 'lx-login-hero' },
+  const hero = el('div', { class: 'lx-login-hero lx-hero-grande' },
     // speedlines animadas
     el('div', { class: 'lx-speedlines' }, el('i'), el('i'), el('i'), el('i')),
     // losango fantasma (cor de destaque do cliente)
     el('div', { class: 'lx-ghost', html: `<svg width="380" height="380" viewBox="0 0 120 120"><path d="M60 12 108 60 60 108 12 60Z" fill="none" stroke="var(--lx-azul-vivo)" stroke-width="5"/></svg>` }),
-    // logo + nome (repintam pela marca)
-    el('div', { class: 'lx-hero-row lx-reveal lx-d1' },
-      el('div', { class: 'lx-mono lx-pop', 'data-lx-logo': '' }, 'LX'),
-      el('div', { class: 'lx-hero-name' },
-        el('b', { 'data-lx-nome': '' }, 'logix'),
-        el('span', {}, 'Plataforma de entregas'))),
-    // headline
-    el('div', { style: 'position:relative;z-index:2;margin-top:auto' },
-      el('h2', { class: 'lx-reveal lx-d2', style: 'color:#fff;font-size:34px;font-weight:800;line-height:1.12;letter-spacing:-.02em;max-width:14ch' }, frase),
-      el('p', { class: 'lx-reveal lx-d3', style: 'color:var(--lx-azul-claro);font-size:15px;margin-top:16px;max-width:42ch;line-height:1.6;font-weight:500' }, sub),
-      el('div', { class: 'feats lx-reveal lx-d4', style: 'display:flex;gap:22px;flex-wrap:wrap;margin-top:24px' },
+    // CENTRO: logo gigante + nome (preenche o espaço)
+    el('div', { class: 'lx-hero-center lx-reveal lx-d1' },
+      el('div', { class: 'lx-mono lx-hero-bigmark lx-pop', 'data-lx-logo': '' }, 'LX'),
+      el('div', { class: 'lx-hero-bigname', 'data-lx-nome': '' }, 'logix'),
+      el('div', { class: 'lx-hero-biglabel' }, 'Plataforma de entregas')),
+    // RODAPÉ: frase + subtítulo + diferenciais
+    el('div', { class: 'lx-hero-bottom' },
+      el('h2', { class: 'lx-reveal lx-d2', style: 'color:#fff;font-size:30px;font-weight:800;line-height:1.12;letter-spacing:-.02em;max-width:16ch' }, frase),
+      el('p', { class: 'lx-reveal lx-d3', style: 'color:var(--lx-azul-claro);font-size:14.5px;margin-top:14px;max-width:42ch;line-height:1.6;font-weight:500' }, sub),
+      el('div', { class: 'feats lx-reveal lx-d4', style: 'display:flex;gap:22px;flex-wrap:wrap;margin-top:22px' },
         ...difs.map(d => el('div', { style: 'display:flex;align-items:center;gap:7px;color:#cfe2f7;font-size:13px;font-weight:500' },
           el('span', { style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-azul-vivo);display:inline-block' }), d))))
   );
