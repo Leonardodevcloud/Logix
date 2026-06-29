@@ -67,6 +67,7 @@ export async function montar(container) {
     let logoData = ehDataUri(dados.logo_url) ? dados.logo_url : null;
     const logoInp = el('input', { class: 'lx-input', value: ehDataUri(dados.logo_url) ? '' : (dados.logo_url || ''), placeholder: 'https://…/logo.png (ou envie um arquivo)' });
     const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
+    const dominioInp = el('input', { class: 'lx-input', value: dados.dominio || '', placeholder: 'painel.ig-express.com (domínio próprio)' });
 
     // Upload de logo: lê o arquivo, reduz no navegador (máx 480px) e guarda como base64.
     const fileInp = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
@@ -178,12 +179,14 @@ export async function montar(container) {
       msg.textContent = 'Salvando…';
       try {
         const sub = subdominioInp.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+        const dom = dominioInp.value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
         await put('/branding/', {
           ...valores,
           empresa_id: empresaId,
           nome_exibicao: nomeInp.value.trim() || undefined,
           logo_url: logoData || logoInp.value.trim() || undefined,
           subdominio: sub || undefined,
+          dominio: dom || undefined,
         }, { empresaId });
         msg.style.color = 'var(--lx-ok)';
         msg.textContent = 'Marca salva. Vale no próximo acesso do cliente.';
@@ -199,6 +202,7 @@ export async function montar(container) {
         campo('URL do logo', logoInp),
         campo('Logo por upload', el('div', { style: 'display:flex;align-items:center;gap:10px' }, thumb, btnUpload, btnLimpar, fileInp)),
         campo('Domínio do cliente (subdomínio)', subdominioInp),
+        campo('Domínio próprio (host completo)', dominioInp),
         pickerCor('Cor primária (botões/ações)', 'cor_primaria'),
         pickerCor('Cor secundária (sidebar/fundo escuro)', 'cor_secundaria'),
         pickerCor('Cor de destaque', 'cor_destaque'),
