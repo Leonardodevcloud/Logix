@@ -8,11 +8,16 @@ const usarSSL = process.env.DB_SSL !== 'false';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: usarSSL ? { rejectUnauthorized: false } : false,
-  max: Number(process.env.DB_POOL_MAX) || 10,
-  idleTimeoutMillis: 30000,
+  max: Number(process.env.DB_POOL_MAX) || 12,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  allowExitOnIdle: false,
 });
 
 pool.on('error', (err) => console.error('[db] erro inesperado no pool:', err.message));
+// Evita que uma query travada segure a conexão para sempre (teto de 20s por query).
+pool.on('connect', (client) => { client.query('SET statement_timeout = 20000').catch(() => {}); });
 
 async function query(texto, params = []) {
   return pool.query(texto, params);

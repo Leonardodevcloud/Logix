@@ -60,6 +60,13 @@ function montarApp() {
   app.use(limiteGlobal);
 
   app.get('/health', (req, res) => res.json({ ok: true, servico: 'logix-api', em: new Date().toISOString() }));
+  // Mede a latência real do banco (use um pinger externo aqui para manter tudo quente).
+  app.get('/health/db', async (req, res) => {
+    const { query } = require('./src/shared/db');
+    const t0 = Date.now();
+    try { await query('SELECT 1'); res.json({ ok: true, db_ms: Date.now() - t0 }); }
+    catch (e) { res.status(500).json({ ok: false, erro: e.message, db_ms: Date.now() - t0 }); }
+  });
 
   const api = express.Router();
   api.use('/auth', auth.initAuthRoutes());
