@@ -78,13 +78,45 @@ async function lojasComCoord(empresaId, lojaId) {
   return lojas;
 }
 
-// URL assinada da selfie do motoboy (a foto não é persistida como URL fixa).
-async function fotoSelfie(motoboyId) {
+// Cache em memoria das URLs de selfie. Gerar URL assinada (S3/R2) a cada poll do
+// mapa custava 1 query + 1 assinatura POR motoboy, a cada 15s. Com 300 online eram
+// ~300 queries + 300 assinaturas a cada 15s, por admin com o mapa aberto — e a URL
+// (valida 1h) mudava toda vez, fazendo o navegador rebaixar a selfie do R2 sempre.
+// Agora: busca os storage_keys em LOTE (1 query) e reaproveita a URL por ~5h.
+const _selfieCache = new Map(); // motoboyId -> { url, exp }
+const SELFIE_TTL_MS  = 5 * 60 * 60 * 1000;  // mantem a URL em cache por 5h
+const SELFIE_URL_SEG = 6 * 60 * 60;         // assina a URL valida por 6h
+
+// Resolve a selfie de varios motoboys de uma vez. Retorna Map(motoboyId -> url|null).
+async function fotosSelfieEmLote(ids) {
+  const agora = Date.now();
+  const out = new Map();
+  const faltam = [];
+  for (const id of ids) {
+    const c = _selfieCache.get(id);
+    if (c && c.exp > agora) out.set(id, c.url);
+    else faltam.push(id);
+  }
+  if (!faltam.length) return out;
+
   try {
-    const { rows } = await query(`SELECT storage_key FROM motoboy_documentos WHERE motoboy_id = $1 AND tipo = 'selfie' LIMIT 1`, [motoboyId]);
-    if (rows[0]) return await storage.urlDe(rows[0].storage_key);
+    // Uma selfie por motoboy (UNIQUE motoboy_id, tipo). Uma query para todos.
+    const { rows } = await query(
+      `SELECT motoboy_id, storage_key
+         FROM motoboy_documentos
+        WHERE motoboy_id = ANY($1::uuid[]) AND tipo = 'selfie'`,
+      [faltam]
+    );
+    const keyPorId = new Map(rows.map(r => [r.motoboy_id, r.storage_key]));
+    await Promise.all(faltam.map(async (id) => {
+      let url = null;
+      const key = keyPorId.get(id);
+      if (key) { try { url = await storage.urlDe(key, { expiraSeg: SELFIE_URL_SEG }); } catch {} }
+      _selfieCache.set(id, { url, exp: agora + SELFIE_TTL_MS });
+      out.set(id, url);
+    }));
   } catch {}
-  return null;
+  return out;
 }
 
 // Motoboys ONLINE com posição, corridas ativas e pontos pendentes.
@@ -116,12 +148,12 @@ async function motoboysOnline(empresaId, lojaId) {
 
   const lista = rows.filter(m => !lojaId || (m.corridas && m.corridas.length));
 
-  // Foto: SEMPRE gera a URL assinada fresca da selfie (a foto_url da tabela
-  // pode estar expirada). Só usa foto_url como último recurso.
-  await Promise.all(lista.map(async (m) => {
-    const fresca = await fotoSelfie(m.id);
-    m.foto_url = fresca || m.foto_url || null;
-  }));
+  // Foto: resolve a selfie de TODOS os motoboys em lote (1 query + cache de URL),
+  // em vez de 1 query + 1 assinatura por motoboy a cada poll.
+  const fotos = await fotosSelfieEmLote(lista.map(m => m.id));
+  for (const m of lista) {
+    m.foto_url = fotos.get(m.id) || m.foto_url || null;
+  }
 
   return lista.map(m => {
     const pos = { lat: Number(m.lat), lng: Number(m.lng) };

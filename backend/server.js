@@ -4,6 +4,7 @@ const http = require('http');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 
 const { requestLogger } = require('./src/middleware/requestLogger');
 const { sanitizarEntrada } = require('./src/middleware/sanitizer');
@@ -49,6 +50,10 @@ function montarApp() {
   const app = express();
   app.set('trust proxy', 1);
 
+  // Compressao gzip/brotli das respostas. Corta 70-90% do payload JSON das telas
+  // de admin (acompanhamento/mapa enviam listas grandes). Ganho imediato no fio,
+  // independente da rede. Fica no topo da stack para envolver todas as respostas.
+  app.use(compression());
   app.use(helmet());
   const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({ origin: origensCors.length ? origensCors : true, credentials: true }));
