@@ -191,7 +191,7 @@ export async function montar(container) {
   // Iniciar mapa
   await garantirLeaflet();
   _mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 13, scrollWheelZoom: true, zoomControl: true });
-  window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(_mapa);
+  window.L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', { attribution: '© OpenStreetMap, © CARTO', maxZoom: 20 }).addTo(_mapa);
 
   // Carregar ponto de coleta padrão da empresa (para mostrar no mapa)
   try {
@@ -375,10 +375,7 @@ export async function montar(container) {
       listaScroll.append(el('div', { class: 'lx-rast-sec' }, 'Disponíveis'));
       livres.forEach((m, i) => listaScroll.append(mkCard(m, 'livre', emRota.length + i)));
     }
-    if (offline.length) {
-      listaScroll.append(el('div', { class: 'lx-rast-sec', style: 'opacity:.4' }, 'Offline'));
-      offline.forEach((m, i) => listaScroll.append(mkCard(m, 'offline', emRota.length + livres.length + i)));
-    }
+    // Motoboys offline não são listados no rastreio (só entram na contagem do KPI).
     if (!_motoboys.length) {
       listaScroll.append(el('div', { style: 'padding:24px;text-align:center;color:#5D8DB8;font-size:13px' }, 'Nenhum motoboy cadastrado.'));
     }
@@ -392,6 +389,7 @@ export async function montar(container) {
     if (!_mapa) return;
 
     _motoboys.forEach((m, i) => {
+      if (!m.online) return;            // offline não aparece no mapa
       if (!m.lat || !m.lng) return;
       const ini = iniciais(m.nome_completo);
       const cor = CORES_MB(i);
@@ -421,7 +419,7 @@ export async function montar(container) {
     });
 
     // Ajustar bounds para incluir todos
-    const todos = _motoboys.filter(m => m.lat && m.lng);
+    const todos = _motoboys.filter(m => m.online && m.lat && m.lng);
     if (todos.length && !_selecionado) {
       const bounds = todos.map(m => [m.lat, m.lng]);
       if (_coletaPadrao?.lat) bounds.push([_coletaPadrao.lat, _coletaPadrao.lng]);

@@ -628,7 +628,7 @@ export async function montar(container) {
     const centro = dados.coleta || dados.trajeto[0] || dados.destinos[0];
     if (!centro) { info.textContent = 'Sem coordenadas registradas para esta corrida.'; return; }
     const mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 14, scrollWheelZoom: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+    L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', { attribution: '© OpenStreetMap, © CARTO', maxZoom: 20 }).addTo(mapa);
     setTimeout(() => mapa.invalidateSize(), 120);
     const bounds = [];
     const pin = (lat, lng, cor, titulo) => { const m = L.circleMarker([lat, lng], { radius: 8, color: cor, fillColor: cor, fillOpacity: 0.9, weight: 2 }).addTo(mapa); if (titulo) m.bindPopup(titulo); bounds.push([lat, lng]); };
@@ -1013,7 +1013,7 @@ export async function montar(container) {
       const centro = dados.coleta || (dados.grupos[0] && dados.grupos[0].destinos[0]);
       if (!centro) { info.textContent = 'Sem coordenadas para montar a rota.'; return; }
       mapa = L.map(mapaDiv, { center: [centro.lat, centro.lng], zoom: 12, scrollWheelZoom: true });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '(c) OpenStreetMap', maxZoom: 19 }).addTo(mapa);
+      L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', { attribution: '(c) OpenStreetMap, (c) CARTO', maxZoom: 20 }).addTo(mapa);
       setTimeout(() => mapa && mapa.invalidateSize(), 120);
       const bounds = [];
       if (dados.coleta) { L.circleMarker([dados.coleta.lat, dados.coleta.lng], { radius: 9, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: .95, weight: 2 }).addTo(mapa).bindPopup('Coleta'); bounds.push([dados.coleta.lat, dados.coleta.lng]); }

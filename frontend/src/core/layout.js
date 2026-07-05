@@ -32,7 +32,9 @@ function gruposNav() {
   if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
   // Mapa em tempo real logo abaixo do Rastreio (abre em aba dedicada).
-  if (a.perfil === 'central_admin')
+  // Central vê o mapa da empresa inteira; a loja vê só ela + os motoboys em
+  // corrida dela (o backend /mapa/overview já faz esse escopo pelo lojaId).
+  if (a.perfil === 'central_admin' || a.perfil === 'loja')
     operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'mapa', novaAba: true });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
