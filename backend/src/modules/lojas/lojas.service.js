@@ -127,11 +127,11 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
       if (dados.email) {
         const { rows: dup } = await query(`SELECT id FROM usuarios WHERE email = $1 AND id <> $2`, [dados.email, userId]);
         if (dup.length) throw AppError.conflito('E-mail já em uso por outro usuário');
-        await query(`UPDATE usuarios SET email = $1, atualizado_em = now() WHERE id = $2`, [dados.email, userId]);
+        await query(`UPDATE usuarios SET email = $1 WHERE id = $2`, [dados.email, userId]);
       }
       if (dados.senha) {
         const senhaHash = await hashSenha(dados.senha);
-        await query(`UPDATE usuarios SET senha_hash = $1, atualizado_em = now() WHERE id = $2`, [senhaHash, userId]);
+        await query(`UPDATE usuarios SET senha_hash = $1 WHERE id = $2`, [senhaHash, userId]);
       }
     } else if (dados.email && dados.senha) {
       // Loja ainda sem login: cria o usuário de acesso agora (mesma lógica do criar()).
