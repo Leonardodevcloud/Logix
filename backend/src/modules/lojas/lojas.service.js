@@ -110,6 +110,43 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
      dados.config_sla !== undefined ? JSON.stringify(dados.config_sla) : undefined,
      dados.ativo]
   );
+
+  // Propaga e-mail/senha para o usuário de acesso da loja (tabela `usuarios`).
+  // Sem isto, editar a loja NÃO alterava o login: o UPDATE acima toca só na tabela
+  // `lojas`, e o campo `senha` era descartado em silêncio — por isso a loja não
+  // conseguia entrar com a senha nova. O login usa usuarios.email + usuarios.senha_hash.
+  if (dados.email || dados.senha) {
+    const { hashSenha } = require('../auth/auth.shared');
+    // Cobre tanto o perfil atual ('loja') quanto o legado ('cliente').
+    const { rows: us } = await query(
+      `SELECT id FROM usuarios WHERE loja_id = $1 AND perfil = ANY($2::text[]) ORDER BY criado_em LIMIT 1`,
+      [id, [PERFIS.LOJA, PERFIS.CLIENTE]]
+    );
+    if (us[0]) {
+      const userId = us[0].id;
+      if (dados.email) {
+        const { rows: dup } = await query(`SELECT id FROM usuarios WHERE email = $1 AND id <> $2`, [dados.email, userId]);
+        if (dup.length) throw AppError.conflito('E-mail já em uso por outro usuário');
+        await query(`UPDATE usuarios SET email = $1, atualizado_em = now() WHERE id = $2`, [dados.email, userId]);
+      }
+      if (dados.senha) {
+        const senhaHash = await hashSenha(dados.senha);
+        await query(`UPDATE usuarios SET senha_hash = $1, atualizado_em = now() WHERE id = $2`, [senhaHash, userId]);
+      }
+    } else if (dados.email && dados.senha) {
+      // Loja ainda sem login: cria o usuário de acesso agora (mesma lógica do criar()).
+      const permissoesService = require('../permissoes/permissoes.service');
+      let papelId = null;
+      try { papelId = await permissoesService.idDoTemplate('Loja'); } catch {}
+      if (!papelId) { try { papelId = await permissoesService.idDoTemplate('Administrador'); } catch {} }
+      await authService.criarUsuario({
+        empresaId, lojaId: id, perfil: PERFIS.LOJA,
+        nome: dados.responsavel || rows[0].nome_fantasia, email: dados.email,
+        telefone: dados.telefone || null, senha: dados.senha, papelId,
+      });
+    }
+  }
+
   await registrarAuditoria({
     empresaId, usuarioId, categoria: AUDIT_CATEGORIES.LOJA, acao: 'atualizar',
     detalhe: { loja: id }, ip,
