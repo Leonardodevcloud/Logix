@@ -33,7 +33,7 @@ async function alternarStatus({ empresaId, lojaId, ativo, usuarioId, ip }) {
 async function listarCentros({ empresaId, lojaId }) {
   await exigirLoja(empresaId, lojaId);
   const { rows } = await query(
-    `SELECT cc.id, cc.nome, cc.codigo, cc.ativo, cc.criado_em,
+    `SELECT cc.id, cc.nome, cc.codigo, cc.ativo, cc.criado_em, cc.endereco, cc.lat, cc.lng,
             COALESCE((SELECT count(*)::int FROM cliente_centro_usuarios ccu WHERE ccu.centro_id = cc.id), 0) AS total_usuarios
        FROM cliente_centros_custo cc
       WHERE cc.loja_id = $1 ORDER BY cc.nome`,
@@ -42,24 +42,38 @@ async function listarCentros({ empresaId, lojaId }) {
   return rows;
 }
 
-async function criarCentro({ empresaId, lojaId, nome, codigo, usuarioId, ip }) {
+async function criarCentro({ empresaId, lojaId, nome, codigo, endereco, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   if (!nome || !nome.trim()) throw AppError.validacao('Informe o nome do centro de custo');
+  // Geocodifica o endereço (se informado) para o centro aparecer no mapa.
+  let lat = null, lng = null;
+  const end = endereco && endereco.trim() ? endereco.trim() : null;
+  if (end && geocodificar) { try { const g = await geocodificar(end); lat = g.lat; lng = g.lng; } catch {} }
   const { rows } = await query(
-    `INSERT INTO cliente_centros_custo (empresa_id, loja_id, nome, codigo) VALUES ($1,$2,$3,$4)
-     RETURNING id, nome, codigo, ativo, criado_em`,
-    [empresaId, lojaId, nome.trim(), codigo || null]
+    `INSERT INTO cliente_centros_custo (empresa_id, loja_id, nome, codigo, endereco, lat, lng)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id, nome, codigo, ativo, criado_em, endereco, lat, lng`,
+    [empresaId, lojaId, nome.trim(), codigo || null, end, lat, lng]
   );
   registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'criar_centro_custo', detalhe: { lojaId, id: rows[0].id }, ip }).catch(() => {});
   return rows[0];
 }
 
-async function atualizarCentro({ empresaId, lojaId, id, nome, codigo, ativo, usuarioId, ip }) {
+async function atualizarCentro({ empresaId, lojaId, id, nome, codigo, ativo, endereco, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   const sets = [], params = [];
   if (nome != null) { params.push(nome.trim()); sets.push(`nome = $${params.length}`); }
   if (codigo !== undefined) { params.push(codigo || null); sets.push(`codigo = $${params.length}`); }
   if (ativo != null) { params.push(!!ativo); sets.push(`ativo = $${params.length}`); }
+  // Endereço mudou: regeocodifica. Vazio limpa lat/lng (some do mapa).
+  if (endereco !== undefined) {
+    const end = endereco && endereco.trim() ? endereco.trim() : null;
+    let lat = null, lng = null;
+    if (end && geocodificar) { try { const g = await geocodificar(end); lat = g.lat; lng = g.lng; } catch {} }
+    params.push(end); sets.push(`endereco = $${params.length}`);
+    params.push(lat); sets.push(`lat = $${params.length}`);
+    params.push(lng); sets.push(`lng = $${params.length}`);
+  }
   if (!sets.length) return { ok: true };
   params.push(id, lojaId);
   const { rows } = await query(

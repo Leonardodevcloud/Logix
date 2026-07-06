@@ -178,25 +178,23 @@ async function motoboysOnline(empresaId, lojaId) {
 }
 
 // Visão geral. empresaId null = super admin (todas as empresas).
-// Endereços de centros de custo (sub-lojas) já geocodificados, no escopo pedido.
-// Aparecem no mapa como marcadores próprios, junto das lojas e motoboys.
+// Centros de custo (sub-lojas) do cliente, já geocodificados, no escopo pedido.
+// O endereço é definido ao criar/editar o centro. Aparecem no mapa como
+// marcadores próprios, junto das lojas e motoboys.
 async function centrosComCoord(empresaId, lojaId) {
   const { rows } = await query(
-    `SELECT ce.id, ce.apelido, ce.endereco, ce.lat, ce.lng,
-            ce.centro_id, cc.nome AS centro_nome,
-            ce.loja_id, l.nome_fantasia AS loja_nome
-       FROM cliente_centro_enderecos ce
-       JOIN cliente_centros_custo cc ON cc.id = ce.centro_id AND cc.ativo = TRUE
-       JOIN lojas l ON l.id = ce.loja_id
-      WHERE ce.lat IS NOT NULL AND ce.lng IS NOT NULL
-        AND ($1::uuid IS NULL OR ce.empresa_id = $1)
-        AND ($2::uuid IS NULL OR ce.loja_id = $2)`,
+    `SELECT cc.id, cc.nome, cc.endereco, cc.lat, cc.lng,
+            cc.loja_id, l.nome_fantasia AS loja_nome
+       FROM cliente_centros_custo cc
+       JOIN lojas l ON l.id = cc.loja_id
+      WHERE cc.ativo = TRUE AND cc.lat IS NOT NULL AND cc.lng IS NOT NULL
+        AND ($1::uuid IS NULL OR cc.empresa_id = $1)
+        AND ($2::uuid IS NULL OR cc.loja_id = $2)`,
     [empresaId || null, lojaId || null]
   );
   return rows.map(r => ({
     id: r.id, tipo: 'centro',
-    nome: r.apelido || r.centro_nome,
-    centro_nome: r.centro_nome, loja_nome: r.loja_nome,
+    nome: r.nome, centro_nome: r.nome, loja_nome: r.loja_nome,
     endereco: r.endereco, lat: r.lat, lng: r.lng,
   }));
 }

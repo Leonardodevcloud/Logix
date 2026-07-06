@@ -15,6 +15,10 @@ async function initClienteHubTables() {
       criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cc_loja ON cliente_centros_custo(loja_id)`);
+  // Endereço do centro de custo (definido ao criar/editar), geocodificado para o mapa.
+  await query(`ALTER TABLE cliente_centros_custo ADD COLUMN IF NOT EXISTS endereco TEXT`);
+  await query(`ALTER TABLE cliente_centros_custo ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION`);
+  await query(`ALTER TABLE cliente_centros_custo ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION`);
 
   // Vínculo de um usuário a um centro de custo (um usuário pode estar em vários).
   await query(`
