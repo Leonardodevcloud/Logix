@@ -4,6 +4,7 @@
 // O escopo (central vê tudo / loja vê só ela e seus motoboys) vem do backend.
 import { get, getToken } from '../core/api.js';
 import { el } from '../core/ui.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 
 const COR = {
   navy: '#042C53', azul: '#185FA5', azulC: '#B5D4F4',
@@ -129,9 +130,7 @@ export async function montar(container) {
 
   const mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 13, zoomControl: false });
   window.L.control.zoom({ position: 'bottomright' }).addTo(mapa);
-  window.L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', {
-    attribution: '© OpenStreetMap, © CARTO', maxZoom: 20,
-  }).addTo(mapa);
+  aplicarBasemap(mapa);
 
   let dados = { lojas: [], motoboys: [], centros: [] };
   let markersLoja = {}, markersMb = {}, markersCentro = {};

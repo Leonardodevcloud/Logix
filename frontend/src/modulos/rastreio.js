@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, getToken } from '../core/api.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 
 const BASE = window.LOGIX_API || '/api/v1';
 
@@ -191,7 +192,7 @@ export async function montar(container) {
   // Iniciar mapa
   await garantirLeaflet();
   _mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 13, scrollWheelZoom: true, zoomControl: true });
-  window.L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', { attribution: '© OpenStreetMap, © CARTO', maxZoom: 20 }).addTo(_mapa);
+  aplicarBasemap(_mapa);
 
   // Carregar ponto de coleta padrão da empresa (para mostrar no mapa)
   try {
