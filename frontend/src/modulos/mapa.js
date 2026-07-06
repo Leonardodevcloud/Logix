@@ -64,18 +64,20 @@ function avatarEl(m, size) {
 function pinLoja() {
   return window.L.divIcon({
     className: '',
-    html: `<div style="width:34px;height:34px;border-radius:9px;background:#fff;border:2px solid ${COR.navy};display:grid;place-items:center;font-size:19px;box-shadow:0 2px 8px rgba(0,0,0,.28)">🏪</div>`,
+    html: `<div style="width:34px;height:34px;border-radius:9px;background:#fff;border:2px solid ${COR.navy};display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.28)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${COR.navy}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 11h.01M15 11h.01"/></svg></div>`,
     iconSize: [34, 34], iconAnchor: [17, 17],
   });
 }
 function pinCentro() {
-  // Endereço de centro de custo (sub-loja): caixa com borda teal e etiqueta.
+  // Endereço de centro de custo (sub-loja): pin de localização, borda teal.
   return window.L.divIcon({
     className: '',
-    html: `<div style="width:30px;height:30px;border-radius:8px;background:#fff;border:2px solid #0F766E;display:grid;place-items:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.25)">🏷️</div>`,
+    html: `<div style="width:30px;height:30px;border-radius:8px;background:#fff;border:2px solid #0F766E;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.25)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg></div>`,
     iconSize: [30, 30], iconAnchor: [15, 15],
   });
 }
+// Span com SVG inline (para legenda e rótulos), evitando emojis.
+function svgSpan(svg) { const s = document.createElement('span'); s.style.display = 'inline-flex'; s.innerHTML = svg; return s; }
 function pinMotoboy(m) {
   const cor = m.ocupado ? COR.vermelho : COR.verde;
   const ini = iniciais(m.nome);
@@ -117,7 +119,8 @@ export async function montar(container) {
 
   const legenda = el('div', { style: `position:absolute;left:14px;bottom:14px;z-index:900;background:#fff;border:1px solid ${COR.linha};
     border-radius:12px;padding:10px 14px;box-shadow:0 2px 10px rgba(4,44,83,.08);font-size:11px;color:#46637f;display:flex;flex-direction:column;gap:5px` },
-    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: 'font-size:14px' }, '🏪'), 'Loja'),
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, svgSpan(`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${COR.navy}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/></svg>`), 'Loja'),
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, svgSpan(`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`), 'Centro de custo'),
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.verde};box-sizing:border-box` }), 'Motoboy livre'),
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box` }), 'Motoboy em corrida'));
 

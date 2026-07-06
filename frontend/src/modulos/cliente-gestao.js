@@ -3,6 +3,13 @@ import { get, post, put, patch, del } from '../core/api.js';
 import { EditorSla } from './sla-editor.js';
 import { EditorValores } from './valores-editor.js';
 
+// Pin de localização em SVG (sem emoji), herda a cor do texto do botão.
+function icoPin(size = 13) {
+  const s = el('span', { style: 'display:inline-flex;vertical-align:-2px;margin-right:5px' });
+  s.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
+  return s;
+}
+
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
   document.body.append(t);
@@ -116,7 +123,7 @@ function abaCentros(loja) {
           el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, `${c.total_usuarios} usuário(s)`)),
         el('div', { style: 'display:flex;gap:6px' },
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formUsuarioCentro(c) }, '+ Usuário'),
-          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formEnderecosCentro(c) }, '📍 Endereços'),
+          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formEnderecosCentro(c) }, icoPin(), 'Endereços'),
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formCentro(c) }, 'Editar'),
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-erro)', onClick: () => confirmar('Excluir centro', `Excluir o centro “${c.nome}”?`, async () => { await del(`/clientes/${loja.id}/centros/${c.id}`); toast('Excluído'); carregar(); }, 'Excluir', true) }, 'Excluir')))));
   }
