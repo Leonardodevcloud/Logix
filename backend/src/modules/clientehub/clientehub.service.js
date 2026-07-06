@@ -3,6 +3,9 @@ const AppError = require('../../shared/AppError');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { PERFIS } = require('../../shared/constants');
 const authService = require('../auth/auth.service');
+// Geocoder (ORS) para localizar os endereços de centro de custo no mapa.
+let geocodificar = null;
+try { geocodificar = require('../../integracoes/openrouteservice').geocodificar; } catch {}
 
 // Garante que a loja pertence à empresa (evita acesso cruzado).
 async function exigirLoja(empresaId, lojaId) {
@@ -361,9 +364,61 @@ async function lojaPode(lojaId, permissao) {
   return rows[0].v !== false;
 }
 
+// ── Endereços de um centro de custo ───────────────────────────────
+async function garantirCentro(empresaId, lojaId, centroId) {
+  await exigirLoja(empresaId, lojaId);
+  const { rows } = await query(`SELECT id, nome FROM cliente_centros_custo WHERE id = $1 AND loja_id = $2`, [centroId, lojaId]);
+  if (!rows[0]) throw AppError.naoEncontrado('Centro de custo não encontrado');
+  return rows[0];
+}
+
+async function listarCentroEnderecos({ empresaId, lojaId, centroId }) {
+  await garantirCentro(empresaId, lojaId, centroId);
+  const { rows } = await query(
+    `SELECT id, apelido, endereco, lat, lng, criado_em
+       FROM cliente_centro_enderecos
+      WHERE centro_id = $1 AND loja_id = $2
+      ORDER BY criado_em`,
+    [centroId, lojaId]
+  );
+  return rows;
+}
+
+async function adicionarCentroEndereco({ empresaId, lojaId, centroId, apelido, endereco, usuarioId, ip }) {
+  await garantirCentro(empresaId, lojaId, centroId);
+  if (!endereco || !endereco.trim()) throw AppError.validacao('Informe o endereço');
+
+  // Geocodifica no cadastro. Se falhar, ainda salva (sem localização no mapa).
+  let lat = null, lng = null;
+  if (geocodificar) {
+    try { const g = await geocodificar(endereco.trim()); lat = g.lat; lng = g.lng; } catch {}
+  }
+
+  const { rows } = await query(
+    `INSERT INTO cliente_centro_enderecos (empresa_id, loja_id, centro_id, apelido, endereco, lat, lng)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id, apelido, endereco, lat, lng, criado_em`,
+    [empresaId, lojaId, centroId, apelido?.trim() || null, endereco.trim(), lat, lng]
+  );
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'criar_endereco_centro', detalhe: { lojaId, centroId, id: rows[0].id }, ip }).catch(() => {});
+  return rows[0];
+}
+
+async function removerCentroEndereco({ empresaId, lojaId, centroId, id, usuarioId, ip }) {
+  await garantirCentro(empresaId, lojaId, centroId);
+  const { rows } = await query(
+    `DELETE FROM cliente_centro_enderecos WHERE id = $1 AND centro_id = $2 AND loja_id = $3 RETURNING id`,
+    [id, centroId, lojaId]
+  );
+  if (!rows[0]) throw AppError.naoEncontrado('Endereço não encontrado');
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'excluir_endereco_centro', detalhe: { lojaId, centroId, id }, ip }).catch(() => {});
+  return { ok: true };
+}
+
 module.exports = {
   exigirLoja, alternarStatus,
   listarCentros, criarCentro, atualizarCentro, excluirCentro, criarUsuarioCentro,
+  listarCentroEnderecos, adicionarCentroEndereco, removerCentroEndereco,
   listarUsuarios, criarUsuario, atualizarUsuario, excluirUsuario,
   listarModalidades, categoriasDisponiveis, adicionarModalidade, atualizarModalidade, removerModalidade,
   obterRegras, salvarRegras,

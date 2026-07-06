@@ -178,10 +178,34 @@ async function motoboysOnline(empresaId, lojaId) {
 }
 
 // Visão geral. empresaId null = super admin (todas as empresas).
+// Endereços de centros de custo (sub-lojas) já geocodificados, no escopo pedido.
+// Aparecem no mapa como marcadores próprios, junto das lojas e motoboys.
+async function centrosComCoord(empresaId, lojaId) {
+  const { rows } = await query(
+    `SELECT ce.id, ce.apelido, ce.endereco, ce.lat, ce.lng,
+            ce.centro_id, cc.nome AS centro_nome,
+            ce.loja_id, l.nome_fantasia AS loja_nome
+       FROM cliente_centro_enderecos ce
+       JOIN cliente_centros_custo cc ON cc.id = ce.centro_id AND cc.ativo = TRUE
+       JOIN lojas l ON l.id = ce.loja_id
+      WHERE ce.lat IS NOT NULL AND ce.lng IS NOT NULL
+        AND ($1::uuid IS NULL OR ce.empresa_id = $1)
+        AND ($2::uuid IS NULL OR ce.loja_id = $2)`,
+    [empresaId || null, lojaId || null]
+  );
+  return rows.map(r => ({
+    id: r.id, tipo: 'centro',
+    nome: r.apelido || r.centro_nome,
+    centro_nome: r.centro_nome, loja_nome: r.loja_nome,
+    endereco: r.endereco, lat: r.lat, lng: r.lng,
+  }));
+}
+
 async function overview({ empresaId = null, lojaId = null }) {
-  const [lojas, motoboys] = await Promise.all([
+  const [lojas, motoboys, centros] = await Promise.all([
     lojasComCoord(empresaId, lojaId),
     motoboysOnline(empresaId, lojaId),
+    centrosComCoord(empresaId, lojaId),
   ]);
   for (const m of motoboys) {
     m.lojas_proximas = lojas.map(l => {
@@ -189,7 +213,7 @@ async function overview({ empresaId = null, lojaId = null }) {
       return km == null ? null : { loja_id: l.id, nome: l.nome, km: +km.toFixed(2), eta_min: kmParaMin(km) };
     }).filter(Boolean).sort((a, b) => a.km - b.km).slice(0, 5);
   }
-  return { lojas, motoboys, config: { vel_media_kmh: VEL_MEDIA_KMH }, escopo: lojaId ? 'loja' : (empresaId ? 'central' : 'global'), em: new Date().toISOString() };
+  return { lojas, motoboys, centros, config: { vel_media_kmh: VEL_MEDIA_KMH }, escopo: lojaId ? 'loja' : (empresaId ? 'central' : 'global'), em: new Date().toISOString() };
 }
 
 module.exports = { overview, distKm, kmParaMin, VEL_MEDIA_KMH };

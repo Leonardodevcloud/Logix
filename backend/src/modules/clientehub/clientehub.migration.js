@@ -80,6 +80,24 @@ async function initClienteHubTables() {
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cli_motoboys_loja ON cliente_motoboys(loja_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cli_motoboys_motoboy ON cliente_motoboys(motoboy_id)`);
+
+  // ── Endereços de um centro de custo ─────────────────────────────
+  // Um centro de custo (sub-loja) pode ter vários endereços físicos. Cada um é
+  // geocodificado no cadastro (lat/lng) para aparecer no mapa em tempo real.
+  await query(`
+    CREATE TABLE IF NOT EXISTS cliente_centro_enderecos (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      loja_id     UUID NOT NULL REFERENCES lojas(id) ON DELETE CASCADE,
+      centro_id   UUID NOT NULL REFERENCES cliente_centros_custo(id) ON DELETE CASCADE,
+      apelido     TEXT,
+      endereco    TEXT NOT NULL,
+      lat         DOUBLE PRECISION,
+      lng         DOUBLE PRECISION,
+      criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_cce_centro ON cliente_centro_enderecos(centro_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_cce_loja ON cliente_centro_enderecos(loja_id)`);
 }
 
 module.exports = { initClienteHubTables };

@@ -116,6 +116,7 @@ function abaCentros(loja) {
           el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' }, `${c.total_usuarios} usuário(s)`)),
         el('div', { style: 'display:flex;gap:6px' },
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formUsuarioCentro(c) }, '+ Usuário'),
+          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formEnderecosCentro(c) }, '📍 Endereços'),
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formCentro(c) }, 'Editar'),
           el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-erro)', onClick: () => confirmar('Excluir centro', `Excluir o centro “${c.nome}”?`, async () => { await del(`/clientes/${loja.id}/centros/${c.id}`); toast('Excluído'); carregar(); }, 'Excluir', true) }, 'Excluir')))));
   }
@@ -148,11 +149,52 @@ function abaCentros(loja) {
       catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
   }
+  // Endereços de um centro de custo (aparecem no Mapa em tempo real).
+  function formEnderecosCentro(c) {
+    const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-bottom:6px' });
+    const apelido = inp('Apelido (ex: Depósito, Filial Norte)');
+    const endereco = inp('Endereço completo (rua, número, bairro, cidade)');
+    const btnAdd = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px;align-self:flex-start' }, 'Adicionar endereço');
+    const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
+      lista,
+      el('div', { style: 'border-top:1px solid var(--lx-linha);padding-top:14px;display:flex;flex-direction:column;gap:12px' },
+        campo('Apelido', apelido), campo('Endereço', endereco), btnAdd));
+    const ov = miniModal(`Endereços — ${c.nome}`, corpo, [
+      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Fechar'),
+    ]);
+
+    async function recarregar() {
+      lista.innerHTML = '<div style="color:var(--lx-tinta-3);font-size:13px;padding:6px 0">Carregando…</div>';
+      try {
+        const es = await get(`/clientes/${loja.id}/centros/${c.id}/enderecos`);
+        lista.innerHTML = '';
+        if (!es.length) { lista.append(el('div', { style: 'color:var(--lx-tinta-3);font-size:13px;padding:6px 0' }, 'Nenhum endereço ainda.')); return; }
+        es.forEach(e => lista.append(
+          el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px' },
+            el('div', { style: 'min-width:0' },
+              el('div', { style: 'font-weight:700;font-size:13px' }, e.apelido || 'Endereço',
+                e.lat == null ? el('span', { style: 'font-size:11px;color:var(--lx-erro);font-weight:600;margin-left:8px' }, '⚠ sem localização') : ''),
+              el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, e.endereco)),
+            el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-erro);flex-shrink:0', onClick: () => confirmar('Excluir endereço', 'Remover este endereço do centro?', async () => { await del(`/clientes/${loja.id}/centros/${c.id}/enderecos/${e.id}`); toast('Removido'); recarregar(); }, 'Excluir', true) }, 'Excluir'))));
+      } catch (err) { lista.innerHTML = ''; lista.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, err.message || 'Erro')); }
+    }
+
+    btnAdd.onclick = async () => {
+      if (!endereco.value.trim()) { toast('Informe o endereço', 'erro'); return; }
+      try {
+        btnAdd.disabled = true;
+        await post(`/clientes/${loja.id}/centros/${c.id}/enderecos`, { apelido: apelido.value.trim() || null, endereco: endereco.value.trim() });
+        apelido.value = ''; endereco.value = ''; toast('Endereço adicionado'); recarregar();
+      } catch (e) { toast(e.message || 'Erro', 'erro'); }
+      finally { btnAdd.disabled = false; }
+    };
+
+    recarregar();
+  }
+
   carregar();
   return wrap;
 }
-
-// ── Aba 2: Usuários avulsos ───────────────────────────────────────
 function abaUsuarios(loja) {
   const wrap = el('div', {});
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });

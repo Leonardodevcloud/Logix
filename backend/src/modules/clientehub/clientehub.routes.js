@@ -45,6 +45,17 @@ function initClienteHubRoutes() {
     try { res.status(201).json(await service.criarUsuarioCentro({ ...base(req), centroId: req.params.centroId, nome: req.body.nome, email: req.body.email, telefone: req.body.telefone, senha: req.body.senha })); } catch (e) { next(e); }
   });
 
+  // Endereços de um centro de custo (geocodificados → aparecem no mapa).
+  router.get('/:lojaId/centros/:centroId/enderecos', async (req, res, next) => {
+    try { res.json(await service.listarCentroEnderecos({ empresaId: req.empresaId, lojaId: req.params.lojaId, centroId: req.params.centroId })); } catch (e) { next(e); }
+  });
+  router.post('/:lojaId/centros/:centroId/enderecos', async (req, res, next) => {
+    try { res.status(201).json(await service.adicionarCentroEndereco({ ...base(req), centroId: req.params.centroId, apelido: req.body.apelido, endereco: req.body.endereco })); } catch (e) { next(e); }
+  });
+  router.delete('/:lojaId/centros/:centroId/enderecos/:id', async (req, res, next) => {
+    try { res.json(await service.removerCentroEndereco({ ...base(req), centroId: req.params.centroId, id: req.params.id })); } catch (e) { next(e); }
+  });
+
   // ── 3) Usuários avulsos ────────────────────────────────────────
   router.get('/:lojaId/usuarios', async (req, res, next) => {
     try { res.json(await service.listarUsuarios({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }

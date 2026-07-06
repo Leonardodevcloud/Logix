@@ -68,6 +68,14 @@ function pinLoja() {
     iconSize: [34, 34], iconAnchor: [17, 17],
   });
 }
+function pinCentro() {
+  // Endereço de centro de custo (sub-loja): caixa com borda teal e etiqueta.
+  return window.L.divIcon({
+    className: '',
+    html: `<div style="width:30px;height:30px;border-radius:8px;background:#fff;border:2px solid #0F766E;display:grid;place-items:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.25)">🏷️</div>`,
+    iconSize: [30, 30], iconAnchor: [15, 15],
+  });
+}
 function pinMotoboy(m) {
   const cor = m.ocupado ? COR.vermelho : COR.verde;
   const ini = iniciais(m.nome);
@@ -122,8 +130,8 @@ export async function montar(container) {
     attribution: '© OpenStreetMap, © CARTO', maxZoom: 20,
   }).addTo(mapa);
 
-  let dados = { lojas: [], motoboys: [] };
-  let markersLoja = {}, markersMb = {};
+  let dados = { lojas: [], motoboys: [], centros: [] };
+  let markersLoja = {}, markersMb = {}, markersCentro = {};
   let selecionado = null; // { tipo:'loja'|'motoboy', id }
   let primeiraVez = true;
 
@@ -228,6 +236,20 @@ export async function montar(container) {
     });
     Object.keys(markersLoja).forEach(id => { if (!vistasLoja.has(id)) { markersLoja[id].remove(); delete markersLoja[id]; } });
 
+    // Endereços de centros de custo (sub-lojas)
+    const vistasCentro = new Set();
+    (dados.centros || []).forEach(c => {
+      if (c.lat == null) return;
+      vistasCentro.add(c.id);
+      if (markersCentro[c.id]) { markersCentro[c.id].setLatLng([c.lat, c.lng]); return; }
+      const label = `${c.nome}${c.loja_nome ? ' · ' + c.loja_nome : ''}`;
+      const mk = window.L.marker([c.lat, c.lng], { icon: pinCentro() }).addTo(mapa);
+      mk.bindTooltip(label, { direction: 'top', offset: [0, -14] });
+      mk.bindPopup(`<b>${c.nome}</b>${c.centro_nome ? '<br>' + c.centro_nome : ''}${c.endereco ? '<br>' + c.endereco : ''}`);
+      markersCentro[c.id] = mk;
+    });
+    Object.keys(markersCentro).forEach(id => { if (!vistasCentro.has(id)) { markersCentro[id].remove(); delete markersCentro[id]; } });
+
     // Motoboys
     const vistasMb = new Set();
     dados.motoboys.forEach(m => {
@@ -248,7 +270,7 @@ export async function montar(container) {
 
     // Enquadra tudo na primeira carga.
     if (primeiraVez) {
-      const pts = [...dados.lojas.map(l => [l.lat, l.lng]), ...dados.motoboys.filter(m => m.lat != null).map(m => [m.lat, m.lng])];
+      const pts = [...dados.lojas.map(l => [l.lat, l.lng]), ...(dados.centros || []).filter(c => c.lat != null).map(c => [c.lat, c.lng]), ...dados.motoboys.filter(m => m.lat != null).map(m => [m.lat, m.lng])];
       if (pts.length) mapa.fitBounds(pts, { padding: [60, 60], maxZoom: 14 });
       primeiraVez = false;
     }
@@ -258,7 +280,7 @@ export async function montar(container) {
     try {
       const r = await get('/mapa/overview');
       VEL = r.config?.vel_media_kmh || VEL;
-      dados = { lojas: r.lojas || [], motoboys: r.motoboys || [] };
+      dados = { lojas: r.lojas || [], motoboys: r.motoboys || [], centros: r.centros || [] };
       const online = dados.motoboys.length;
       document.getElementById('mapa-status').textContent =
         `${dados.lojas.length} loja(s) · ${online} motoboy(s) online · atualizado ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
