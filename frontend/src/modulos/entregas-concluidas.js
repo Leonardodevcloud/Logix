@@ -64,8 +64,11 @@ async function linhaDetalhe(e, protocolo) {
     const header = el('div', { style: 'display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--lx-superficie,#fff);border-radius:10px;border:0.5px solid var(--lx-linha);margin-bottom:12px' });
 
     if (d.motoboy_foto) {
-      header.append(el('img', { src: normalizarFotoUrl(d.motoboy_foto),
-        style: 'width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--lx-linha)' }));
+      const imgH = el('img', { src: normalizarFotoUrl(d.motoboy_foto),
+        style: 'width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none;border:2px solid var(--lx-linha)' });
+      imgH.onerror = () => imgH.replaceWith(el('div', { style: 'width:48px;height:48px;border-radius:50%;background:var(--lx-info-bg,#EAF3FF);display:grid;place-items:center;flex:none',
+        html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' }));
+      header.append(imgH);
     } else {
       header.append(el('div', { style: 'width:48px;height:48px;border-radius:50%;background:var(--lx-info-bg,#EAF3FF);display:grid;place-items:center;flex:none',
         html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' }));
@@ -328,10 +331,15 @@ export async function montarConcluidas(container, filtroInicial) {
       const btnExp = el('div', { style: 'width:26px;height:26px;border-radius:7px;background:var(--lx-superficie-2,#F5F7FA);border:0.5px solid var(--lx-linha);display:grid;place-items:center;cursor:pointer;color:var(--lx-tinta-2)' });
       btnExp.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
-      const foto = e.motoboy_foto
-        ? el('img', { src: normalizarFotoUrl(e.motoboy_foto), style: 'width:32px;height:32px;border-radius:50%;object-fit:cover;border:1.5px solid var(--lx-linha);display:block;margin:0 auto' })
-        : el('div', { style: 'width:32px;height:32px;border-radius:50%;background:#EAF3FF;display:grid;place-items:center;margin:0 auto',
-            html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' });
+      const phMotoboyLinha = () => el('div', { style: 'width:32px;height:32px;border-radius:50%;background:#EAF3FF;display:grid;place-items:center;margin:0 auto',
+        html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h1l3 5M5.5 14H11l4-8h2"/><path d="M9 14l2-8"/></svg>' });
+      let foto;
+      if (e.motoboy_foto) {
+        foto = el('img', { src: normalizarFotoUrl(e.motoboy_foto), style: 'width:32px;height:32px;border-radius:50%;object-fit:cover;border:1.5px solid var(--lx-linha);display:block;margin:0 auto' });
+        foto.onerror = () => foto.replaceWith(phMotoboyLinha());  // URL quebrada/expirada -> placeholder
+      } else {
+        foto = phMotoboyLinha();
+      }
 
       // FIX 5: km — mostra '—' mas nunca NaN
       const kmStr = e.distancia_km && !isNaN(parseFloat(e.distancia_km)) && parseFloat(e.distancia_km) > 0

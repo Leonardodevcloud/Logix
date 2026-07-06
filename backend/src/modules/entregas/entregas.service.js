@@ -1,4 +1,5 @@
 const { pool, query } = require('../../shared/db');
+const storage = require('../../shared/storage');
 const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, ERRO_MSGS, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
@@ -128,6 +129,28 @@ async function listar({ empresaId, status, motoboyId, lojaId = null }) {
   return rows;
 }
 
+// Gera a URL assinada FRESCA da selfie de cada motoboy (a partir de
+// motoboy_documentos) e a coloca em `motoboy_foto`. A URL assinada do storage
+// EXPIRA, entao nunca pode vir do campo persistido motoboys.foto_url — era isso
+// que deixava a foto quebrada nas Concluidas. Uma query em lote + assinatura por
+// motoboy distinto.
+async function resolverSelfies(rows) {
+  const ids = [...new Set(rows.map(r => r.motoboy_id).filter(Boolean))];
+  if (!ids.length) { rows.forEach(r => { r.motoboy_foto = null; }); return rows; }
+  const urlPorId = new Map();
+  try {
+    const { rows: docs } = await query(
+      `SELECT motoboy_id, storage_key FROM motoboy_documentos WHERE motoboy_id = ANY($1::uuid[]) AND tipo = 'selfie'`,
+      [ids]
+    );
+    await Promise.all(docs.map(async (d) => {
+      try { urlPorId.set(d.motoboy_id, await storage.urlDe(d.storage_key)); } catch {}
+    }));
+  } catch {}
+  rows.forEach(r => { r.motoboy_foto = (r.motoboy_id && urlPorId.get(r.motoboy_id)) || null; });
+  return rows;
+}
+
 async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
   // status: 'entregue' | 'cancelada' | null (todas)
@@ -165,6 +188,7 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId 
        WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 500`,
     params
   );
+  await resolverSelfies(rows);   // troca a foto_url velha pela selfie assinada fresca
   return rows;
 }
 
@@ -198,6 +222,7 @@ async function detalharConcluida({ empresaId, id, lojaId = null }) {
      GROUP BY ep.id ORDER BY ep.ordem`, [id]);
 
   const e = ent[0];
+  await resolverSelfies([e]);   // selfie assinada fresca (nunca a foto_url persistida)
 
   // FIX KM: calcular haversine se distancia_km for null ou zero.
   // Se a coleta não tem coordenada mas tem endereço, geocodifica e persiste —
