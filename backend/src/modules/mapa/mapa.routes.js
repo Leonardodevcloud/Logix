@@ -10,11 +10,14 @@ try { lojaPode = require('../clientehub/clientehub.service').lojaPode; } catch {
 module.exports = function mapaRoutes() {
   const router = express.Router();
 
-  // GET /mapa/config — config pública do basemap para o frontend.
-  // A chave do MapTiler vem da env MAPTILER_KEY (definida no Railway), nunca do
-  // código do front. Vazia = frontend usa o basemap de fallback (CARTO Voyager).
+  // GET /mapa/config — config pública do basemap para o frontend. As chaves vêm
+  // de env vars no Railway (nunca hardcoded no front). O front usa Google se
+  // houver googleMapsKey; senão MapTiler; senão o fallback interno.
   router.get('/config', verificarToken, (req, res) => {
-    res.json({ maptilerKey: process.env.MAPTILER_KEY || '' });
+    res.json({
+      googleMapsKey: process.env.GOOGLE_MAPS_BROWSER_KEY || '',
+      maptilerKey: process.env.MAPTILER_KEY || '',
+    });
   });
 
   // GET /mapa/overview — lojas + motoboys online + ETAs, no escopo do solicitante.
