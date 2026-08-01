@@ -400,6 +400,20 @@ module.exports = function motoboyAppRoutes() {
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
 
+      // Idempotência: se o ponto JÁ foi concluído (entregue/insucesso), este pedido
+      // é o retry / duplo-toque de uma conclusão que já deu certo (a 1ª resposta se
+      // perdeu na rede). Devolve sucesso SEM recriar foto/retorno/log — evita a
+      // duplicação que deixava o app "bugado".
+      {
+        const { rows: jaR } = await query(
+          `SELECT status FROM entregas_pontos WHERE id = $1 AND entrega_id = $2`,
+          [pontoId, entregaId]
+        );
+        if (jaR[0] && (jaR[0].status === 'entregue' || jaR[0].status === 'insucesso')) {
+          return res.json({ ok: true, jaConcluido: true, todos_entregues: false, retorno_gerado: false });
+        }
+      }
+
       // GEOFENCE: a loja pode exigir que o motoboy esteja dentro de um raio do
       // ponto para marcar. Pulado se o ponto já foi LIBERADO pela central, se a
       // loja está em "raio livre", ou se não há como saber a posição.
@@ -565,6 +579,13 @@ module.exports = function motoboyAppRoutes() {
         [entregaId]
       );
       const pontoId = pontos[0]?.id;
+
+      // Idempotência: nenhum ponto pendente = a corrida já foi concluída (retry /
+      // duplo-toque). Devolve sucesso sem tentar inserir foto órfã nem concluir
+      // "o próximo" ponto por engano.
+      if (!pontoId) {
+        return res.json({ ok: true, jaConcluido: true, todos_entregues: true });
+      }
 
       if (pontoId) {
         await query(
