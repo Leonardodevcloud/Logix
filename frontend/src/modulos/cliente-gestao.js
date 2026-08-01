@@ -3,13 +3,6 @@ import { get, post, put, patch, del } from '../core/api.js';
 import { EditorSla } from './sla-editor.js';
 import { EditorValores } from './valores-editor.js';
 
-// Pin de localização em SVG (sem emoji), herda a cor do texto do botão.
-function icoPin(size = 13) {
-  const s = el('span', { style: 'display:inline-flex;vertical-align:-2px;margin-right:5px' });
-  s.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
-  return s;
-}
-
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
   document.body.append(t);
@@ -59,15 +52,15 @@ export function abrirGestaoCliente(loja, aoFechar) {
     { id: 'valores', rotulo: 'Valores' },
   ];
   let _aba = 'centros';
-  const nav = el('div', { style: 'display:flex;gap:2px;padding:0 26px;border-bottom:1px solid var(--lx-linha);overflow-x:auto' });
-  const corpo = el('div', { style: 'flex:1;overflow:auto;padding:24px 26px' });
+  const nav = el('div', { style: 'flex:0 0 190px;display:flex;flex-direction:column;gap:2px;padding:16px 12px;border-right:1px solid var(--lx-linha);overflow-y:auto' });
+  const corpo = el('div', { style: 'flex:1;min-width:0;overflow:auto;padding:24px 26px' });
 
   function renderNav() {
     nav.innerHTML = '';
     ABAS.forEach(a => {
       const on = a.id === _aba;
       nav.append(el('button', {
-        style: `background:none;border:none;padding:12px 14px;font-size:13.5px;font-weight:700;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${on ? 'var(--lx-azul-primario)' : 'transparent'};color:${on ? 'var(--lx-azul-primario)' : 'var(--lx-tinta-2)'};margin-bottom:-1px`,
+        style: `text-align:left;width:100%;background:${on ? 'var(--lx-info-bg,#EAF3FF)' : 'none'};border:none;border-radius:9px;padding:11px 14px;font-size:13px;font-weight:700;cursor:pointer;color:${on ? 'var(--lx-azul-primario)' : 'var(--lx-tinta-2)'}`,
         onClick: () => { _aba = a.id; renderNav(); renderCorpo(); },
       }, a.rotulo));
     });
@@ -84,7 +77,7 @@ export function abrirGestaoCliente(loja, aoFechar) {
   }
   function fechar() { overlay.remove(); if (aoFechar) aoFechar(); }
 
-  box.append(head, nav, corpo);
+  box.append(head, el('div', { style: 'flex:1;display:flex;min-height:0' }, nav, corpo));
   overlay.append(box);
   overlay.addEventListener('click', e => { if (e.target === overlay) fechar(); });
   document.body.append(overlay);
@@ -162,10 +155,11 @@ function abaCentros(loja) {
       catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
   }
-
   carregar();
   return wrap;
 }
+
+// ── Aba 2: Usuários avulsos ───────────────────────────────────────
 function abaUsuarios(loja) {
   const wrap = el('div', {});
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
