@@ -50,9 +50,7 @@ function montarApp() {
   const app = express();
   app.set('trust proxy', 1);
 
-  // Compressao gzip/brotli das respostas. Corta 70-90% do payload JSON das telas
-  // de admin (acompanhamento/mapa enviam listas grandes). Ganho imediato no fio,
-  // independente da rede. Fica no topo da stack para envolver todas as respostas.
+  // Compressao gzip/brotli das respostas (telas de admin enviam listas grandes).
   app.use(compression());
   app.use(helmet());
   const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -97,6 +95,11 @@ async function iniciar() {
   await migrar();
   const app = montarApp();
   const server = http.createServer(app);
+  // Mantem conexoes keep-alive vivas por 65s (padrao do Node = 5s). Sem isto, a
+  // conexao ociosa entre os polls e fechada pelo servidor e o OkHttp do Android
+  // falha ao reusa-la numa acao (PATCH/POST) — virava 'Sem conexao' no motoboy.
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000; // deve ser > keepAliveTimeout
   iniciarWebSocket(server);
 
   // Modo econômico (padrão): roda os cron jobs no MESMO processo da API — 1 container só.
