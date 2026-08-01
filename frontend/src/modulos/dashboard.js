@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get } from '../core/api.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 import * as auth from '../core/auth.js';
 
 // Coordenadas reais (lat/lng) das principais cidades brasileiras
@@ -144,10 +145,7 @@ async function dashAdmin(content) {
     scrollWheelZoom: false,
   });
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 18,
-  }).addTo(map);
+  aplicarBasemap(map);
 
   // Pins dos clientes
   ativos.forEach((c, i) => {

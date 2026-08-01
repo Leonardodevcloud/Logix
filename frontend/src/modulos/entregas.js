@@ -2,6 +2,7 @@ import { casca } from '../core/layout.js';
 import { el, statusBadge } from '../core/ui.js';
 import { get, post, patch, getToken } from '../core/api.js';
 import { montarConcluidas } from './entregas-concluidas.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 import * as auth from '../core/auth.js';
 
 const BASE = window.LOGIX_API || '/api/v1';
@@ -73,9 +74,7 @@ function criarMapa(div) {
     if (map) return;
     await garantirLeaflet();
     map = window.L.map(div, { center: [-12.97, -38.5], zoom: 13, scrollWheelZoom: true });
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap', maxZoom: 19,
-    }).addTo(map);
+    aplicarBasemap(map);
   }
 
   function limpar() {
@@ -219,7 +218,7 @@ async function modalAjusteMapa(enderecoInicial, onConfirmar, onPular) {
 
   // Iniciar mapa
   const map = L.map(mapDiv, { center: [enderecoInicial.lat, enderecoInicial.lng], zoom: 17, scrollWheelZoom: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
+  aplicarBasemap(map);
 
   const marker = L.marker([enderecoInicial.lat, enderecoInicial.lng], { draggable: true }).addTo(map);
   let posAtual = { lat: enderecoInicial.lat, lng: enderecoInicial.lng };
