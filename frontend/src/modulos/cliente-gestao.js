@@ -141,18 +141,67 @@ function abaCentros(loja) {
   function render(cs) {
     lista.innerHTML = '';
     if (!cs.length) { lista.append(vazio('Nenhum centro de custo ainda.')); return; }
-    cs.forEach(c => lista.append(
-      el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px' },
-        el('div', {},
-          el('div', { style: 'font-weight:700;font-size:14px' }, c.nome, c.codigo ? el('span', { style: 'font-size:12px;color:var(--lx-tinta-3);font-weight:600;margin-left:8px' }, c.codigo) : ''),
-          el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' },
-            c.endereco || 'Sem endereço',
-            (c.endereco && c.lat == null) ? el('span', { style: 'color:var(--lx-erro);margin-left:6px' }, '(não localizado no mapa)') : '',
-            el('span', { style: 'color:var(--lx-tinta-3);margin-left:8px' }, `· ${c.total_usuarios} usuário(s)`))),
-        el('div', { style: 'display:flex;gap:6px' },
-          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formUsuarioCentro(c) }, '+ Usuário'),
-          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formCentro(c) }, 'Editar'),
-          el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-erro)', onClick: () => confirmar('Excluir centro', `Excluir o centro “${c.nome}”?`, async () => { await del(`/clientes/${loja.id}/centros/${c.id}`); toast('Excluído'); carregar(); }, 'Excluir', true) }, 'Excluir')))));
+    cs.forEach(c => {
+      const usersBox = el('div', { style: 'display:none;margin-top:10px;border-top:1px solid var(--lx-linha);padding-top:8px' });
+      let carregado = false;
+      const contagem = el('span', { style: 'color:var(--lx-azul-primario);margin-left:8px;cursor:pointer;font-weight:700', onClick: (e) => { e.stopPropagation(); toggle(); } }, `· ${c.total_usuarios} usuário(s) ▾`);
+
+      async function carregarUsuarios() {
+        usersBox.innerHTML = '<div style="color:var(--lx-tinta-3);font-size:12px;padding:6px">Carregando…</div>';
+        try {
+          const us = await get(`/clientes/${loja.id}/centros/${c.id}/usuarios`);
+          usersBox.innerHTML = '';
+          if (!us.length) { usersBox.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:6px' }, 'Nenhum usuário neste centro. Use “+ Usuário” para criar.')); return; }
+          us.forEach(u => usersBox.append(
+            el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--lx-linha)' },
+              el('div', { style: 'width:30px;height:30px;border-radius:50%;background:#dcebfb;color:var(--lx-azul-primario);display:grid;place-items:center;font-weight:800;font-size:12px;flex:none' }, (u.nome || '?').slice(0, 1).toUpperCase()),
+              el('div', { style: 'flex:1;min-width:0' },
+                el('div', { style: 'font-weight:600;font-size:13px' }, u.nome, u.ativo === false ? el('span', { style: 'color:var(--lx-erro);font-size:11px;margin-left:6px' }, '(inativo)') : ''),
+                el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, u.email + (u.telefone ? ' · ' + u.telefone : ''))),
+              el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:4px 9px;font-size:11.5px', onClick: () => formEditarUsuario(u, carregarUsuarios) }, 'Editar'),
+              el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:4px 8px;font-size:11.5px;color:var(--lx-erro)', onClick: () => confirmar('Excluir usuário', `Excluir o usuário “${u.nome}”? O login dele deixará de funcionar.`, async () => { await del(`/clientes/${loja.id}/usuarios/${u.id}`); toast('Usuário excluído'); carregarUsuarios(); carregar(); }, 'Excluir', true) }, 'Excluir'))));
+        } catch (e) { usersBox.innerHTML = ''; usersBox.append(el('div', { style: 'font-size:12px;color:var(--lx-erro);padding:6px' }, e.message || 'Erro ao carregar usuários')); }
+      }
+      async function toggle() {
+        const abrir = usersBox.style.display === 'none';
+        usersBox.style.display = abrir ? 'block' : 'none';
+        contagem.textContent = `· ${c.total_usuarios} usuário(s) ` + (abrir ? '▴' : '▾');
+        if (abrir && !carregado) { carregado = true; await carregarUsuarios(); }
+      }
+
+      lista.append(el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);padding:12px 14px' },
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px' },
+          el('div', {},
+            el('div', { style: 'font-weight:700;font-size:14px' }, c.nome, c.codigo ? el('span', { style: 'font-size:12px;color:var(--lx-tinta-3);font-weight:600;margin-left:8px' }, c.codigo) : ''),
+            el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' },
+              c.endereco || 'Sem endereço',
+              (c.endereco && c.lat == null) ? el('span', { style: 'color:var(--lx-erro);margin-left:6px' }, '(não localizado no mapa)') : '',
+              contagem)),
+          el('div', { style: 'display:flex;gap:6px' },
+            el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formUsuarioCentro(c) }, '+ Usuário'),
+            el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px', onClick: () => formCentro(c) }, 'Editar'),
+            el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-erro)', onClick: () => confirmar('Excluir centro', `Excluir o centro “${c.nome}”?`, async () => { await del(`/clientes/${loja.id}/centros/${c.id}`); toast('Excluído'); carregar(); }, 'Excluir', true) }, 'Excluir'))),
+        usersBox));
+    });
+  }
+
+  function formEditarUsuario(u, onSaved) {
+    const nome = inp('Nome completo', u.nome || '');
+    const tel = inp('Telefone (opcional)', u.telefone || '');
+    const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Salvar');
+    const ov = miniModal(`Editar usuário`,
+      el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
+        campo('Nome', nome), campo('Telefone', tel),
+        el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3)' }, `E-mail (login): ${u.email}`)), [
+      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn,
+    ]);
+    btn.onclick = async () => {
+      if (!nome.value.trim()) { toast('Informe o nome', 'erro'); return; }
+      try { btn.disabled = true;
+        await put(`/clientes/${loja.id}/usuarios/${u.id}`, { nome: nome.value.trim(), telefone: tel.value.trim() || null });
+        ov.remove(); toast('Salvo'); onSaved && onSaved();
+      } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
+    };
   }
   function formCentro(c) {
     const nome = inp('Ex: Matriz, Filial Centro…', c?.nome || '');

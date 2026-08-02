@@ -133,6 +133,20 @@ async function listarUsuarios({ empresaId, lojaId }) {
   return rows;
 }
 
+// Usuários vinculados a UM centro de custo.
+async function listarUsuariosCentro({ empresaId, lojaId, centroId }) {
+  await exigirLoja(empresaId, lojaId);
+  const { rows } = await query(
+    `SELECT u.id, u.nome, u.email, u.telefone, u.ativo, u.ultimo_acesso
+       FROM cliente_centro_usuarios ccu
+       JOIN usuarios u ON u.id = ccu.usuario_id
+      WHERE ccu.centro_id = $1 AND u.loja_id = $2
+      ORDER BY u.nome`,
+    [centroId, lojaId]
+  );
+  return rows;
+}
+
 async function criarUsuario({ empresaId, lojaId, nome, email, telefone, senha, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   if (!nome || !email || !senha) throw AppError.validacao('Nome, e-mail e senha são obrigatórios');
@@ -441,7 +455,7 @@ module.exports = {
   exigirLoja, alternarStatus,
   listarCentros, criarCentro, atualizarCentro, excluirCentro, criarUsuarioCentro,
   listarCentroEnderecos, adicionarCentroEndereco, removerCentroEndereco,
-  listarUsuarios, criarUsuario, atualizarUsuario, excluirUsuario,
+  listarUsuarios, listarUsuariosCentro, criarUsuario, atualizarUsuario, excluirUsuario,
   listarModalidades, categoriasDisponiveis, adicionarModalidade, atualizarModalidade, removerModalidade,
   obterRegras, salvarRegras,
   listarMotoboysExclusivos, atribuirMotoboy, removerMotoboy, motoboysDisponiveis,

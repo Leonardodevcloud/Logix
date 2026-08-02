@@ -41,6 +41,9 @@ function initClienteHubRoutes() {
   router.delete('/:lojaId/centros/:id', async (req, res, next) => {
     try { res.json(await service.excluirCentro({ ...base(req), id: req.params.id })); } catch (e) { next(e); }
   });
+  router.get('/:lojaId/centros/:centroId/usuarios', async (req, res, next) => {
+    try { res.json(await service.listarUsuariosCentro({ ...base(req), centroId: req.params.centroId })); } catch (e) { next(e); }
+  });
   router.post('/:lojaId/centros/:centroId/usuarios', async (req, res, next) => {
     try { res.status(201).json(await service.criarUsuarioCentro({ ...base(req), centroId: req.params.centroId, nome: req.body.nome, email: req.body.email, telefone: req.body.telefone, senha: req.body.senha })); } catch (e) { next(e); }
   });
