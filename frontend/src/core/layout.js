@@ -34,8 +34,9 @@ function gruposNav() {
   // Mapa em tempo real logo abaixo do Rastreio (abre em aba dedicada).
   if (a.perfil === 'central_admin')
     operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'mapa', novaAba: true });
-  // Radar operacional: motoboys parados/sem sinal em corridas em rota (só central).
-  if (a.perfil === 'central_admin')
+  // Radar operacional: motoboys parados/sem sinal em corridas em rota.
+  // Central vê tudo (+ configura); loja vê só os alertas das entregas dela.
+  if (a.perfil === 'central_admin' || a.perfil === 'loja')
     operacao.push({ rota: '/radar', rotulo: 'Radar', icone: 'acompanhamento' });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });

@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, post, put } from '../core/api.js';
+import * as auth from '../core/auth.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-navy,#042C53)'};color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:4000;box-shadow:0 10px 30px -8px rgba(0,0,0,.4)` }, msg);
@@ -9,12 +10,16 @@ function toast(msg, tipo) {
 function soDigitos(s) { return String(s || '').replace(/\D/g, ''); }
 
 export async function montar(container) {
+  const ehLoja = ((auth.acessoAtual && auth.acessoAtual()) || {}).perfil === 'loja';
   let _aba = 'alertas';
   const nav = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);margin-bottom:18px' });
   const painel = el('div', {});
 
-  const ABAS = [{ id: 'alertas', rotulo: 'Alertas' }, { id: 'config', rotulo: 'Configuração' }];
+  const ABAS = ehLoja
+    ? [{ id: 'alertas', rotulo: 'Alertas' }]
+    : [{ id: 'alertas', rotulo: 'Alertas' }, { id: 'config', rotulo: 'Configuração' }];
   function renderNav() {
+    nav.style.display = ehLoja ? 'none' : 'flex'; // uma aba só? não mostra a barra
     nav.innerHTML = '';
     ABAS.forEach(a => {
       const on = a.id === _aba;
@@ -26,14 +31,17 @@ export async function montar(container) {
   }
   function render() {
     painel.innerHTML = '';
-    painel.append(_aba === 'alertas' ? abaAlertas() : abaConfig());
+    painel.append(_aba === 'alertas' ? abaAlertas(ehLoja) : abaConfig());
   }
   renderNav(); render();
-  container.append(casca('Radar operacional', el('div', {}, nav, painel), 'Motoboys parados ou sem sinal — só em corridas em rota (já coletadas).'));
+  const sub = ehLoja
+    ? 'Entregas suas que estão paradas ou sem sinal, em rota.'
+    : 'Motoboys parados ou sem sinal — só em corridas em rota (já coletadas).';
+  container.append(casca('Radar operacional', el('div', {}, nav, painel), sub));
 }
 
 // ── Aba: Alertas ──────────────────────────────────────────────────
-function abaAlertas() {
+function abaAlertas(ehLoja) {
   const wrap = el('div', {});
   const aviso = el('div', {});
   const resumo = el('div', { style: 'display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px' });
@@ -56,7 +64,7 @@ function abaAlertas() {
     const tel = soDigitos(a.telefone_principal);
 
     const btn = (txt, extra, onClick) => el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px;padding:6px 11px' + (extra || ''), onClick }, txt);
-    const acoes = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-left:auto' },
+    const acoes = ehLoja ? el('div', { style: 'margin-left:auto' }) : el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-left:auto' },
       tel ? btn('Ligar', '', () => { location.href = 'tel:' + tel; }) : el('span', {}),
       tel ? btn('Mensagem', '', () => { window.open(`https://wa.me/55${tel}?text=` + encodeURIComponent(`Olá ${a.motoboy_nome || ''}, tudo certo com a entrega ${a.protocolo}? Notamos que você está parado há ${a.minutos} min.`), '_blank'); }) : el('span', {}),
       btn('Ver no mapa', '', () => { window.open('/#/mapa?foco=' + a.motoboy_id, '_blank'); }),
@@ -83,13 +91,15 @@ function abaAlertas() {
   async function carregar() {
     if (!document.body.contains(wrap)) { if (timer) clearInterval(timer); return; }
     try {
-      const cfg = await get('/radar/config');
-      if (!cfg.configurado || !cfg.ativo) {
-        aviso.innerHTML = '';
-        aviso.append(el('div', { style: 'background:#fff7e6;border:1px solid #ffe4b0;border-radius:var(--lx-raio);padding:16px 18px;margin-bottom:16px;font-size:13.5px;color:#8a5a12' },
-          el('b', {}, 'Radar desligado. '), 'Defina os limites na aba ', el('b', {}, 'Configuração'), ' para ativar o monitoramento.'));
-        resumo.innerHTML = ''; lista.innerHTML = '';
-        return;
+      if (!ehLoja) {
+        const cfg = await get('/radar/config');
+        if (!cfg.configurado || !cfg.ativo) {
+          aviso.innerHTML = '';
+          aviso.append(el('div', { style: 'background:#fff7e6;border:1px solid #ffe4b0;border-radius:var(--lx-raio);padding:16px 18px;margin-bottom:16px;font-size:13.5px;color:#8a5a12' },
+            el('b', {}, 'Radar desligado. '), 'Defina os limites na aba ', el('b', {}, 'Configuração'), ' para ativar o monitoramento.'));
+          resumo.innerHTML = ''; lista.innerHTML = '';
+          return;
+        }
       }
       aviso.innerHTML = '';
       const r = await get('/radar/alertas');

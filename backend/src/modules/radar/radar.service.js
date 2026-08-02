@@ -39,7 +39,10 @@ async function salvarConfig({ empresaId, ativo, paradoAtencaoMin, paradoCriticoM
 }
 
 // ── Alertas (leitura) ─────────────────────────────────────────────
-async function listarAlertas({ empresaId }) {
+async function listarAlertas({ empresaId, lojaId = null }) {
+  const params = [empresaId];
+  let cond = `a.empresa_id = $1 AND a.status = 'ativo'`;
+  if (lojaId) { params.push(lojaId); cond += ` AND e.loja_id = $${params.length}`; }
   const { rows } = await query(
     `SELECT a.id, a.tipo, a.severidade, a.minutos, a.lat, a.lng, a.ultima_pos_em, a.parado_desde,
             a.entrega_id, e.protocolo,
@@ -47,8 +50,8 @@ async function listarAlertas({ empresaId }) {
        FROM radar_alertas a
        JOIN entregas e ON e.id = a.entrega_id
        JOIN motoboys m ON m.id = a.motoboy_id
-      WHERE a.empresa_id = $1 AND a.status = 'ativo'
-      ORDER BY (a.severidade = 'critico') DESC, a.minutos DESC`, [empresaId]);
+      WHERE ${cond}
+      ORDER BY (a.severidade = 'critico') DESC, a.minutos DESC`, params);
   return { alertas: rows };
 }
 

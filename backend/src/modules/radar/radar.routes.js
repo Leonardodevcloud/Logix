@@ -5,12 +5,13 @@ const service = require('./radar.service');
 
 function initRadarRoutes() {
   const router = express.Router();
-  router.use(verificarToken, resolverTenant, exigirTenant, exigirCentral);
+  router.use(verificarToken, resolverTenant, exigirTenant);
 
-  router.get('/config', async (req, res, next) => {
+  // Config: só a central lê e edita (limites e liga/desliga).
+  router.get('/config', exigirCentral, async (req, res, next) => {
     try { res.json(await service.getConfig({ empresaId: req.empresaId })); } catch (e) { next(e); }
   });
-  router.put('/config', async (req, res, next) => {
+  router.put('/config', exigirCentral, async (req, res, next) => {
     try {
       res.json(await service.salvarConfig({
         empresaId: req.empresaId,
@@ -24,10 +25,12 @@ function initRadarRoutes() {
     } catch (e) { next(e); }
   });
 
+  // Alertas: central vê tudo; loja vê só os das entregas dela (filtrado por lojaId).
   router.get('/alertas', async (req, res, next) => {
-    try { res.json(await service.listarAlertas({ empresaId: req.empresaId })); } catch (e) { next(e); }
+    try { res.json(await service.listarAlertas({ empresaId: req.empresaId, lojaId: req.lojaId || null })); } catch (e) { next(e); }
   });
-  router.post('/alertas/:id/dispensar', async (req, res, next) => {
+  // Dispensar é ação de gestão: só a central.
+  router.post('/alertas/:id/dispensar', exigirCentral, async (req, res, next) => {
     try { res.json(await service.dispensarAlerta({ empresaId: req.empresaId, id: req.params.id, minutos: req.body.minutos })); } catch (e) { next(e); }
   });
 
