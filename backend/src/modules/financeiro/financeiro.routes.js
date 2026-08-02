@@ -29,6 +29,9 @@ function initFinanceiroRoutes() {
   });
 
   // ── Faturamento / Saldo Motoboy ────────────────────────────────
+  router.get('/motoboys-lista', async (req, res, next) => {
+    try { res.json(await service.listarMotoboysSimples({ empresaId: req.empresaId })); } catch (e) { next(e); }
+  });
   router.get('/motoboy', async (req, res, next) => {
     try { res.json(await service.faturamentoMotoboy({ empresaId: req.empresaId, ...periodo(req) })); } catch (e) { next(e); }
   });

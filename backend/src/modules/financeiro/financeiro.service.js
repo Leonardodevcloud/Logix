@@ -347,9 +347,18 @@ async function estornarFechamento({ empresaId, id }) {
   }
 }
 
+// Lista simples de motoboys ativos (para o seletor de lançamento).
+async function listarMotoboysSimples({ empresaId }) {
+  const { rows } = await query(
+    `SELECT id AS motoboy_id, nome_completo AS motoboy_nome, codigo AS motoboy_codigo
+       FROM motoboys WHERE empresa_id = $1 AND status = 'ativo' ORDER BY nome_completo`, [empresaId]);
+  return { motoboys: rows };
+}
+
 module.exports = {
   faturamentoCliente, faturamentoClienteCentros, faturamentoClienteCorridas,
   faturamentoMotoboy, faturamentoMotoboyCorridas,
+  listarMotoboysSimples,
   listarCategorias, criarCategoria, atualizarCategoria, excluirCategoria,
   listarLancamentos, criarLancamento, excluirLancamento,
   extratoMotoboy,

@@ -190,7 +190,11 @@ function abaMotoboy(periodo) {
   const wrap = el('div', {});
   const topo = el('div', {});
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-  wrap.append(topo, lista);
+  const barraAcoes = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px' },
+    el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2)' }, 'Lance crédito (bônus, diária…) ou abatimento (adiantamento, multa…) para qualquer motoboy.'),
+    el('div', { style: 'flex:1' }),
+    el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: () => formLancamento(null, 'credito', () => carregar()) }, '+ Novo lançamento'));
+  wrap.append(topo, barraAcoes, lista);
   const expandido = new Set();
 
   async function carregar() {
@@ -344,7 +348,23 @@ async function formLancamento(m, tipoInicial, aoSalvar) {
   let cats = [];
   try { cats = (await get('/financeiro/categorias')).categorias || []; } catch {}
   let tipo = tipoInicial, catId = null;
+  let motoboyId = m ? m.motoboy_id : null;
+  let motoboyNome = m ? (m.motoboy_nome || '') : '';
   const hoje = new Date().toISOString().slice(0, 10);
+
+  // Seletor de motoboy — só quando o lançamento não é de um motoboy fixo.
+  let seletorMb = null;
+  if (!m) {
+    const sel = el('select', { class: 'lx-input', style: 'width:100%' });
+    sel.append(el('option', { value: '' }, 'Escolha o motoboy…'));
+    try {
+      const arr = (await get('/financeiro/motoboys-lista')).motoboys || [];
+      arr.forEach(mb => sel.append(el('option', { value: mb.motoboy_id }, '#' + String(mb.motoboy_codigo || 0).padStart(3, '0') + ' · ' + mb.motoboy_nome)));
+    } catch {}
+    sel.addEventListener('change', () => { motoboyId = sel.value || null; motoboyNome = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ''; });
+    seletorMb = campoF('Motoboy', sel);
+  }
+
   const segCred = el('button', {}, 'Crédito (soma)');
   const segAbat = el('button', {}, 'Abatimento (subtrai)');
   const seg = el('div', { style: 'display:flex;background:var(--lx-superficie-2);border-radius:10px;padding:4px;gap:4px' }, segCred, segAbat);
@@ -370,17 +390,20 @@ async function formLancamento(m, tipoInicial, aoSalvar) {
   segAbat.onclick = () => { tipo = 'abatimento'; catId = null; pintaSeg(); pintaCats(); };
   pintaSeg(); pintaCats();
   const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Lançar');
-  const ov = miniModal(`Novo lançamento — ${m.motoboy_nome || ''}`,
-    el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
-      campoF('Tipo', seg), campoF('Categoria', catWrap),
-      el('div', { style: 'display:flex;gap:12px' }, el('div', { style: 'flex:1' }, campoF('Valor', valor)), el('div', { style: 'flex:1' }, campoF('Competência', comp))),
-      campoF('Descrição (opcional)', desc)),
-    [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
+  const corpo = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+  if (seletorMb) corpo.append(seletorMb);
+  corpo.append(
+    campoF('Tipo', seg), campoF('Categoria', catWrap),
+    el('div', { style: 'display:flex;gap:12px' }, el('div', { style: 'flex:1' }, campoF('Valor', valor)), el('div', { style: 'flex:1' }, campoF('Competência', comp))),
+    campoF('Descrição (opcional)', desc));
+  const ov = miniModal(m ? `Novo lançamento — ${motoboyNome}` : 'Novo lançamento',
+    corpo, [el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn]);
   btn.onclick = async () => {
+    if (!motoboyId) { toast('Escolha o motoboy', 'erro'); return; }
     const cent = parseValor(valor.value);
     if (!cent) { toast('Informe um valor', 'erro'); return; }
     try { btn.disabled = true;
-      await post(`/financeiro/motoboy/${m.motoboy_id}/lancamentos`, { tipo, categoria_id: catId, valor_cent: cent, descricao: desc.value.trim() || null, competencia: comp.value || null });
+      await post(`/financeiro/motoboy/${motoboyId}/lancamentos`, { tipo, categoria_id: catId, valor_cent: cent, descricao: desc.value.trim() || null, competencia: comp.value || null });
       ov.remove(); toast('Lançado'); aoSalvar && aoSalvar();
     } catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
   };
