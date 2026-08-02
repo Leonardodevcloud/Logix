@@ -20,6 +20,27 @@ function restaurarTemaPadrao() {
   document.title = 'logix';
 }
 
+// Tela de "carregando" instantânea (overlay). Evita a tela branca enquanto a
+// sessão é restaurada — importante quando o backend está "frio" (cold start).
+function mostrarCarregando() {
+  if (document.getElementById('lx-boot')) return;
+  const ov = document.createElement('div');
+  ov.id = 'lx-boot';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--lx-fundo,#eef4fb)';
+  ov.innerHTML =
+    '<div style="width:48px;height:48px;border-radius:13px;background:var(--lx-azul-primario,#185FA5);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;box-shadow:0 8px 24px -8px rgba(4,44,83,.4)">LX</div>' +
+    '<div style="width:26px;height:26px;border:3px solid #cddcec;border-top-color:var(--lx-azul-primario,#185FA5);border-radius:50%;animation:lxspin .8s linear infinite"></div>' +
+    '<style>@keyframes lxspin{to{transform:rotate(360deg)}}</style>';
+  document.body.append(ov);
+}
+function esconderCarregando() {
+  const ov = document.getElementById('lx-boot');
+  if (!ov) return;
+  ov.style.transition = 'opacity .2s ease';
+  ov.style.opacity = '0';
+  setTimeout(() => ov.remove(), 220);
+}
+
 // Resolve a marca pelo domínio atual (ex.: painel.ig-express.com → IG).
 // Em domínios sem cliente (logix-ochre.vercel.app) cai no tema padrão.
 async function aplicarTemaDoHost() {
@@ -54,8 +75,11 @@ async function boot() {
   if (window.LOGIX_API) api.setBase(window.LOGIX_API);
   router.definirSaida(app);
 
-  // Boot: resolve a marca pelo domínio (white-label como painel.ig-express.com)
-  await aplicarTemaDoHost();
+  // Tema padrão na hora + tela de "carregando" (acaba com a tela branca no cold start).
+  restaurarTemaPadrao();
+  mostrarCarregando();
+  // Branding do domínio em segundo plano — NÃO trava o primeiro render.
+  aplicarTemaDoHost();
 
   router.rota('/login',                () => import('./modulos/login.js'));
   router.rota('/',                     () => import('./modulos/dashboard.js'));
@@ -79,11 +103,14 @@ async function boot() {
     return null;
   });
 
-  // Restaurar sessão e aplicar tema correto
-  const logado = await auth.restaurar();
-  if (logado) await aplicarTemaDoUsuario();
+  // Restaurar sessão (a guarda de rota precisa saber se está logado).
+  let logado = false;
+  try { logado = await auth.restaurar(); } catch { logado = false; }
+  // Tema do usuário em segundo plano — não trava a tela.
+  if (logado) aplicarTemaDoUsuario();
 
   router.iniciar();
+  esconderCarregando();
 
   // Eventos de mudança de sessão
   document.addEventListener('logix:login',      () => aplicarTemaDoUsuario());

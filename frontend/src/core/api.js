@@ -12,10 +12,23 @@ async function bruto(metodo, caminho, { corpo, headers = {}, empresaId } = {}) {
   const h = { 'Content-Type': 'application/json', ...headers };
   if (accessToken) h.Authorization = 'Bearer ' + accessToken;
   if (empresaId) h['X-Empresa-Id'] = empresaId;
-  return fetch(BASE + caminho, {
+  const opc = {
     method: metodo, headers: h, credentials: 'include',
     body: corpo ? JSON.stringify(corpo) : undefined,
-  });
+  };
+  // Timeout de segurança só em GET (leituras). Não afeta uploads (POST/PUT/PATCH).
+  // 40s dá folga para o cold start do backend, mas evita chamadas penduradas.
+  let timer = null;
+  if (metodo === 'GET' && typeof AbortController !== 'undefined') {
+    const ac = new AbortController();
+    opc.signal = ac.signal;
+    timer = setTimeout(() => ac.abort(), 40000);
+  }
+  try {
+    return await fetch(BASE + caminho, opc);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function tentarRenovar() {
