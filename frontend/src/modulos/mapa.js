@@ -14,6 +14,17 @@ const COR = {
 
 let VEL = 25; // km/h (vem do backend em config.vel_media_kmh)
 
+// Motoboys em alerta no radar (parado/sem sinal). Preenchido a cada carga; o
+// pino deles ganha um anel pulsante vermelho.
+let alertaIds = new Set();
+function garantirCssPulse() {
+  if (document.getElementById('lx-pulse-css')) return;
+  const st = document.createElement('style');
+  st.id = 'lx-pulse-css';
+  st.textContent = '@keyframes lxPulse{0%{transform:scale(.75);opacity:.9}100%{transform:scale(2);opacity:0}}.lx-pulse-anel{position:absolute;inset:-3px;border-radius:50%;border:3px solid #e23b3b;pointer-events:none;animation:lxPulse 1.5s ease-out infinite}';
+  document.head.append(st);
+}
+
 async function garantirLeaflet() {
   if (window.L) return;
   if (!document.getElementById('lx-leaflet-css')) {
@@ -82,16 +93,19 @@ function svgSpan(svg) { const s = document.createElement('span'); s.style.displa
 function pinMotoboy(m) {
   const cor = m.ocupado ? COR.vermelho : COR.verde;
   const ini = iniciais(m.nome);
+  const emAlerta = alertaIds.has(m.id);
   const inner = m.foto_url
     ? `<img src="${m.foto_url}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.style.background='${cor}';this.parentNode.style.color='#fff';this.parentNode.style.fontWeight='800';this.parentNode.style.fontSize='12px';this.parentNode.style.display='grid';this.parentNode.style.placeItems='center';this.parentNode.textContent='${ini}'">`
     : ini;
   const badge = m.ocupado
     ? `<div style="position:absolute;top:-5px;right:-6px;background:${cor};color:#fff;border:2px solid #fff;border-radius:10px;min-width:17px;height:17px;display:grid;place-items:center;font-size:9px;font-weight:800;padding:0 3px">${m.entregas_ativas}</div>`
     : '';
+  const anel = emAlerta ? `<div class="lx-pulse-anel"></div>` : '';
+  const borda = emAlerta ? COR.vermelho : cor;
   return window.L.divIcon({
     className: '',
-    html: `<div style="position:relative;width:42px;height:42px">
-      <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;border:3px solid ${cor};background:${cor};color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">${inner}</div>${badge}
+    html: `<div style="position:relative;width:42px;height:42px">${anel}
+      <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;border:3px solid ${borda};background:${cor};color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">${inner}</div>${badge}
     </div>`,
     iconSize: [42, 42], iconAnchor: [21, 21],
   });
@@ -100,6 +114,11 @@ function pinMotoboy(m) {
 export async function montar(container) {
   document.title = 'Mapa em tempo real — logix';
   await garantirLeaflet();
+  garantirCssPulse();
+
+  // Motoboy a focar ao abrir (vindo do Radar: /#/mapa?foco=<id>).
+  const focoId = new URLSearchParams((location.hash.split('?')[1] || '')).get('foco');
+  let focoFeito = false;
 
   // ── Layout tela cheia: mapa + painel lateral ──
   const mapaDiv = el('div', { style: 'position:absolute;inset:0' });
@@ -123,7 +142,8 @@ export async function montar(container) {
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, svgSpan(`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="${COR.navy}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6"/></svg>`), 'Loja'),
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, svgSpan(`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`), 'Centro de custo'),
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.verde};box-sizing:border-box` }), 'Motoboy livre'),
-    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box` }), 'Motoboy em corrida'));
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box` }), 'Motoboy em corrida'),
+    el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box;box-shadow:0 0 0 3px rgba(226,59,59,.35)` }), 'Alerta do radar'));
 
   const wrap = el('div', { style: 'position:fixed;inset:0;background:#eef4fb' }, mapaDiv, titulo, legenda, painel);
   container.append(wrap);
@@ -270,6 +290,16 @@ export async function montar(container) {
     // Reabre o painel do item selecionado com dados frescos.
     if (selecionado) abrirSelecionado();
 
+    // Foco vindo do Radar: centraliza no motoboy e abre o painel dele (uma vez).
+    if (!focoFeito && focoId) {
+      const m = dados.motoboys.find(x => x.id === focoId);
+      if (m && m.lat != null) {
+        focoFeito = true; primeiraVez = false;
+        mapa.setView([m.lat, m.lng], 16);
+        abrirPainelMotoboy(m); painel.style.transform = 'translateX(0)';
+      }
+    }
+
     // Enquadra tudo na primeira carga.
     if (primeiraVez) {
       const pts = [...dados.lojas.map(l => [l.lat, l.lng]), ...(dados.centros || []).filter(c => c.lat != null).map(c => [c.lat, c.lng]), ...dados.motoboys.filter(m => m.lat != null).map(m => [m.lat, m.lng])];
@@ -283,6 +313,11 @@ export async function montar(container) {
       const r = await get('/mapa/overview');
       VEL = r.config?.vel_media_kmh || VEL;
       dados = { lojas: r.lojas || [], motoboys: r.motoboys || [], centros: r.centros || [] };
+      // Radar: quem está em alerta (parado/sem sinal) ganha o anel pulsante.
+      try {
+        const ra = await get('/radar/alertas');
+        alertaIds = new Set((ra.alertas || []).map(a => a.motoboy_id));
+      } catch { alertaIds = new Set(); }
       const online = dados.motoboys.length;
       document.getElementById('mapa-status').textContent =
         `${dados.lojas.length} loja(s) · ${online} motoboy(s) online · atualizado ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -311,8 +346,8 @@ export async function montar(container) {
           if (evento === 'motoboy.posicao' && d?.motoboyId) {
             const m = dados.motoboys.find(x => x.id === d.motoboyId);
             if (m && d.lat != null) { m.lat = d.lat; m.lng = d.lng; if (markersMb[m.id]) markersMb[m.id].setLatLng([d.lat, d.lng]); }
-          } else if (['entrega.atribuida', 'entrega.concluida', 'entrega.status', 'oferta.disparada'].includes(evento)) {
-            carregar(); // mudança de carga: recarrega os ETAs
+          } else if (['entrega.atribuida', 'entrega.concluida', 'entrega.status', 'oferta.disparada', 'radar:atualizado'].includes(evento)) {
+            carregar(); // mudança de carga / radar: recarrega os ETAs e alertas
           }
         } catch {}
       };

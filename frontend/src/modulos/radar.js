@@ -59,7 +59,7 @@ function abaAlertas() {
     const acoes = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-left:auto' },
       tel ? btn('Ligar', '', () => { location.href = 'tel:' + tel; }) : el('span', {}),
       tel ? btn('Mensagem', '', () => { window.open(`https://wa.me/55${tel}?text=` + encodeURIComponent(`Olá ${a.motoboy_nome || ''}, tudo certo com a entrega ${a.protocolo}? Notamos que você está parado há ${a.minutos} min.`), '_blank'); }) : el('span', {}),
-      btn('Ver no mapa', '', () => { window.open('/#/mapa', '_blank'); }),
+      btn('Ver no mapa', '', () => { window.open('/#/mapa?foco=' + a.motoboy_id, '_blank'); }),
       btn('Dispensar', ';color:var(--lx-tinta-3)', () => dispensar(a)));
 
     return el('div', { style: `background:var(--lx-superficie);border:1px solid var(--lx-linha);border-left:4px solid ${cor};border-radius:var(--lx-raio);padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap` },
