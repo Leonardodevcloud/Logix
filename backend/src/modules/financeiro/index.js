@@ -1,3 +1,4 @@
 const { initFinanceiroRoutes } = require('./financeiro.routes');
+const { initFinanceiroTables } = require('./financeiro.migration');
 
-module.exports = { initFinanceiroRoutes };
+module.exports = { initFinanceiroRoutes, initFinanceiroTables };

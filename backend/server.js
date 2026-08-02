@@ -42,6 +42,7 @@ async function migrar() {
   await clientehub.initClienteHubTables();  // depois de config (FK -> frete_categorias) e motoboys
   await branding.initBrandingTables();
   await mapa.initMapaTables();    // depois de clientehub (coluna em cliente_regras_acionamento)
+  await financeiro.initFinanceiroTables();  // tabelas de lancamentos/fechamentos + ALTER entregas
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
