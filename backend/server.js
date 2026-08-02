@@ -26,6 +26,7 @@ const lojas = require('./src/modules/lojas');
 const config = require('./src/modules/config');
 const clientehub = require('./src/modules/clientehub');
 const financeiro = require('./src/modules/financeiro');
+const radar = require('./src/modules/radar');
 const mapa = require('./src/modules/mapa');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
@@ -43,6 +44,7 @@ async function migrar() {
   await branding.initBrandingTables();
   await mapa.initMapaTables();    // depois de clientehub (coluna em cliente_regras_acionamento)
   await financeiro.initFinanceiroTables();  // tabelas de lancamentos/fechamentos + ALTER entregas
+  await radar.initRadarTables();            // config + alertas do radar operacional
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -85,6 +87,7 @@ function montarApp() {
   api.use('/config', config.initConfigRoutes());
   api.use('/clientes', clientehub.initClienteHubRoutes());
   api.use('/financeiro', financeiro.initFinanceiroRoutes());
+  api.use('/radar', radar.initRadarRoutes());
   api.use('/mapa', mapa.initMapaRoutes());
   app.use('/api/v1', api);
 

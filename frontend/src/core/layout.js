@@ -32,10 +32,11 @@ function gruposNav() {
   if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
   // Mapa em tempo real logo abaixo do Rastreio (abre em aba dedicada).
-  // Central vê o mapa da empresa inteira; a loja vê só ela + os motoboys em
-  // corrida dela (o backend /mapa/overview já faz esse escopo pelo lojaId).
-  if (a.perfil === 'central_admin' || a.perfil === 'loja')
+  if (a.perfil === 'central_admin')
     operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'mapa', novaAba: true });
+  // Radar operacional: motoboys parados/sem sinal em corridas em rota (só central).
+  if (a.perfil === 'central_admin')
+    operacao.push({ rota: '/radar', rotulo: 'Radar', icone: 'acompanhamento' });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
   // Lojas: só para a administração da central (central_admin), não para usuários de loja.
