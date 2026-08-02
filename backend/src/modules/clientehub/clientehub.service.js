@@ -42,37 +42,45 @@ async function listarCentros({ empresaId, lojaId }) {
   return rows;
 }
 
-async function criarCentro({ empresaId, lojaId, nome, codigo, endereco, usuarioId, ip }) {
+async function criarCentro({ empresaId, lojaId, nome, codigo, endereco, lat, lng, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   if (!nome || !nome.trim()) throw AppError.validacao('Informe o nome do centro de custo');
-  // Geocodifica o endereço (se informado) para o centro aparecer no mapa.
-  let lat = null, lng = null;
+  // Coordenadas: usa as do pin (frontend) se vierem; senão geocodifica o endereço.
+  let flat = null, flng = null;
   const end = endereco && endereco.trim() ? endereco.trim() : null;
-  if (end && geocodificar) { try { const g = await geocodificar(end); lat = g.lat; lng = g.lng; } catch {} }
+  if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+    flat = Number(lat); flng = Number(lng);
+  } else if (end && geocodificar) {
+    try { const g = await geocodificar(end); flat = g.lat; flng = g.lng; } catch {}
+  }
   const { rows } = await query(
     `INSERT INTO cliente_centros_custo (empresa_id, loja_id, nome, codigo, endereco, lat, lng)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      RETURNING id, nome, codigo, ativo, criado_em, endereco, lat, lng`,
-    [empresaId, lojaId, nome.trim(), codigo || null, end, lat, lng]
+    [empresaId, lojaId, nome.trim(), codigo || null, end, flat, flng]
   );
   registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'criar_centro_custo', detalhe: { lojaId, id: rows[0].id }, ip }).catch(() => {});
   return rows[0];
 }
 
-async function atualizarCentro({ empresaId, lojaId, id, nome, codigo, ativo, endereco, usuarioId, ip }) {
+async function atualizarCentro({ empresaId, lojaId, id, nome, codigo, ativo, endereco, lat, lng, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   const sets = [], params = [];
   if (nome != null) { params.push(nome.trim()); sets.push(`nome = $${params.length}`); }
   if (codigo !== undefined) { params.push(codigo || null); sets.push(`codigo = $${params.length}`); }
   if (ativo != null) { params.push(!!ativo); sets.push(`ativo = $${params.length}`); }
-  // Endereço mudou: regeocodifica. Vazio limpa lat/lng (some do mapa).
+  // Endereço mudou: usa coords do pin se vierem; senão regeocodifica. Vazio limpa lat/lng.
   if (endereco !== undefined) {
     const end = endereco && endereco.trim() ? endereco.trim() : null;
-    let lat = null, lng = null;
-    if (end && geocodificar) { try { const g = await geocodificar(end); lat = g.lat; lng = g.lng; } catch {} }
+    let flat = null, flng = null;
+    if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+      flat = Number(lat); flng = Number(lng);
+    } else if (end && geocodificar) {
+      try { const g = await geocodificar(end); flat = g.lat; flng = g.lng; } catch {}
+    }
     params.push(end); sets.push(`endereco = $${params.length}`);
-    params.push(lat); sets.push(`lat = $${params.length}`);
-    params.push(lng); sets.push(`lng = $${params.length}`);
+    params.push(flat); sets.push(`lat = $${params.length}`);
+    params.push(flng); sets.push(`lng = $${params.length}`);
   }
   if (!sets.length) return { ok: true };
   params.push(id, lojaId);

@@ -1,7 +1,39 @@
 import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 import { EditorSla } from './sla-editor.js';
 import { EditorValores } from './valores-editor.js';
+
+// Carrega o Leaflet sob demanda (para o mini-mapa do centro de custo).
+let _leafletPronto = null;
+function garantirLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (_leafletPronto) return _leafletPronto;
+  _leafletPronto = new Promise((res, rej) => {
+    if (!document.getElementById('lx-leaflet-css')) {
+      const l = document.createElement('link');
+      l.id = 'lx-leaflet-css'; l.rel = 'stylesheet';
+      l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+      document.head.append(l);
+    }
+    const s = document.createElement('script');
+    s.id = 'lx-leaflet-js';
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.append(s);
+  });
+  return _leafletPronto;
+}
+// Busca de endereço (mesma API do lançamento de entrega). Aceita "lat,lng" p/ reverso.
+const _geoCacheCC = new Map();
+async function geocodeEndereco(q) {
+  const k = String(q).trim().toLowerCase();
+  if (_geoCacheCC.has(k)) return _geoCacheCC.get(k);
+  const r = await get('/entregas/geocode?q=' + encodeURIComponent(q));
+  const res = r.resultados || [];
+  _geoCacheCC.set(k, res);
+  return res;
+}
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -125,17 +157,87 @@ function abaCentros(loja) {
   function formCentro(c) {
     const nome = inp('Ex: Matriz, Filial Centro…', c?.nome || '');
     const codigo = inp('Código (opcional)', c?.codigo || '');
-    const endereco = inp('Rua, número, bairro, cidade', c?.endereco || '');
+    const endereco = inp('Digite e escolha uma sugestão…', c?.endereco || '');
+    let lat = (c && c.lat != null) ? Number(c.lat) : null;
+    let lng = (c && c.lng != null) ? Number(c.lng) : null;
+
+    // Campo de busca com dropdown de sugestões
+    const drop = el('div', { style: 'position:absolute;left:0;right:0;top:100%;z-index:50;background:#fff;border:1px solid var(--lx-linha);border-radius:9px;box-shadow:0 12px 30px -10px rgba(4,44,83,.3);max-height:200px;overflow:auto;display:none' });
+    const buscaWrap = el('div', { style: 'position:relative' }, endereco, drop);
+
+    // Mini-mapa com pin arrastável
+    const mapaBox = el('div', { style: 'height:210px;border-radius:9px;overflow:hidden;border:1px solid var(--lx-linha);display:none' });
+    const dica = el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);text-align:center;margin-top:6px;display:none' }, 'Arraste o pino para ajustar a posição exata.');
+    let map = null, marker = null;
+
+    async function mostrarMapa() {
+      if (lat == null || lng == null) { mapaBox.style.display = 'none'; dica.style.display = 'none'; return; }
+      mapaBox.style.display = 'block'; dica.style.display = 'block';
+      await garantirLeaflet();
+      if (!map) {
+        map = window.L.map(mapaBox, { center: [lat, lng], zoom: 16, scrollWheelZoom: true });
+        aplicarBasemap(map);
+        marker = window.L.marker([lat, lng], { draggable: true }).addTo(map);
+        marker.on('dragend', async () => {
+          const p = marker.getLatLng(); lat = p.lat; lng = p.lng;
+          try { const r = await geocodeEndereco(`${lat},${lng}`); if (r.length) endereco.value = r[0].endereco || r[0].label || endereco.value; } catch {}
+        });
+        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 60);
+      } else {
+        map.setView([lat, lng], 16); marker.setLatLng([lat, lng]);
+        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 60);
+      }
+    }
+
+    function escolher(s) {
+      endereco.value = s.endereco || s.label || endereco.value;
+      lat = (s.lat != null) ? Number(s.lat) : null;
+      lng = (s.lng != null) ? Number(s.lng) : null;
+      drop.style.display = 'none';
+      mostrarMapa();
+    }
+
+    let _t = null;
+    endereco.addEventListener('input', () => {
+      lat = null; lng = null; // texto mudou → precisa re-escolher/ajustar para ter coords
+      mapaBox.style.display = 'none'; dica.style.display = 'none';
+      clearTimeout(_t);
+      const q = endereco.value.trim();
+      if (q.length < 3) { drop.style.display = 'none'; return; }
+      _t = setTimeout(async () => {
+        try {
+          const res = await geocodeEndereco(q);
+          drop.innerHTML = '';
+          if (!res.length) { drop.style.display = 'none'; return; }
+          res.slice(0, 6).forEach(s => drop.append(
+            el('div', { style: 'padding:9px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--lx-linha)', onClick: () => escolher(s) }, s.endereco || s.label)));
+          drop.style.display = 'block';
+        } catch { drop.style.display = 'none'; }
+      }, 350);
+    });
+
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, c ? 'Salvar' : 'Criar');
     const ov = miniModal(c ? 'Editar centro de custo' : 'Novo centro de custo',
       el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
-        campo('Nome', nome), campo('Código', codigo), campo('Endereço (aparece no mapa)', endereco)), [
+        campo('Nome', nome), campo('Código', codigo),
+        campo('Endereço (aparece no mapa)', buscaWrap), mapaBox, dica), [
       el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn,
     ]);
+
+    // Fecha o dropdown ao clicar fora (auto-remove quando o modal some).
+    function fechaFora(e) {
+      if (!document.body.contains(ov)) { document.removeEventListener('click', fechaFora); return; }
+      if (!buscaWrap.contains(e.target)) drop.style.display = 'none';
+    }
+    document.addEventListener('click', fechaFora);
+
+    // Editando com coordenadas já salvas: já mostra o mapa.
+    if (lat != null && lng != null) mostrarMapa();
+
     btn.onclick = async () => {
       if (!nome.value.trim()) { toast('Informe o nome', 'erro'); return; }
       try { btn.disabled = true;
-        const corpo = { nome: nome.value.trim(), codigo: codigo.value.trim() || null, endereco: endereco.value.trim() || null };
+        const corpo = { nome: nome.value.trim(), codigo: codigo.value.trim() || null, endereco: endereco.value.trim() || null, lat, lng };
         if (c) await put(`/clientes/${loja.id}/centros/${c.id}`, corpo);
         else await post(`/clientes/${loja.id}/centros`, corpo);
         ov.remove(); toast('Salvo'); carregar();

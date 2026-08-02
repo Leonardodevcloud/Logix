@@ -33,10 +33,10 @@ function initClienteHubRoutes() {
     try { res.json(await service.listarCentros({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }
   });
   router.post('/:lojaId/centros', async (req, res, next) => {
-    try { res.status(201).json(await service.criarCentro({ ...base(req), nome: req.body.nome, codigo: req.body.codigo, endereco: req.body.endereco })); } catch (e) { next(e); }
+    try { res.status(201).json(await service.criarCentro({ ...base(req), nome: req.body.nome, codigo: req.body.codigo, endereco: req.body.endereco, lat: req.body.lat, lng: req.body.lng })); } catch (e) { next(e); }
   });
   router.put('/:lojaId/centros/:id', async (req, res, next) => {
-    try { res.json(await service.atualizarCentro({ ...base(req), id: req.params.id, nome: req.body.nome, codigo: req.body.codigo, ativo: req.body.ativo, endereco: req.body.endereco })); } catch (e) { next(e); }
+    try { res.json(await service.atualizarCentro({ ...base(req), id: req.params.id, nome: req.body.nome, codigo: req.body.codigo, ativo: req.body.ativo, endereco: req.body.endereco, lat: req.body.lat, lng: req.body.lng })); } catch (e) { next(e); }
   });
   router.delete('/:lojaId/centros/:id', async (req, res, next) => {
     try { res.json(await service.excluirCentro({ ...base(req), id: req.params.id })); } catch (e) { next(e); }
