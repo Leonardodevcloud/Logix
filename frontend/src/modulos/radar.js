@@ -55,6 +55,15 @@ function abaAlertas(ehLoja) {
       el('div', {}, el('div', { style: 'font-size:22px;font-weight:800;line-height:1' }, String(n)), el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);font-weight:600' }, rot)));
   }
 
+  // Desenha os cards de resumo na hora (evita a tela vazia enquanto a API carrega).
+  function renderResumo(crit, aten, sem) {
+    resumo.innerHTML = '';
+    resumo.append(
+      kpi('var(--lx-erro)', crit, 'Parados (crítico)'),
+      kpi('#b45309', aten, 'Parados (atenção)'),
+      kpi('var(--lx-azul-primario)', sem, 'Sem sinal'));
+  }
+
   function cardAlerta(a) {
     const critico = a.severidade === 'critico';
     const semSinal = a.tipo === 'sem_sinal';
@@ -97,7 +106,7 @@ function abaAlertas(ehLoja) {
           aviso.innerHTML = '';
           aviso.append(el('div', { style: 'background:#fff7e6;border:1px solid #ffe4b0;border-radius:var(--lx-raio);padding:16px 18px;margin-bottom:16px;font-size:13.5px;color:#8a5a12' },
             el('b', {}, 'Radar desligado. '), 'Defina os limites na aba ', el('b', {}, 'Configuração'), ' para ativar o monitoramento.'));
-          resumo.innerHTML = ''; lista.innerHTML = '';
+          resumo && renderResumo(0, 0, 0); lista.innerHTML = '';
           return;
         }
       }
@@ -107,8 +116,7 @@ function abaAlertas(ehLoja) {
       const critParado = al.filter(a => a.tipo === 'parado' && a.severidade === 'critico').length;
       const atenParado = al.filter(a => a.tipo === 'parado' && a.severidade === 'atencao').length;
       const semSinal = al.filter(a => a.tipo === 'sem_sinal').length;
-      resumo.innerHTML = '';
-      resumo.append(kpi('var(--lx-erro)', critParado, 'Parados (crítico)'), kpi('#b45309', atenParado, 'Parados (atenção)'), kpi('var(--lx-azul-primario)', semSinal, 'Sem sinal'));
+      renderResumo(critParado, atenParado, semSinal);
       lista.innerHTML = '';
       if (!al.length) lista.append(el('div', { style: 'padding:30px;text-align:center;color:var(--lx-tinta-3);font-size:13px;border:1px dashed var(--lx-linha);border-radius:var(--lx-raio)' }, 'Nenhum alerta agora — tudo em movimento. ✓'));
       else al.forEach(a => lista.append(cardAlerta(a)));
@@ -116,6 +124,10 @@ function abaAlertas(ehLoja) {
       lista.innerHTML = ''; lista.append(el('div', { style: 'padding:16px;color:var(--lx-erro);font-size:13px' }, e.message || 'Erro ao carregar'));
     }
   }
+
+  // Primeiro render instantâneo: cards com 0 + estado de carregando (sem tela vazia).
+  renderResumo(0, 0, 0);
+  lista.append(el('div', { style: 'padding:30px;text-align:center;color:var(--lx-tinta-3);font-size:13px;border:1px dashed var(--lx-linha);border-radius:var(--lx-raio)' }, 'Carregando alertas…'));
 
   carregar();
   timer = setInterval(carregar, 20000); // atualiza a cada 20s
