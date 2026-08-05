@@ -9,9 +9,27 @@ const BASE_ORS = 'https://api.openrouteservice.org';
 module.exports = function rastreioRoutes() {
   const router = express.Router();
 
-  // GET /motoboys/rastreio — lista todos motoboys com última posição e carga atual
+  // GET /motoboys/rastreio — lista motoboys com última posição e carga atual.
+  // Central vê todos; loja vê só os atribuídos a ela (respeitando o centro do usuário).
   router.get('/rastreio', exigirTenant, async (req, res, next) => {
     try {
+      const params = [req.empresaId];
+      let filtroLoja = '';
+      if (req.lojaId) {
+        // Centro do usuário logado (se for usuário de um centro de custo).
+        let centroId = null;
+        try {
+          const c = await query(`SELECT centro_id FROM cliente_centro_usuarios WHERE usuario_id = $1 LIMIT 1`, [req.usuario && req.usuario.id]);
+          centroId = c.rows[0] ? c.rows[0].centro_id : null;
+        } catch {}
+        params.push(req.lojaId); const pLoja = params.length;
+        params.push(centroId); const pCentro = params.length;
+        filtroLoja = `AND m.id IN (
+          SELECT motoboy_id FROM cliente_motoboys
+           WHERE loja_id = $${pLoja}
+             AND ($${pCentro}::uuid IS NULL OR centro_id IS NULL OR centro_id = $${pCentro})
+        )`;
+      }
       const { rows } = await query(
         `SELECT m.id, m.nome_completo, m.telefone_principal, m.foto_url, m.online, m.status,
                 r.lat, r.lng, r.capturado_em AS ultima_posicao_em,
@@ -32,10 +50,10 @@ module.exports = function rastreioRoutes() {
          LEFT JOIN entregas e ON e.motoboy_id = m.id
            AND e.empresa_id = m.empresa_id
            AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
-         WHERE m.empresa_id = $1 AND m.status = 'ativo'
+         WHERE m.empresa_id = $1 AND m.status = 'ativo' ${filtroLoja}
          GROUP BY m.id, r.lat, r.lng, r.capturado_em
          ORDER BY m.online DESC, r.capturado_em DESC NULLS LAST`,
-        [req.empresaId]
+        params
       );
       // Resolve a foto (selfie assinada) por leitura — a coluna foto_url do banco
       // não guarda a URL final. Mesmo esquema do app/mapa.
