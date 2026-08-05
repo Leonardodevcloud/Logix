@@ -23,15 +23,22 @@ function initMotoboysRoutes() {
   router.use(verificarToken, resolverTenant);
   router.use('/', rastreioRoutes());
   router.use('/', appRoutes());
+
+  // Loja: lista de motoboys ATRIBUÍDOS a ela, para lançar entrega. Precisa ficar
+  // ANTES do guard de módulo — a loja NÃO tem o módulo de gestão de motoboys, só
+  // usa essa lista para escolher quem faz a corrida (mesmo caso do /rastreio).
+  router.get('/', exigirTenant, async (req, res, next) => {
+    if (!req.lojaId) return next(); // central segue para o handler de gestão (com guard)
+    try {
+      res.json(await service.listarDisponiveisParaLoja({ empresaId: req.empresaId, lojaId: req.lojaId, usuarioId: req.usuario && req.usuario.id }));
+    } catch (e) { next(e); }
+  });
+
   router.use(exigirTenant, exigirModulo('motoboys'));
 
-  // GET /motoboys?status=ativo&online=true
+  // GET /motoboys?status=ativo&online=true  (gestão — central)
   router.get('/', exigirPermissao('motoboys.ver'), async (req, res, next) => {
     try {
-      // Loja: enxerga só os motoboys atribuídos a ela e disponíveis (online ou ao vivo).
-      if (req.lojaId) {
-        return res.json(await service.listarDisponiveisParaLoja({ empresaId: req.empresaId, lojaId: req.lojaId, usuarioId: req.usuario && req.usuario.id }));
-      }
       const online = req.query.online === undefined ? undefined : req.query.online === 'true';
       res.json(await service.listar({ empresaId: req.empresaId, status: req.query.status, online }));
     } catch (e) { next(e); }
