@@ -9,6 +9,19 @@ const { query } = require('../../../shared/db');
 const BASE_ORS = 'https://api.openrouteservice.org';
 const BASE_GOOGLE = 'https://maps.googleapis.com/maps/api';
 
+// Endereços salvos são por centro de custo. Para um usuário de loja, resolve o
+// centro dele (via cliente_centro_usuarios). Central não tem centro fixo → null.
+async function centroDoUsuario(req) {
+  if (!req.lojaId) return null;
+  try {
+    const { rows } = await query(
+      `SELECT centro_id FROM cliente_centro_usuarios WHERE usuario_id = $1 LIMIT 1`,
+      [req.usuario && req.usuario.id]
+    );
+    return rows[0] ? rows[0].centro_id : null;
+  } catch { return null; }
+}
+
 // ── Cache permanente no banco ─────────────────────────────────────────────────
 // Consulta o cache antes de chamar a API. Grava o resultado se não existir.
 async function geocodeComCache(chave, fn) {
@@ -175,9 +188,10 @@ module.exports = function geocodeRoutes() {
   // GET /entregas/enderecos-salvos
   router.get('/enderecos-salvos', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
+      const centroId = await centroDoUsuario(req);
       const q = (req.query.q || '').trim();
-      let sql = `SELECT * FROM enderecos_salvos WHERE empresa_id = $1`;
-      const params = [req.empresaId];
+      let sql = `SELECT * FROM enderecos_salvos WHERE empresa_id = $1 AND centro_id IS NOT DISTINCT FROM $2`;
+      const params = [req.empresaId, centroId];
       if (q) { params.push(`%${q}%`); sql += ` AND (apelido ILIKE $${params.length} OR endereco_completo ILIKE $${params.length})`; }
       sql += ` ORDER BY is_coleta_padrao DESC, uso_count DESC, apelido LIMIT 20`;
       const { rows } = await query(sql, params);
@@ -190,19 +204,20 @@ module.exports = function geocodeRoutes() {
     try {
       const { apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep, is_coleta_padrao } = req.body;
       if (!apelido || !endereco_completo) throw AppError.validacao('Apelido e endereço são obrigatórios');
+      const centroId = await centroDoUsuario(req);
       if (is_coleta_padrao) {
-        await query(`UPDATE enderecos_salvos SET is_coleta_padrao = false WHERE empresa_id = $1 AND is_coleta_padrao = true`, [req.empresaId]);
+        await query(`UPDATE enderecos_salvos SET is_coleta_padrao = false WHERE empresa_id = $1 AND centro_id IS NOT DISTINCT FROM $2 AND is_coleta_padrao = true`, [req.empresaId, centroId]);
       }
       const { rows } = await query(
-        `INSERT INTO enderecos_salvos (empresa_id, apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep, is_coleta_padrao)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-         ON CONFLICT (empresa_id, apelido) DO UPDATE SET
+        `INSERT INTO enderecos_salvos (empresa_id, loja_id, centro_id, apelido, endereco_completo, lat, lng, bairro, cidade, uf, cep, is_coleta_padrao)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (empresa_id, centro_id, apelido) DO UPDATE SET
            endereco_completo = EXCLUDED.endereco_completo, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
            bairro = EXCLUDED.bairro, cidade = EXCLUDED.cidade, uf = EXCLUDED.uf, cep = EXCLUDED.cep,
            is_coleta_padrao = EXCLUDED.is_coleta_padrao,
            uso_count = enderecos_salvos.uso_count + 1, atualizado_em = now()
          RETURNING *`,
-        [req.empresaId, apelido.trim(), endereco_completo, lat||null, lng||null, bairro||null, cidade||null, uf||null, cep||null, !!is_coleta_padrao]
+        [req.empresaId, req.lojaId || null, centroId, apelido.trim(), endereco_completo, lat||null, lng||null, bairro||null, cidade||null, uf||null, cep||null, !!is_coleta_padrao]
       );
       res.status(201).json(rows[0]);
     } catch (e) { next(e); }
@@ -211,7 +226,8 @@ module.exports = function geocodeRoutes() {
   // DELETE /entregas/enderecos-salvos/:id
   router.delete('/enderecos-salvos/:id', exigirTenant, exigirPermissao('entregas.criar'), async (req, res, next) => {
     try {
-      await query(`DELETE FROM enderecos_salvos WHERE id = $1 AND empresa_id = $2`, [req.params.id, req.empresaId]);
+      const centroId = await centroDoUsuario(req);
+      await query(`DELETE FROM enderecos_salvos WHERE id = $1 AND empresa_id = $2 AND centro_id IS NOT DISTINCT FROM $3`, [req.params.id, req.empresaId, centroId]);
       res.json({ ok: true });
     } catch (e) { next(e); }
   });

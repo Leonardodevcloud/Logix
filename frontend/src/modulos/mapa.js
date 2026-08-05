@@ -183,17 +183,21 @@ export async function montar(container) {
         '✓ Livre agora — pronto para um novo serviço'));
     }
 
-    // Lojas mais próximas a partir de onde ele fica livre.
+    // Lojas e centros de custo mais próximos de onde ele fica livre.
     const origem = m.posicao_livre || { lat: m.lat, lng: m.lng };
-    const prox = dados.lojas.map(l => {
-      const km = haversineKm(origem, l);
-      return km == null ? null : { nome: l.nome, km, min: kmMin(km) };
-    }).filter(Boolean).sort((a, b) => a.km - b.km).slice(0, 6);
+    const alvos = [
+      ...dados.lojas.filter(l => l.lat != null).map(l => ({ nome: l.nome, tipo: 'Loja', lat: l.lat, lng: l.lng })),
+      ...(dados.centros || []).filter(c => c.lat != null).map(c => ({ nome: c.nome, tipo: 'Centro de custo' + (c.loja_nome ? ' · ' + c.loja_nome : ''), lat: c.lat, lng: c.lng })),
+    ];
+    const prox = alvos.map(a => {
+      const km = haversineKm(origem, a);
+      return km == null ? null : { nome: a.nome, tipo: a.tipo, km, min: kmMin(km) };
+    }).filter(Boolean).sort((a, b) => a.km - b.km).slice(0, 8);
 
     painelBody.append(el('div', { style: 'font-size:11px;color:#8ba5bc;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 8px' },
-      m.ocupado ? 'Lojas mais próximas (após concluir)' : 'Lojas mais próximas'));
-    if (!prox.length) painelBody.append(el('div', { style: 'font-size:12px;color:#8ba5bc' }, 'Nenhuma loja com endereço.'));
-    prox.forEach(l => painelBody.append(linhaProx(l.nome, l.km, l.min)));
+      m.ocupado ? 'Mais próximos (após concluir)' : 'Lojas e centros mais próximos'));
+    if (!prox.length) painelBody.append(el('div', { style: 'font-size:12px;color:#8ba5bc' }, 'Nenhum ponto com endereço.'));
+    prox.forEach(l => painelBody.append(linhaProx(l.nome, l.km, l.min, l.tipo)));
   }
 
   function abrirPainelLoja(l) {
@@ -228,11 +232,13 @@ export async function montar(container) {
           el('div', { style: 'font-size:10px;color:#8ba5bc' }, fmtKm(km))))));
   }
 
-  function linhaProx(nome, km, min) {
+  function linhaProx(nome, km, min, tipo) {
     return el('div', { style: `display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${COR.linha}` },
       el('div', { style: `width:26px;height:26px;border-radius:7px;background:${COR.azulC};display:grid;place-items:center;flex-shrink:0` },
         el('span', { html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2"><path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>' })),
-      el('div', { style: 'flex:1;min-width:0;font-weight:700;font-size:13px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, nome),
+      el('div', { style: 'flex:1;min-width:0' },
+        el('div', { style: 'font-weight:700;font-size:13px;color:#0e2138;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, nome),
+        tipo ? el('div', { style: 'font-size:10px;color:#8ba5bc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, tipo) : ''),
       el('div', { style: 'text-align:right;flex-shrink:0' },
         el('div', { style: `font-weight:800;font-size:13px;color:${COR.azul}` }, fmtMin(min)),
         el('div', { style: 'font-size:10px;color:#8ba5bc' }, fmtKm(km))));
@@ -302,8 +308,14 @@ export async function montar(container) {
 
     // Enquadra tudo na primeira carga.
     if (primeiraVez) {
-      const pts = [...dados.lojas.map(l => [l.lat, l.lng]), ...(dados.centros || []).filter(c => c.lat != null).map(c => [c.lat, c.lng]), ...dados.motoboys.filter(m => m.lat != null).map(m => [m.lat, m.lng])];
-      if (pts.length) mapa.fitBounds(pts, { padding: [60, 60], maxZoom: 14 });
+      // Enquadra na região da(s) loja(s)/centro(s) — não afasta por motoboy distante.
+      const base = [
+        ...dados.lojas.filter(l => l.lat != null).map(l => [l.lat, l.lng]),
+        ...(dados.centros || []).filter(c => c.lat != null).map(c => [c.lat, c.lng]),
+      ];
+      const pts = base.length ? base : dados.motoboys.filter(m => m.lat != null).map(m => [m.lat, m.lng]);
+      if (pts.length === 1) mapa.setView(pts[0], 14);
+      else if (pts.length) mapa.fitBounds(pts, { padding: [70, 70], maxZoom: 15 });
       primeiraVez = false;
     }
   }

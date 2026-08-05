@@ -2,6 +2,7 @@ const express = require('express');
 const { exigirTenant } = require('../../middleware/tenant');
 const { query } = require('../../shared/db');
 const { httpRequest } = require('../../shared/httpRequest');
+const storage = require('../../shared/storage');
 
 const BASE_ORS = 'https://api.openrouteservice.org';
 
@@ -36,6 +37,24 @@ module.exports = function rastreioRoutes() {
          ORDER BY m.online DESC, r.capturado_em DESC NULLS LAST`,
         [req.empresaId]
       );
+      // Resolve a foto (selfie assinada) por leitura — a coluna foto_url do banco
+      // não guarda a URL final. Mesmo esquema do app/mapa.
+      if (rows.length) {
+        try {
+          const ids = rows.map(r => r.id);
+          const { rows: docs } = await query(
+            `SELECT motoboy_id, storage_key FROM motoboy_documentos
+              WHERE tipo = 'selfie' AND motoboy_id = ANY($1::uuid[])`,
+            [ids]
+          );
+          const keyByMb = new Map();
+          for (const d of docs) { if (!keyByMb.has(d.motoboy_id)) keyByMb.set(d.motoboy_id, d.storage_key); }
+          for (const r of rows) {
+            const k = keyByMb.get(r.id);
+            r.foto_url = k ? await storage.urlDe(k).catch(() => null) : null;
+          }
+        } catch { /* mantém foto_url do SELECT como fallback */ }
+      }
       res.json(rows);
     } catch (e) { next(e); }
   });

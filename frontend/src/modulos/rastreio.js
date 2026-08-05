@@ -3,6 +3,19 @@ import { el } from '../core/ui.js';
 import { get, getToken } from '../core/api.js';
 import { aplicarBasemap } from '../core/mapa-tiles.js';
 
+// Avatar do motoboy no rastreio: foto (selfie) com fallback para iniciais.
+function avatarRast(m, cor, ini) {
+  const box = el('div', { class: 'lx-mb-av', style: `background:${cor};overflow:hidden` });
+  if (m && m.foto_url) {
+    const img = el('img', { src: m.foto_url, style: 'width:100%;height:100%;object-fit:cover;display:block' });
+    img.onerror = () => { box.textContent = ini; };
+    box.append(img);
+  } else {
+    box.textContent = ini;
+  }
+  return box;
+}
+
 const BASE = window.LOGIX_API || '/api/v1';
 
 // SVG helpers inline (sem dependência de webfont)
@@ -349,7 +362,7 @@ export async function montar(container) {
 
       card.append(
         el('div', { class: 'lx-mb-top' },
-          el('div', { class: 'lx-mb-av', style: `background:${cor}` }, ini),
+          avatarRast(m, cor, ini),
           el('div', { style: 'flex:1;min-width:0' },
             el('span', { class: 'lx-mb-name' }, m.nome_completo),
             el('span', { class: 'lx-mb-sub' }, m.telefone_principal || '—')),

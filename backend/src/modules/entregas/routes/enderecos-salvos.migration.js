@@ -21,6 +21,14 @@ async function initEnderecosSalvosTables() {
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_end_salvos_empresa ON enderecos_salvos(empresa_id)`);
+
+  // Endereços salvos passam a ser por CENTRO DE CUSTO (usuários de centros
+  // diferentes do mesmo cliente não compartilham/sobrescrevem o padrão de coleta).
+  await query(`ALTER TABLE enderecos_salvos ADD COLUMN IF NOT EXISTS loja_id UUID`);
+  await query(`ALTER TABLE enderecos_salvos ADD COLUMN IF NOT EXISTS centro_id UUID`);
+  await query(`ALTER TABLE enderecos_salvos DROP CONSTRAINT IF EXISTS enderecos_salvos_empresa_id_apelido_key`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_end_salvos_centro ON enderecos_salvos(empresa_id, centro_id, apelido)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_end_salvos_centro ON enderecos_salvos(centro_id)`);
 }
 
 async function initGeocodeCacheTables() {
