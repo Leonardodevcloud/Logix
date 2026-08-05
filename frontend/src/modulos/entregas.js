@@ -708,7 +708,9 @@ export async function montar(container) {
         const ini = m.nome_completo.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
         const row = el('div', { style: `display:flex;align-items:center;gap:9px;padding:8px 10px;border:1.5px solid var(--lx-linha);border-radius:8px;cursor:pointer;${disp?'':'opacity:.7'}`, onClick: () => { mbId.val=m.id; mbListaWrap.querySelectorAll('[data-mb]').forEach(r=>{r.style.borderColor='var(--lx-linha)';r.style.background='';}); row.style.borderColor='var(--lx-azul-primario)'; row.style.background='var(--lx-info-bg)'; }});
         row.setAttribute('data-mb', m.id);
-        row.append(el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none` }, ini), el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: `font-size:11px;color:${disp?'var(--lx-ok)':'var(--lx-tinta-3)'}` }, disp ? 'Disponível' : 'Offline')));
+        const av = el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none;overflow:hidden` });
+        if (m.foto_url) { const img = el('img', { src: m.foto_url, style: 'width:100%;height:100%;object-fit:cover;display:block' }); img.onerror = () => { av.textContent = ini; }; av.append(img); } else { av.textContent = ini; }
+        row.append(av, el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: `font-size:11px;color:${disp?'var(--lx-ok)':'var(--lx-tinta-3)'}` }, disp ? 'Disponível' : 'Offline')));
         mbListaWrap.append(row);
       });
       if (!lista.length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:4px 0' }, 'Nenhum motoboy disponível. Confira a atribuição de motos deste cliente.'));

@@ -1,4 +1,5 @@
 const { query } = require('../../shared/db');
+const storage = require('../../shared/storage');
 const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, ERRO_MSGS } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
@@ -105,6 +106,22 @@ async function listarDisponiveisParaLoja({ empresaId, lojaId, usuarioId }) {
       ORDER BY disponivel DESC, m.nome_completo`,
     [lojaId, empresaId, centroId]
   );
+  // Resolve a foto (selfie assinada) por leitura — a coluna foto_url do banco não
+  // guarda a URL final. Mesmo esquema do rastreio/app.
+  if (rows.length) {
+    try {
+      const ids = rows.map(r => r.id);
+      const { rows: docs } = await query(
+        `SELECT motoboy_id, storage_key FROM motoboy_documentos
+          WHERE tipo = 'selfie' AND motoboy_id = ANY($1::uuid[])`, [ids]);
+      const keyByMb = new Map();
+      for (const d of docs) { if (!keyByMb.has(d.motoboy_id)) keyByMb.set(d.motoboy_id, d.storage_key); }
+      for (const r of rows) {
+        const k = keyByMb.get(r.id);
+        r.foto_url = k ? await storage.urlDe(k).catch(() => null) : null;
+      }
+    } catch { /* mantém foto_url do SELECT */ }
+  }
   return rows;
 }
 
