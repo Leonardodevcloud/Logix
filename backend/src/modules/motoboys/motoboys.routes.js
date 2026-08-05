@@ -28,6 +28,10 @@ function initMotoboysRoutes() {
   // GET /motoboys?status=ativo&online=true
   router.get('/', exigirPermissao('motoboys.ver'), async (req, res, next) => {
     try {
+      // Loja: enxerga só os motoboys atribuídos a ela e disponíveis (online ou ao vivo).
+      if (req.lojaId) {
+        return res.json(await service.listarDisponiveisParaLoja({ empresaId: req.empresaId, lojaId: req.lojaId }));
+      }
       const online = req.query.online === undefined ? undefined : req.query.online === 'true';
       res.json(await service.listar({ empresaId: req.empresaId, status: req.query.status, online }));
     } catch (e) { next(e); }

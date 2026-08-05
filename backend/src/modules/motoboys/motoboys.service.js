@@ -76,7 +76,28 @@ async function definirOnline({ empresaId, id, online }) {
   return rows[0];
 }
 
-module.exports = { listar, obter, criar, atualizar, definirOnline, desativar, reativar };
+// Para a LOJA: só os motoboys atribuídos a ela (exclusivos, tela "Atribuição de
+// motos"), e disponíveis para receber corrida = online OU "ao vivo" (posição
+// recente). O campo `online` na resposta reflete essa disponibilidade — o app às
+// vezes não marca o flag online mas segue enviando GPS (aparece no rastreio).
+async function listarDisponiveisParaLoja({ empresaId, lojaId }) {
+  const { rows } = await query(
+    `SELECT DISTINCT m.id, m.nome_completo, m.cpf, m.telefone_principal, m.status, m.foto_url,
+            (m.online = TRUE OR r.capturado_em > now() - interval '10 minutes') AS online
+       FROM cliente_motoboys cm
+       JOIN motoboys m ON m.id = cm.motoboy_id
+       LEFT JOIN LATERAL (
+         SELECT capturado_em FROM rastreamento WHERE motoboy_id = m.id ORDER BY capturado_em DESC LIMIT 1
+       ) r ON true
+      WHERE cm.loja_id = $1 AND m.empresa_id = $2 AND m.status = 'ativo'
+        AND (m.online = TRUE OR r.capturado_em > now() - interval '10 minutes')
+      ORDER BY m.nome_completo`,
+    [lojaId, empresaId]
+  );
+  return rows;
+}
+
+module.exports = { listar, listarDisponiveisParaLoja, obter, criar, atualizar, definirOnline, desativar, reativar };
 
 // Desativação lógica (não apaga do banco)
 async function desativar({ empresaId, id, usuarioId, ip }) {
