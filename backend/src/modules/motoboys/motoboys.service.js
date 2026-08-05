@@ -83,15 +83,16 @@ async function definirOnline({ empresaId, id, online }) {
 async function listarDisponiveisParaLoja({ empresaId, lojaId }) {
   const { rows } = await query(
     `SELECT DISTINCT m.id, m.nome_completo, m.cpf, m.telefone_principal, m.status, m.foto_url,
-            (m.online = TRUE OR r.capturado_em > now() - interval '10 minutes') AS online
+            m.online,
+            (r.capturado_em > now() - interval '15 minutes') AS ao_vivo,
+            (m.online = TRUE OR r.capturado_em > now() - interval '15 minutes') AS disponivel
        FROM cliente_motoboys cm
        JOIN motoboys m ON m.id = cm.motoboy_id
        LEFT JOIN LATERAL (
          SELECT capturado_em FROM rastreamento WHERE motoboy_id = m.id ORDER BY capturado_em DESC LIMIT 1
        ) r ON true
       WHERE cm.loja_id = $1 AND m.empresa_id = $2 AND m.status = 'ativo'
-        AND (m.online = TRUE OR r.capturado_em > now() - interval '10 minutes')
-      ORDER BY m.nome_completo`,
+      ORDER BY disponivel DESC, m.nome_completo`,
     [lojaId, empresaId]
   );
   return rows;

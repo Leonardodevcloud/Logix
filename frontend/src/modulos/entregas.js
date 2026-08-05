@@ -700,14 +700,18 @@ export async function montar(container) {
     try {
       const mbs = await get('/motoboys?online=true').catch(() => []);
       const CORES = ['#185FA5','#0F6E56','#534AB7','#854F0B'];
-      mbs.filter(m => m.online && m.status!=='inativo').forEach((m,i) => {
+      // Mostra todos os motoboys que o backend devolveu (central = online; loja =
+      // seus atribuídos). Não filtra mais por m.online no cliente.
+      const lista = mbs.filter(m => m.status !== 'inativo');
+      lista.forEach((m,i) => {
+        const disp = (m.disponivel != null) ? m.disponivel : !!m.online;
         const ini = m.nome_completo.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
-        const row = el('div', { style: 'display:flex;align-items:center;gap:9px;padding:8px 10px;border:1.5px solid var(--lx-linha);border-radius:8px;cursor:pointer', onClick: () => { mbId.val=m.id; mbListaWrap.querySelectorAll('[data-mb]').forEach(r=>{r.style.borderColor='var(--lx-linha)';r.style.background='';}); row.style.borderColor='var(--lx-azul-primario)'; row.style.background='var(--lx-info-bg)'; }});
+        const row = el('div', { style: `display:flex;align-items:center;gap:9px;padding:8px 10px;border:1.5px solid var(--lx-linha);border-radius:8px;cursor:pointer;${disp?'':'opacity:.7'}`, onClick: () => { mbId.val=m.id; mbListaWrap.querySelectorAll('[data-mb]').forEach(r=>{r.style.borderColor='var(--lx-linha)';r.style.background='';}); row.style.borderColor='var(--lx-azul-primario)'; row.style.background='var(--lx-info-bg)'; }});
         row.setAttribute('data-mb', m.id);
-        row.append(el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none` }, ini), el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `Online · ${m.carga||0}`)));
+        row.append(el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none` }, ini), el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: `font-size:11px;color:${disp?'var(--lx-ok)':'var(--lx-tinta-3)'}` }, disp ? 'Disponível' : 'Offline')));
         mbListaWrap.append(row);
       });
-      if (!mbs.filter(m=>m.online).length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:4px 0' }, 'Nenhum online.'));
+      if (!lista.length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:4px 0' }, 'Nenhum motoboy disponível. Confira a atribuição de motos deste cliente.'));
     } catch {}
   })();
 
