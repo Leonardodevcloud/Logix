@@ -85,6 +85,13 @@ async function initClienteHubTables() {
   await query(`CREATE INDEX IF NOT EXISTS idx_cli_motoboys_loja ON cliente_motoboys(loja_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cli_motoboys_motoboy ON cliente_motoboys(motoboy_id)`);
 
+  // Atribuição pode ser da LOJA inteira (centro_id NULL = todos os centros veem)
+  // ou de um CENTRO específico (só aquele centro vê o motoboy).
+  await query(`ALTER TABLE cliente_motoboys ADD COLUMN IF NOT EXISTS centro_id UUID REFERENCES cliente_centros_custo(id) ON DELETE CASCADE`);
+  await query(`ALTER TABLE cliente_motoboys DROP CONSTRAINT IF EXISTS cliente_motoboys_loja_id_motoboy_id_modalidade_id_key`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_cli_motoboys ON cliente_motoboys(loja_id, motoboy_id, modalidade_id, centro_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_cli_motoboys_centro ON cliente_motoboys(centro_id)`);
+
   // ── Endereços de um centro de custo ─────────────────────────────
   // Um centro de custo (sub-loja) pode ter vários endereços físicos. Cada um é
   // geocodificado no cadastro (lat/lng) para aparecer no mapa em tempo real.

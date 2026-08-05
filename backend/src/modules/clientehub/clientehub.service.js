@@ -312,20 +312,22 @@ async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos 
 async function listarMotoboysExclusivos({ empresaId, lojaId }) {
   await exigirLoja(empresaId, lojaId);
   const { rows } = await query(
-    `SELECT cmb.id, cmb.motoboy_id, cmb.modalidade_id,
+    `SELECT cmb.id, cmb.motoboy_id, cmb.modalidade_id, cmb.centro_id,
             m.nome_completo, m.codigo, m.online,
-            c.nome AS modalidade_nome, c.cor AS modalidade_cor
+            c.nome AS modalidade_nome, c.cor AS modalidade_cor,
+            cc.nome AS centro_nome
        FROM cliente_motoboys cmb
        JOIN motoboys m ON m.id = cmb.motoboy_id
        LEFT JOIN cliente_modalidades cm ON cm.id = cmb.modalidade_id
        LEFT JOIN frete_categorias c ON c.id = cm.categoria_id
+       LEFT JOIN cliente_centros_custo cc ON cc.id = cmb.centro_id
       WHERE cmb.loja_id = $1 ORDER BY m.codigo`,
     [lojaId]
   );
   return rows;
 }
 
-async function atribuirMotoboy({ empresaId, lojaId, motoboyId, modalidadeId, usuarioId, ip }) {
+async function atribuirMotoboy({ empresaId, lojaId, motoboyId, modalidadeId, centroId, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   const mb = await query(`SELECT id FROM motoboys WHERE id = $1 AND empresa_id = $2`, [motoboyId, empresaId]);
   if (!mb.rows[0]) throw AppError.naoEncontrado('Motoboy não encontrado');
@@ -333,16 +335,20 @@ async function atribuirMotoboy({ empresaId, lojaId, motoboyId, modalidadeId, usu
     const md = await query(`SELECT id FROM cliente_modalidades WHERE id = $1 AND loja_id = $2`, [modalidadeId, lojaId]);
     if (!md.rows[0]) throw AppError.validacao('Modalidade inválida para este cliente');
   }
+  if (centroId) {
+    const cc = await query(`SELECT id FROM cliente_centros_custo WHERE id = $1 AND loja_id = $2`, [centroId, lojaId]);
+    if (!cc.rows[0]) throw AppError.validacao('Centro de custo inválido para este cliente');
+  }
   try {
     const { rows } = await query(
-      `INSERT INTO cliente_motoboys (empresa_id, loja_id, motoboy_id, modalidade_id)
-       VALUES ($1,$2,$3,$4) RETURNING id`,
-      [empresaId, lojaId, motoboyId, modalidadeId || null]
+      `INSERT INTO cliente_motoboys (empresa_id, loja_id, motoboy_id, modalidade_id, centro_id)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [empresaId, lojaId, motoboyId, modalidadeId || null, centroId || null]
     );
-    registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'atribuir_motoboy', detalhe: { lojaId, motoboyId, modalidadeId }, ip }).catch(() => {});
+    registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'atribuir_motoboy', detalhe: { lojaId, motoboyId, modalidadeId, centroId }, ip }).catch(() => {});
     return rows[0];
   } catch (e) {
-    if (e.code === '23505') throw AppError.conflito('Esse motoboy já está atribuído nessa modalidade');
+    if (e.code === '23505') throw AppError.conflito('Esse motoboy já está atribuído nessa modalidade/centro');
     throw e;
   }
 }

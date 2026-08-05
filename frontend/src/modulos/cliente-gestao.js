@@ -560,12 +560,14 @@ function abaMotos(loja) {
             el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' },
               m.modalidade_nome
                 ? el('span', { style: `display:inline-flex;align-items:center;gap:5px` }, el('span', { style: `width:9px;height:9px;border-radius:3px;background:${m.modalidade_cor || '#999'}` }), m.modalidade_nome)
-                : el('span', {}, 'Todas as modalidades')))),
+                : el('span', {}, 'Todas as modalidades')),
+            el('div', { style: `font-size:11.5px;margin-top:2px;font-weight:700;color:${m.centro_nome ? '#0F766E' : 'var(--lx-azul-primario)'}` },
+              m.centro_nome ? ('Só o centro: ' + m.centro_nome) : 'Loja inteira (todos os centros)'))),
         el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 10px;font-size:12px;color:var(--lx-erro)', onClick: () => confirmar('Remover atribuição', `Remover ${m.nome_completo} deste cliente?`, async () => { await del(`/clientes/${loja.id}/motoboys/${m.id}`); toast('Removido'); carregar(); }, 'Remover', true) }, 'Remover'))));
   }
   async function formAtribuir() {
-    let motoboys = [], modalidades = [];
-    try { [motoboys, modalidades] = await Promise.all([get(`/clientes/${loja.id}/motoboys/disponiveis`), get(`/clientes/${loja.id}/modalidades`)]); }
+    let motoboys = [], modalidades = [], centros = [];
+    try { [motoboys, modalidades, centros] = await Promise.all([get(`/clientes/${loja.id}/motoboys/disponiveis`), get(`/clientes/${loja.id}/modalidades`), get(`/clientes/${loja.id}/centros`).catch(() => [])]); }
     catch { toast('Erro ao carregar dados', 'erro'); return; }
     if (!motoboys.length) { toast('Nenhum motoboy ativo na empresa', 'erro'); return; }
 
@@ -587,16 +589,18 @@ function abaMotos(loja) {
     buscaMb.addEventListener('input', renderMb); renderMb();
 
     const selMod = el('select', { class: 'lx-input' }, el('option', { value: '' }, 'Todas as modalidades'), ...modalidades.map(m => el('option', { value: m.id }, m.nome)));
+    const selCentro = el('select', { class: 'lx-input' }, el('option', { value: '' }, 'Loja inteira (todos os centros veem)'), ...centros.map(c => el('option', { value: c.id }, 'Só o centro: ' + c.nome)));
 
     const btn = el('button', { class: 'lx-btn lx-btn-primario' }, 'Atribuir');
     const ov = miniModal('Atribuir motoboy ao cliente', el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
       campo('Motoboy', el('div', {}, buscaMb, selMb)),
-      campo('Modalidade', selMod)), [
+      campo('Modalidade', selMod),
+      campo('Atribuir a', selCentro)), [
       el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btn,
     ]);
     btn.onclick = async () => {
       if (!mbEscolhido) { toast('Escolha um motoboy', 'erro'); return; }
-      try { btn.disabled = true; await post(`/clientes/${loja.id}/motoboys`, { motoboyId: mbEscolhido.id, modalidadeId: selMod.value || null }); ov.remove(); toast('Motoboy atribuído'); carregar(); }
+      try { btn.disabled = true; await post(`/clientes/${loja.id}/motoboys`, { motoboyId: mbEscolhido.id, modalidadeId: selMod.value || null, centroId: selCentro.value || null }); ov.remove(); toast('Motoboy atribuído'); carregar(); }
       catch (e) { toast(e.message || 'Erro', 'erro'); btn.disabled = false; }
     };
   }

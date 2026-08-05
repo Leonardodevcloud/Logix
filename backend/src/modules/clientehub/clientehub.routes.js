@@ -120,7 +120,7 @@ function initClienteHubRoutes() {
     try { res.json(await service.motoboysDisponiveis({ empresaId: req.empresaId })); } catch (e) { next(e); }
   });
   router.post('/:lojaId/motoboys', async (req, res, next) => {
-    try { res.status(201).json(await service.atribuirMotoboy({ ...base(req), motoboyId: req.body.motoboyId, modalidadeId: req.body.modalidadeId })); } catch (e) { next(e); }
+    try { res.status(201).json(await service.atribuirMotoboy({ ...base(req), motoboyId: req.body.motoboyId, modalidadeId: req.body.modalidadeId, centroId: req.body.centroId })); } catch (e) { next(e); }
   });
   router.delete('/:lojaId/motoboys/:id', async (req, res, next) => {
     try { res.json(await service.removerMotoboy({ ...base(req), id: req.params.id })); } catch (e) { next(e); }

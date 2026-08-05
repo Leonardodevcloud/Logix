@@ -80,7 +80,16 @@ async function definirOnline({ empresaId, id, online }) {
 // motos"), e disponíveis para receber corrida = online OU "ao vivo" (posição
 // recente). O campo `online` na resposta reflete essa disponibilidade — o app às
 // vezes não marca o flag online mas segue enviando GPS (aparece no rastreio).
-async function listarDisponiveisParaLoja({ empresaId, lojaId }) {
+async function listarDisponiveisParaLoja({ empresaId, lojaId, usuarioId }) {
+  // Centro do usuário logado (se for usuário de um centro de custo).
+  let centroId = null;
+  try {
+    const c = await query(`SELECT centro_id FROM cliente_centro_usuarios WHERE usuario_id = $1 LIMIT 1`, [usuarioId]);
+    centroId = c.rows[0] ? c.rows[0].centro_id : null;
+  } catch {}
+  // Regra: motoboys atribuídos à LOJA inteira (centro_id NULL) todos veem;
+  // atribuídos a um CENTRO só aquele centro vê. Usuário sem centro (admin da
+  // loja) vê tudo.
   const { rows } = await query(
     `SELECT DISTINCT m.id, m.nome_completo, m.cpf, m.telefone_principal, m.status, m.foto_url,
             m.online,
@@ -92,8 +101,9 @@ async function listarDisponiveisParaLoja({ empresaId, lojaId }) {
          SELECT capturado_em FROM rastreamento WHERE motoboy_id = m.id ORDER BY capturado_em DESC LIMIT 1
        ) r ON true
       WHERE cm.loja_id = $1 AND m.empresa_id = $2 AND m.status = 'ativo'
+        AND ($3::uuid IS NULL OR cm.centro_id IS NULL OR cm.centro_id = $3)
       ORDER BY disponivel DESC, m.nome_completo`,
-    [lojaId, empresaId]
+    [lojaId, empresaId, centroId]
   );
   return rows;
 }
