@@ -118,7 +118,7 @@ async function listar({ empresaId, status, motoboyId, lojaId = null }) {
   if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.motoboy_id, e.status, e.distancia_km, e.tempo_estimado_min,
-             e.coleta_endereco, e.criado_em, e.loja_id,
+             e.coleta_endereco, e.criado_em, e.concluida_em, e.loja_id,
              m.nome_completo AS motoboy_nome,
              (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e

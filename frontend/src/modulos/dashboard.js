@@ -213,7 +213,11 @@ async function dashCliente(content) {
       auth.temModulo('motoboys') ? get('/motoboys').catch(() => []) : Promise.resolve([]),
     ]);
     const emAndamento = entregas.filter(e => ['aguardando_coleta','em_coleta','em_rota'].includes(e.status));
-    const concluidas = entregas.filter(e => e.status === 'entregue').length;
+    // "Concluídas hoje" = entregues cuja conclusão caiu na data de hoje (fuso da
+    // Bahia — o servidor roda em UTC). Antes contava o histórico inteiro.
+    const dataBahia = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Bahia' });
+    const hoje = dataBahia(new Date());
+    const concluidas = entregas.filter(e => e.status === 'entregue' && e.concluida_em && dataBahia(e.concluida_em) === hoje).length;
     const naFila = entregas.filter(e => e.status === 'aguardando_atribuicao').length;
     const online = motoboys.filter(m => m.online).length;
 
