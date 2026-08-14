@@ -5,6 +5,7 @@ const { limiteRastreamento } = require('../../../middleware/rateLimit');
 const service = require('../entregas.service');
 const clienteHub = require('../../clientehub/clientehub.service');
 const AppError = require('../../../shared/AppError');
+const { query } = require('../../../shared/db');
 
 // Acompanhamento em tempo real + recebimento de posição do app.
 module.exports = function acompanhamentoRoutes() {
@@ -19,6 +20,27 @@ module.exports = function acompanhamentoRoutes() {
       if (req.lojaId) {
         const ok = await clienteHub.lojaPode(req.lojaId, permissao);
         if (!ok) throw AppError.proibido(msg || 'Ação não permitida para este cliente');
+      }
+      next();
+    } catch (e) { next(e); }
+  };
+
+  // Cancelamento pela loja: só exige a permissão 'pode_cancelar_associada' quando a
+  // corrida JÁ está associada (tem motoboy / saiu da fila). Corrida ainda "na fila"
+  // (aguardando atribuição, sem motoboy) a loja pode cancelar livremente.
+  const exigirCancelamentoPermitido = async (req, res, next) => {
+    try {
+      if (req.lojaId) {
+        const { rows } = await query(
+          `SELECT status, motoboy_id FROM entregas WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+          [req.params.id, req.empresaId, req.lojaId]
+        );
+        if (!rows[0]) throw AppError.naoEncontrado('Entrega não encontrada');
+        const associada = !!rows[0].motoboy_id || rows[0].status !== 'aguardando_atribuicao';
+        if (associada) {
+          const ok = await clienteHub.lojaPode(req.lojaId, 'pode_cancelar_associada');
+          if (!ok) throw AppError.proibido('Este cliente não tem permissão para cancelar corridas já associadas');
+        }
       }
       next();
     } catch (e) { next(e); }
@@ -82,7 +104,7 @@ module.exports = function acompanhamentoRoutes() {
 
   // PATCH /entregas/:id/cancelar
   router.patch('/:id/cancelar', exigirTenant,
-    exigirPermissaoCliente('pode_cancelar_associada', 'Este cliente não tem permissão para cancelar corridas já associadas'),
+    exigirCancelamentoPermitido,
     async (req, res, next) => {
     try {
       res.json(await service.cancelarEntrega({
