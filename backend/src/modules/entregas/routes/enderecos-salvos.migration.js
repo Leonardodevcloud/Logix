@@ -29,6 +29,12 @@ async function initEnderecosSalvosTables() {
   await query(`ALTER TABLE enderecos_salvos DROP CONSTRAINT IF EXISTS enderecos_salvos_empresa_id_apelido_key`);
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_end_salvos_centro ON enderecos_salvos(empresa_id, centro_id, apelido)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_end_salvos_centro ON enderecos_salvos(centro_id)`);
+  // Isolamento por LOJA: cada cliente (loja) só vê seus endereços. O índice único
+  // passa a incluir loja_id — sem isso, lojas diferentes com centro nulo colidiam
+  // e vazavam endereços entre si.
+  await query(`DROP INDEX IF EXISTS uq_end_salvos_centro`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_end_salvos_lojacentro ON enderecos_salvos(empresa_id, loja_id, centro_id, apelido)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_end_salvos_loja ON enderecos_salvos(loja_id)`);
 }
 
 async function initGeocodeCacheTables() {
