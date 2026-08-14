@@ -129,6 +129,17 @@ async function resumoEntregas({ empresaId, lojaId = null }) {
   return rows[0] || { em_andamento: 0, na_fila: 0, concluidas_hoje: 0 };
 }
 
+// Config de lançamento da loja (quais modos aparecem e qual é o padrão) — a
+// central controla isso por cliente. Central (sem loja) vê tudo liberado.
+async function configLancamentoLoja({ empresaId, lojaId }) {
+  if (!lojaId) return { permite_automatico: true, permite_manual: true, modo_padrao: 'auto' };
+  const { rows } = await query(
+    `SELECT permite_automatico, permite_manual, modo_padrao FROM lojas WHERE id = $1 AND empresa_id = $2`,
+    [lojaId, empresaId]
+  );
+  return rows[0] || { permite_automatico: true, permite_manual: true, modo_padrao: 'auto' };
+}
+
 async function listar({ empresaId, status, motoboyId, lojaId = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
   if (status) { params.push(status); cond.push(`e.status = $${params.length}`); }
@@ -1250,7 +1261,7 @@ async function liberarPonto({ empresaId, entregaId, pontoId, usuarioId, ip }) {
 }
 
 module.exports = { cancelarEntrega, liberarPonto,
-  criarEntrega, obter, listar, resumoEntregas, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  criarEntrega, obter, listar, resumoEntregas, configLancamentoLoja, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
   listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 

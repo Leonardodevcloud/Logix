@@ -24,6 +24,12 @@ async function initLojasTables() {
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_lojas_empresa ON lojas(empresa_id)`);
+
+  // Config de lançamento controlada pela central: quais modos a loja pode usar
+  // (Automático / Manual) e qual vem selecionado por padrão.
+  await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS permite_automatico BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS permite_manual BOOLEAN NOT NULL DEFAULT TRUE`);
+  await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS modo_padrao TEXT NOT NULL DEFAULT 'auto'`);
   // CNPJ único por empresa (uma loja não se repete dentro do mesmo tenant), mas permite null.
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_lojas_empresa_cnpj
                ON lojas(empresa_id, cnpj) WHERE cnpj IS NOT NULL`);

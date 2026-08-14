@@ -95,7 +95,10 @@ async function listarDisponiveisParaLoja({ empresaId, lojaId, usuarioId }) {
     `SELECT DISTINCT m.id, m.nome_completo, m.cpf, m.telefone_principal, m.status, m.foto_url,
             m.online,
             (r.capturado_em > now() - interval '15 minutes') AS ao_vivo,
-            (m.online = TRUE OR r.capturado_em > now() - interval '15 minutes') AS disponivel
+            (m.online = TRUE OR r.capturado_em > now() - interval '15 minutes') AS disponivel,
+            (SELECT count(*) FROM entregas e2
+               WHERE e2.motoboy_id = m.id
+                 AND e2.status IN ('aguardando_coleta','em_coleta','em_rota'))::int AS carga
        FROM cliente_motoboys cm
        JOIN motoboys m ON m.id = cm.motoboy_id
        LEFT JOIN LATERAL (

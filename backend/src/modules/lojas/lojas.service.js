@@ -100,6 +100,9 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
        telefone      = COALESCE($15, telefone),
        config_sla    = COALESCE($16, config_sla),
        ativo         = COALESCE($17, ativo),
+       permite_automatico = COALESCE($18, permite_automatico),
+       permite_manual     = COALESCE($19, permite_manual),
+       modo_padrao        = COALESCE($20, modo_padrao),
        atualizado_em = now()
      WHERE id = $1 AND empresa_id = $2 RETURNING *`,
     [id, empresaId, dados.nome_fantasia, dados.razao_social,
@@ -108,7 +111,10 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
      dados.logradouro, dados.numero, dados.complemento, dados.bairro, dados.cidade,
      dados.estado, dados.responsavel, dados.email, dados.telefone,
      dados.config_sla !== undefined ? JSON.stringify(dados.config_sla) : undefined,
-     dados.ativo]
+     dados.ativo,
+     dados.permite_automatico === undefined ? undefined : !!dados.permite_automatico,
+     dados.permite_manual === undefined ? undefined : !!dados.permite_manual,
+     dados.modo_padrao || undefined]
   );
 
   // Propaga e-mail/senha para o usuário de acesso da loja (tabela `usuarios`).

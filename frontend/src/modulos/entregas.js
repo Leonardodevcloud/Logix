@@ -696,6 +696,25 @@ export async function montar(container) {
   const btnManual = el('div', { style: 'flex:1;border:1.5px solid var(--lx-linha);border-radius:9px;padding:10px 12px;cursor:pointer', onClick: () => { modoAuto.val=false; btnManual.style.borderColor='var(--lx-azul-vivo)'; btnManual.style.background='var(--lx-info-bg)'; btnAuto.style.borderColor='var(--lx-linha)'; btnAuto.style.background=''; mbListaWrap.style.display='flex'; }},
     el('b', { style: 'font-size:12.5px;display:block' }, 'Manual'), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, 'Escolher da lista'));
 
+  // Config de lançamento definida pela central por cliente: quais modos aparecem
+  // (Automático/Manual) e qual vem selecionado por padrão.
+  (async () => {
+    try {
+      const cfg = await get('/entregas/config-lancamento').catch(() => ({}));
+      const pa = cfg.permite_automatico !== false;
+      const pm = cfg.permite_manual !== false;
+      if (!pa) btnAuto.style.display = 'none';
+      if (!pm) btnManual.style.display = 'none';
+      // Padrão manual quando configurado (e permitido) ou quando o automático não é permitido.
+      if ((cfg.modo_padrao === 'manual' && pm) || (!pa && pm)) {
+        modoAuto.val = false;
+        btnManual.style.borderColor = 'var(--lx-azul-vivo)'; btnManual.style.background = 'var(--lx-info-bg)';
+        btnAuto.style.borderColor = 'var(--lx-linha)'; btnAuto.style.background = '';
+        mbListaWrap.style.display = 'flex';
+      }
+    } catch {}
+  })();
+
   (async () => {
     try {
       const mbs = await get('/motoboys?online=true').catch(() => []);
@@ -710,7 +729,11 @@ export async function montar(container) {
         row.setAttribute('data-mb', m.id);
         const av = el('div', { style: `width:28px;height:28px;border-radius:50%;background:${CORES[i%CORES.length]};color:#fff;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none;overflow:hidden` });
         if (m.foto_url) { const img = el('img', { src: m.foto_url, style: 'width:100%;height:100%;object-fit:cover;display:block' }); img.onerror = () => { av.textContent = ini; }; av.append(img); } else { av.textContent = ini; }
-        row.append(av, el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: `font-size:11px;color:${disp?'var(--lx-ok)':'var(--lx-tinta-3)'}` }, disp ? 'Disponível' : 'Offline')));
+        const carga = m.carga || 0;
+        const st = !disp
+          ? { t: 'Offline', c: 'var(--lx-tinta-3)' }
+          : (carga > 0 ? { t: `Ocupado (${carga})`, c: '#b45309' } : { t: 'Livre', c: 'var(--lx-ok)' });
+        row.append(av, el('div', {}, el('b', { style: 'font-size:12px;display:block' }, m.nome_completo), el('span', { style: `font-size:11px;color:${st.c};font-weight:600` }, st.t)));
         mbListaWrap.append(row);
       });
       if (!lista.length) mbListaWrap.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);padding:4px 0' }, 'Nenhum motoboy disponível. Confira a atribuição de motos deste cliente.'));
@@ -887,11 +910,8 @@ export async function montar(container) {
           try {
             const r = await get('/entregas/' + e.id + '/rota');
             detalhesWrap.innerHTML = '';
-            // Coleta
-            detalhesWrap.append(
-              el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-profundo);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' }), 'Coleta'),
-              el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px;margin-bottom:6px' }, r.coleta?.endereco || '—'));
-            // Pontos
+            // Não repete Coleta/Destino aqui (já aparecem no cabeçalho do card e no
+            // mapa). O expandido mostra só os detalhes de entrega (NF, obs, etc.).
             (r.pontos || []).forEach((p, i) => {
               const infos = [
                 p.nome_fantasia ? ['ti-user', p.nome_fantasia] : null,
@@ -901,8 +921,7 @@ export async function montar(container) {
                 p.telefone ? ['ti-phone', p.telefone] : null,
               ].filter(Boolean);
               detalhesWrap.append(
-                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' }), `Destino ${i+1}`),
-                el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);padding-left:4px' }, p.endereco || '—'));
+                el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:2px' }, el('span', { style: 'display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--lx-azul-primario);', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' }), `Destino ${i+1}`));
               infos.forEach(([ico, txt]) => {
                 const row = el('div', { style: 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lx-tinta-2);padding:2px 0' });
                 row.append(el('i', { class: 'ti ' + ico, style: 'font-size:11px;flex:none;color:var(--lx-tinta-3)' }), document.createTextNode(txt));

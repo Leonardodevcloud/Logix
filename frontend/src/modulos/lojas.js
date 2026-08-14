@@ -115,6 +115,16 @@ export async function montar(container) {
     const fTel = input('Telefone', loja?.telefone);
     const fSenha = input('Senha de acesso' + (ed ? ' (deixe em branco p/ manter)' : ' *'), '', 'password');
 
+    // Config de lançamento (o que a loja pode usar ao criar corrida).
+    const fAuto = el('input', { type: 'checkbox' });
+    fAuto.checked = loja ? (loja.permite_automatico !== false) : true;
+    const fManual = el('input', { type: 'checkbox' });
+    fManual.checked = loja ? (loja.permite_manual !== false) : true;
+    const fPadrao = el('select', { class: 'lx-input' },
+      el('option', { value: 'auto' }, 'Automático (mais próximo)'),
+      el('option', { value: 'manual' }, 'Manual (escolher da lista)'));
+    fPadrao.value = (loja && loja.modo_padrao) ? loja.modo_padrao : 'auto';
+
     // Busca de CEP: ao completar 8 dígitos, preenche o endereço automaticamente.
     const cepMsg = el('span', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-left:8px' });
     let _ultimoCep = '';
@@ -159,7 +169,16 @@ export async function montar(container) {
           campo('Responsável', fResp),
           el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, campo('E-mail de acesso', fEmail), campo('Telefone', fTel)),
           campo('Senha de acesso', fSenha),
-          el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'E-mail + senha criam o login da loja (a loja vê só as próprias entregas).'))));
+          el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'E-mail + senha criam o login da loja (a loja vê só as próprias entregas).'))),
+
+      // Lançamento — o que a loja pode usar ao criar corrida.
+      el('div', { style: 'border-top:1px solid var(--lx-linha);padding-top:12px;margin-top:2px' },
+        el('div', { style: 'font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:10px' }, 'Lançamento de corridas'),
+        el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+          el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer' }, fAuto, 'Permitir modo Automático (mais próximo por GPS)'),
+          el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer' }, fManual, 'Permitir modo Manual (escolher motoboy da lista)'),
+          campo('Modo padrão (já vem selecionado)', fPadrao),
+          el('p', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:0' }, 'Se desmarcar um modo, ele não aparece para a loja. Deixe ao menos um marcado.'))));
 
     const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario' }, ed ? 'Salvar' : 'Criar loja');
     const ov = modal(ed ? 'Editar loja' : 'Nova loja', corpo, [
@@ -176,9 +195,15 @@ export async function montar(container) {
         bairro: fBairro.value.trim() || null, cidade: fCidade.value.trim() || null,
         estado: fEstado.value.trim().toUpperCase() || null, responsavel: fResp.value.trim() || null,
         email: fEmail.value.trim() || null, telefone: fTel.value.trim() || null,
+        permite_automatico: fAuto.checked, permite_manual: fManual.checked,
+        modo_padrao: fPadrao.value,
       };
       if (fSenha.value) dados.senha = fSenha.value;
       if (!dados.nome_fantasia) return toast('Nome fantasia é obrigatório', 'erro');
+      if (!dados.permite_automatico && !dados.permite_manual) return toast('Marque ao menos um modo de lançamento', 'erro');
+      // Se o padrão escolhido está desabilitado, cai para o que está permitido.
+      if (dados.modo_padrao === 'auto' && !dados.permite_automatico) dados.modo_padrao = 'manual';
+      if (dados.modo_padrao === 'manual' && !dados.permite_manual) dados.modo_padrao = 'auto';
       try {
         btnSalvar.disabled = true;
         if (ed) await put('/lojas/' + loja.id, dados);

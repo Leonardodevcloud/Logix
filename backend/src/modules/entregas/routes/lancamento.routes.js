@@ -48,6 +48,12 @@ module.exports = function lancamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // Config de lançamento da loja (Automático/Manual + padrão). Fica no módulo
+  // entregas porque a loja não tem o módulo de gestão de lojas.
+  router.get('/config-lancamento', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try { res.json(await service.configLancamentoLoja({ empresaId: req.empresaId, lojaId: req.lojaId || null })); } catch (e) { next(e); }
+  });
+
   router.get('/', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       // Usuário de loja só vê as próprias; central pode filtrar por loja_id (query).
