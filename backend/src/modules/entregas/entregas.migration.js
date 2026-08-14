@@ -91,6 +91,13 @@ async function migrarColunasExtras() {
     await query(`ALTER TABLE entregas_pontos ADD CONSTRAINT entregas_pontos_status_check
                  CHECK (status IN ('pendente','entregue','falha','insucesso'))`);
   } catch {}
+
+  // Índice para os KPIs do painel (contagem por loja/status/data) — depois de
+  // garantir que a coluna concluida_em existe. Sem isso, contar em tabela grande
+  // ficaria lento conforme o histórico cresce.
+  try {
+    await query(`CREATE INDEX IF NOT EXISTS idx_entregas_loja_status_concl ON entregas(loja_id, status, concluida_em)`);
+  } catch {}
 }
 
 // Configuração de SLA por empresa (geral) e por loja (opcional).

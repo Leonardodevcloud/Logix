@@ -208,24 +208,21 @@ async function dashCliente(content) {
   content.append(grade, secHeader('Em andamento'), lateralAtivas);
 
   try {
-    const [entregas, motoboys] = await Promise.all([
+    const [resumo, entregas, motoboys] = await Promise.all([
+      auth.temModulo('entregas') ? get('/entregas/resumo').catch(() => ({})) : Promise.resolve({}),
       auth.temModulo('entregas') ? get('/entregas').catch(() => []) : Promise.resolve([]),
       auth.temModulo('motoboys') ? get('/motoboys').catch(() => []) : Promise.resolve([]),
     ]);
     const emAndamento = entregas.filter(e => ['aguardando_coleta','em_coleta','em_rota'].includes(e.status));
-    // "Concluídas hoje" = entregues cuja conclusão caiu na data de hoje (fuso da
-    // Bahia — o servidor roda em UTC). Antes contava o histórico inteiro.
-    const dataBahia = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Bahia' });
-    const hoje = dataBahia(new Date());
-    const concluidas = entregas.filter(e => e.status === 'entregue' && e.concluida_em && dataBahia(e.concluida_em) === hoje).length;
-    const naFila = entregas.filter(e => e.status === 'aguardando_atribuicao').length;
     const online = motoboys.filter(m => m.online).length;
 
     grade.innerHTML = '';
+    // Contagens vêm do backend (/entregas/resumo) — precisas e escaláveis. A lista
+    // de entregas serve só para exibir as ativas abaixo.
     [
-      { val: emAndamento.length, lbl: 'Em andamento' },
-      { val: concluidas, lbl: 'Concluídas hoje' },
-      { val: naFila, lbl: 'Na fila' },
+      { val: resumo.em_andamento ?? emAndamento.length, lbl: 'Em andamento' },
+      { val: resumo.concluidas_hoje ?? 0, lbl: 'Concluídas hoje' },
+      { val: resumo.na_fila ?? 0, lbl: 'Na fila' },
       { val: `${online}/${motoboys.length}`, lbl: 'Motoboys online' },
     ].forEach(({ val, lbl }) => {
       grade.append(el('div', { class: 'lx-card lx-kpi' },

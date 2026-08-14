@@ -40,6 +40,14 @@ module.exports = function lancamentoRoutes() {
   });
 
   // GET /entregas?status=&motoboy_id=&loja_id=
+  // KPIs do painel — contagem no banco (escala). Loja vê só as suas; central o total.
+  router.get('/resumo', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      const lojaId = req.lojaId || req.query.loja_id || null;
+      res.json(await service.resumoEntregas({ empresaId: req.empresaId, lojaId }));
+    } catch (e) { next(e); }
+  });
+
   router.get('/', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
     try {
       // Usuário de loja só vê as próprias; central pode filtrar por loja_id (query).

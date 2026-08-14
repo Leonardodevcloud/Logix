@@ -111,6 +111,24 @@ async function obter({ empresaId, id }) {
   return { ...rows[0], pontos: pontos.rows };
 }
 
+// KPIs do painel contados NO BANCO (não puxa linhas para o cliente — escala para
+// qualquer volume). "Concluídas hoje" usa a data no fuso da Bahia (servidor é UTC).
+async function resumoEntregas({ empresaId, lojaId = null }) {
+  const { rows } = await query(
+    `SELECT
+        count(*) FILTER (WHERE status IN ('aguardando_coleta','em_coleta','em_rota'))::int AS em_andamento,
+        count(*) FILTER (WHERE status = 'aguardando_atribuicao')::int AS na_fila,
+        count(*) FILTER (
+          WHERE status = 'entregue'
+            AND (concluida_em AT TIME ZONE 'America/Bahia')::date = (now() AT TIME ZONE 'America/Bahia')::date
+        )::int AS concluidas_hoje
+       FROM entregas
+      WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)`,
+    [empresaId, lojaId]
+  );
+  return rows[0] || { em_andamento: 0, na_fila: 0, concluidas_hoje: 0 };
+}
+
 async function listar({ empresaId, status, motoboyId, lojaId = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
   if (status) { params.push(status); cond.push(`e.status = $${params.length}`); }
@@ -118,7 +136,7 @@ async function listar({ empresaId, status, motoboyId, lojaId = null }) {
   if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.motoboy_id, e.status, e.distancia_km, e.tempo_estimado_min,
-             e.coleta_endereco, e.criado_em, e.concluida_em, e.loja_id,
+             e.coleta_endereco, e.criado_em, e.loja_id,
              m.nome_completo AS motoboy_nome,
              (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e
@@ -1232,7 +1250,7 @@ async function liberarPonto({ empresaId, entregaId, pontoId, usuarioId, ip }) {
 }
 
 module.exports = { cancelarEntrega, liberarPonto,
-  criarEntrega, obter, listar, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  criarEntrega, obter, listar, resumoEntregas, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
   listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 
