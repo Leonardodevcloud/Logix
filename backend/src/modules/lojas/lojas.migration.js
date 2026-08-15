@@ -30,6 +30,21 @@ async function initLojasTables() {
   await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS permite_automatico BOOLEAN NOT NULL DEFAULT TRUE`);
   await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS permite_manual BOOLEAN NOT NULL DEFAULT TRUE`);
   await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS modo_padrao TEXT NOT NULL DEFAULT 'auto'`);
+
+  // Código curto por loja (por empresa), buscável — igual ao dos motoboys.
+  try { await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS codigo INTEGER`); } catch {}
+  try {
+    await query(`
+      WITH numerados AS (
+        SELECT id, row_number() OVER (PARTITION BY empresa_id ORDER BY criado_em, id) AS seq
+          FROM lojas WHERE codigo IS NULL
+      )
+      UPDATE lojas l SET codigo = n.seq + COALESCE(
+        (SELECT max(codigo) FROM lojas x WHERE x.empresa_id = l.empresa_id), 0)
+      FROM numerados n WHERE n.id = l.id
+    `);
+  } catch {}
+  try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_lojas_codigo ON lojas(empresa_id, codigo)`); } catch {}
   // CNPJ único por empresa (uma loja não se repete dentro do mesmo tenant), mas permite null.
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_lojas_empresa_cnpj
                ON lojas(empresa_id, cnpj) WHERE cnpj IS NOT NULL`);

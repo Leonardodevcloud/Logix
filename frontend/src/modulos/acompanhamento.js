@@ -118,7 +118,7 @@ const P = {
 
 function carregarFiltros() {
   try { const j = JSON.parse(localStorage.getItem(LS_KEY)); if (j) { if (!j.categorias) j.categorias = []; return j; } } catch {}
-  return { periodo: 'hoje', de: '', ate: '', lojas: [], cidades: [], categorias: [] };
+  return { periodo: 'hoje', de: '', ate: '', lojas: [], cidades: [], categorias: [], motoboy: '', centro: '' };
 }
 function salvarFiltros(f) { try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {} }
 
@@ -218,21 +218,59 @@ export async function montar(container) {
   selPeriodo.onchange = () => { customWrap.style.display = selPeriodo.value === 'custom' ? 'flex' : 'none'; };
 
   // Dropdowns multi-select de loja, cidade e categoria (escaláveis).
-  const dropLojas = dropMulti('Todas as lojas', [], filtros.lojas, arr => { filtros.lojas = arr; });
+  const dropLojas = dropMulti('Todas as lojas', [], filtros.lojas, arr => { filtros.lojas = arr; atualizarCentros(); });
   const dropCidades = dropMulti('Todas as regiões', [], filtros.cidades, arr => { filtros.cidades = arr; });
   const dropCategorias = dropMulti('Todas as categorias', [], filtros.categorias || [], arr => { filtros.categorias = arr; });
+
+  // Filtro por MOTOBOY (single-select). "Todos" = sem filtro.
+  const selMotoboy = el('select', { class: 'lx-input', style: 'height:36px' }, el('option', { value: '' }, 'Todos os motoboys'));
+  selMotoboy.onchange = () => { filtros.motoboy = selMotoboy.value; };
+  // Filtro por CENTRO DE CUSTO — depende da loja selecionada (só aparece quando
+  // exatamente uma loja está selecionada). "Todos" = corridas de qualquer centro.
+  const selCentro = el('select', { class: 'lx-input', style: 'height:36px' }, el('option', { value: '' }, 'Todos os centros'));
+  selCentro.onchange = () => { filtros.centro = selCentro.value; };
+  const colCentroWrap = el('div', { style: 'display:none' });
+
+  function preencherMotoboys() {
+    selMotoboy.innerHTML = '';
+    selMotoboy.append(el('option', { value: '' }, 'Todos os motoboys'));
+    (_motoboys || []).slice().sort((a,b) => (a.codigo||0)-(b.codigo||0)).forEach(m => {
+      selMotoboy.append(el('option', { value: m.id }, '#' + String(m.codigo||0).padStart(3,'0') + ' · ' + (m.nome_completo||'')));
+    });
+    selMotoboy.value = filtros.motoboy || '';
+  }
+
+  async function atualizarCentros() {
+    // Só faz sentido escolher centro quando UMA loja está selecionada.
+    if (!filtros.lojas || filtros.lojas.length !== 1) {
+      colCentroWrap.style.display = 'none';
+      filtros.centro = ''; selCentro.value = '';
+      return;
+    }
+    const lojaId = filtros.lojas[0];
+    let centros = [];
+    try { centros = await get('/clientes/' + lojaId + '/centros'); } catch { centros = []; }
+    if (!centros.length) { colCentroWrap.style.display = 'none'; filtros.centro = ''; selCentro.value=''; return; }
+    selCentro.innerHTML = '';
+    selCentro.append(el('option', { value: '' }, 'Todos os centros'));
+    centros.forEach(c => selCentro.append(el('option', { value: c.id }, (c.codigo ? c.codigo + ' · ' : '') + c.nome)));
+    selCentro.value = filtros.centro || '';
+    colCentroWrap.style.display = 'block';
+  }
 
   function aplicarFiltros() {
     filtros.periodo = selPeriodo.value;
     filtros.de = inpDe.value; filtros.ate = inpAte.value;
+    filtros.motoboy = selMotoboy.value; filtros.centro = selCentro.value;
     salvarFiltros(filtros);
     atualizarBadge();
     carregar();
   }
   function limparFiltros() {
-    filtros.periodo = 'hoje'; filtros.de = ''; filtros.ate = ''; filtros.lojas = []; filtros.cidades = []; filtros.categorias = [];
+    filtros.periodo = 'hoje'; filtros.de = ''; filtros.ate = ''; filtros.lojas = []; filtros.cidades = []; filtros.categorias = []; filtros.motoboy = ''; filtros.centro = '';
     selPeriodo.value = 'hoje'; inpDe.value = ''; inpAte.value = ''; customWrap.style.display = 'none';
     dropLojas._setSel([]); dropCidades._setSel([]); dropCategorias._setSel([]);
+    selMotoboy.value = ''; selCentro.value = ''; colCentroWrap.style.display = 'none';
     salvarFiltros(filtros); atualizarBadge(); carregar();
   }
   const btnAplicar = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: () => { aplicarFiltros(); _aberto = false; painel.style.display = 'none'; } }, 'Aplicar');
@@ -242,9 +280,11 @@ export async function montar(container) {
   const colLojas = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Lojas'), dropLojas);
   const colCidades = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Regiões'), dropCidades);
   const colCategorias = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Categorias'), dropCategorias);
+  const colMotoboy = el('div', {}, el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Motoboy'), selMotoboy);
+  colCentroWrap.append(el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'Centro de custo'), selCentro);
 
   painel.append(
-    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:start;margin-bottom:16px' }, colPeriodo, colLojas, colCidades, colCategorias),
+    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;align-items:start;margin-bottom:16px' }, colPeriodo, colLojas, colCidades, colCategorias, colMotoboy, colCentroWrap),
     el('div', { style: 'display:flex;gap:8px;justify-content:flex-end' }, btnLimpar, btnAplicar));
 
   function preencherDrops() {
@@ -257,6 +297,8 @@ export async function montar(container) {
     let n = 0;
     if (filtros.periodo && filtros.periodo !== 'hoje') n++;
     n += filtros.lojas.length + filtros.cidades.length + ((filtros.categorias && filtros.categorias.length) || 0);
+    if (filtros.motoboy) n++;
+    if (filtros.centro) n++;
     badgeAtivos.textContent = String(n);
     badgeAtivos.style.display = n ? 'inline' : 'none';
   }
@@ -725,6 +767,7 @@ export async function montar(container) {
           : (c.tem_liberado
             ? el('span', { style: 'flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.3px;color:#fff;background:var(--lx-ok);padding:2px 7px;border-radius:5px', title: 'Ponto liberado pela central' }, '🔓 LIBERADO')
             : null)),
+      c.centro_nome ? el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, (c.centro_codigo ? c.centro_codigo + ' · ' : '') + c.centro_nome) : null,
       ponto('var(--lx-azul-primario)', 'Coleta', c.coleta_endereco),
       ponto('var(--lx-ok)', rotuloEntrega, c.destino_endereco, verTodos ? el('div', {}, verTodos) : null));
   }
@@ -1154,6 +1197,8 @@ export async function montar(container) {
       if (filtros.lojas.length) params.set('loja_ids', filtros.lojas.join(','));
       if (filtros.cidades.length) params.set('cidades', filtros.cidades.join(','));
       if (filtros.categorias && filtros.categorias.length) params.set('categoria_ids', filtros.categorias.join(','));
+      if (filtros.motoboy) params.set('motoboy_id', filtros.motoboy);
+      if (filtros.centro) params.set('centro_id', filtros.centro);
     }
     try { _dados = await get('/entregas/acompanhamento?' + params.toString()); render(); }
     catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
@@ -1170,7 +1215,8 @@ export async function montar(container) {
     try { _lojas = await get('/lojas?ativo=true'); } catch { _lojas = []; }
     try { _cidades = await get('/entregas/acompanhamento/cidades'); } catch { _cidades = []; }
     try { _categorias = await get('/entregas/acompanhamento/categorias'); } catch { _categorias = []; }
-    preencherDrops(); atualizarBadge();
+    try { _motoboys = await get('/filas/motoboys-ativos'); } catch { _motoboys = []; }
+    preencherDrops(); preencherMotoboys(); atualizarCentros(); atualizarBadge();
   })();
 
   const timer = setInterval(carregar, 30000);

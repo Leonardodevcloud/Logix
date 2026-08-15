@@ -39,8 +39,9 @@ async function criar({ empresaId, dados, usuarioId, ip }) {
     await cliente.query('BEGIN');
     const { rows } = await cliente.query(
       `INSERT INTO lojas (empresa_id, nome_fantasia, razao_social, cnpj, cep, logradouro, numero,
-         complemento, bairro, cidade, estado, responsavel, email, telefone, config_sla)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+         complemento, bairro, cidade, estado, responsavel, email, telefone, config_sla, codigo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+         (SELECT COALESCE(MAX(codigo),0)+1 FROM lojas WHERE empresa_id = $1)) RETURNING *`,
       [empresaId, dados.nome_fantasia, dados.razao_social || null,
        dados.cnpj ? apenasDigitos(dados.cnpj) : null, dados.cep ? apenasDigitos(dados.cep) : null,
        dados.logradouro || null, dados.numero || null, dados.complemento || null,

@@ -55,6 +55,8 @@ module.exports = function acompanhamentoRoutes() {
         lojaIds: csv(req.query.loja_ids),
         cidades: csv(req.query.cidades),
         categoriaIds: csv(req.query.categoria_ids),
+        motoboyId: req.query.motoboy_id || null,
+        centroId: req.query.centro_id || null,
         de: req.query.de || null, ate: req.query.ate || null,
         q: req.query.q || null,
         lojaIdToken: req.lojaId || null, // trava de segurança p/ usuário de loja

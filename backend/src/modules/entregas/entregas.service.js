@@ -427,7 +427,7 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
 // Filtros: lojaIds[] (OR), cidades[] (OR, via cidade da loja), de/ate (range de datas).
 // q (busca): quando presente, IGNORA os demais filtros e procura em protocolo/NF/endereço.
 // lojaIdToken: trava de segurança — usuário de loja só vê a própria, sempre.
-async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null, categoriaIds = null, de = null, ate = null, q = null, lojaIdToken = null }) {
+async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null, categoriaIds = null, motoboyId = null, centroId = null, de = null, ate = null, q = null, lojaIdToken = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
 
   // Trava de segurança: usuário de loja nunca escapa da própria loja.
@@ -442,6 +442,7 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
     cond.push(`(e.protocolo ILIKE $${i}
        OR e.coleta_endereco ILIKE $${i}
        OR EXISTS (SELECT 1 FROM motoboys mb WHERE mb.id = e.motoboy_id AND (mb.nome_completo ILIKE $${i} OR CAST(mb.codigo AS TEXT) ILIKE $${i}))
+       OR EXISTS (SELECT 1 FROM lojas lj WHERE lj.id = e.loja_id AND (lj.nome_fantasia ILIKE $${i} OR CAST(lj.codigo AS TEXT) ILIKE $${i}))
        OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND (ep.numero_nf ILIKE $${i} OR ep.endereco ILIKE $${i})))`);
   } else {
     if (Array.isArray(lojaIds) && lojaIds.length) {
@@ -456,6 +457,8 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
       params.push(categoriaIds);
       cond.push(`e.modalidade_id IN (SELECT id FROM cliente_modalidades WHERE categoria_id = ANY($${params.length}::uuid[]))`);
     }
+    if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
+    if (centroId) { params.push(centroId); cond.push(`e.centro_custo_id = $${params.length}`); }
     if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
     if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
   }
@@ -463,7 +466,8 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em,
             e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.loja_id,
-            l.nome_fantasia AS loja_nome, l.cidade AS loja_cidade, l.estado AS loja_uf,
+            l.nome_fantasia AS loja_nome, l.codigo AS loja_codigo, l.cidade AS loja_cidade, l.estado AS loja_uf,
+            cc.nome AS centro_nome, cc.codigo AS centro_codigo,
             m.id AS motoboy_id, m.codigo AS motoboy_codigo, m.nome_completo AS motoboy_nome, m.telefone_principal AS motoboy_telefone,
             cat.nome AS categoria_nome, cat.cor AS categoria_cor,
             e.valor_cliente_cent, e.valor_motoboy_cent,
@@ -476,6 +480,7 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
             EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.liberado = TRUE) AS tem_liberado
        FROM entregas e
        LEFT JOIN lojas l    ON l.id = e.loja_id
+       LEFT JOIN cliente_centros_custo cc ON cc.id = e.centro_custo_id
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
        LEFT JOIN cliente_modalidades cm ON cm.id = e.modalidade_id
        LEFT JOIN frete_categorias cat ON cat.id = cm.categoria_id
