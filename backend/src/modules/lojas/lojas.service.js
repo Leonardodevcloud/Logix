@@ -84,38 +84,37 @@ async function criar({ empresaId, dados, usuarioId, ip }) {
 
 async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
   await obter({ empresaId, id });
+
+  // SET dinâmico: altera apenas os campos ENVIADOS no corpo. Assim um campo em
+  // branco ('' → null) realmente LIMPA o dado — o COALESCE antigo mantinha o valor
+  // antigo quando recebia null, impedindo apagar (ex.: limpar o endereço).
+  const set = []; const params = [id, empresaId];
+  const add = (col, val) => { params.push(val); set.push(`${col} = $${params.length}`); };
+  const enviado = (k) => Object.prototype.hasOwnProperty.call(dados || {}, k);
+
+  if (enviado('nome_fantasia') && dados.nome_fantasia) add('nome_fantasia', dados.nome_fantasia);
+  if (enviado('razao_social')) add('razao_social', dados.razao_social || null);
+  if (enviado('cnpj')) add('cnpj', dados.cnpj ? apenasDigitos(dados.cnpj) : null);
+  if (enviado('cep')) add('cep', dados.cep ? apenasDigitos(dados.cep) : null);
+  if (enviado('logradouro')) add('logradouro', dados.logradouro || null);
+  if (enviado('numero')) add('numero', dados.numero || null);
+  if (enviado('complemento')) add('complemento', dados.complemento || null);
+  if (enviado('bairro')) add('bairro', dados.bairro || null);
+  if (enviado('cidade')) add('cidade', dados.cidade || null);
+  if (enviado('estado')) add('estado', dados.estado || null);
+  if (enviado('responsavel')) add('responsavel', dados.responsavel || null);
+  if (enviado('email')) add('email', dados.email || null);
+  if (enviado('telefone')) add('telefone', dados.telefone || null);
+  if (enviado('config_sla')) add('config_sla', JSON.stringify(dados.config_sla));
+  if (enviado('ativo')) add('ativo', dados.ativo);
+  if (enviado('permite_automatico')) add('permite_automatico', !!dados.permite_automatico);
+  if (enviado('permite_manual')) add('permite_manual', !!dados.permite_manual);
+  if (enviado('modo_padrao')) add('modo_padrao', dados.modo_padrao || 'auto');
+  set.push('atualizado_em = now()');
+
   const { rows } = await query(
-    `UPDATE lojas SET
-       nome_fantasia = COALESCE($3, nome_fantasia),
-       razao_social  = COALESCE($4, razao_social),
-       cnpj          = COALESCE($5, cnpj),
-       cep           = COALESCE($6, cep),
-       logradouro    = COALESCE($7, logradouro),
-       numero        = COALESCE($8, numero),
-       complemento   = COALESCE($9, complemento),
-       bairro        = COALESCE($10, bairro),
-       cidade        = COALESCE($11, cidade),
-       estado        = COALESCE($12, estado),
-       responsavel   = COALESCE($13, responsavel),
-       email         = COALESCE($14, email),
-       telefone      = COALESCE($15, telefone),
-       config_sla    = COALESCE($16, config_sla),
-       ativo         = COALESCE($17, ativo),
-       permite_automatico = COALESCE($18, permite_automatico),
-       permite_manual     = COALESCE($19, permite_manual),
-       modo_padrao        = COALESCE($20, modo_padrao),
-       atualizado_em = now()
-     WHERE id = $1 AND empresa_id = $2 RETURNING *`,
-    [id, empresaId, dados.nome_fantasia, dados.razao_social,
-     dados.cnpj ? apenasDigitos(dados.cnpj) : undefined,
-     dados.cep ? apenasDigitos(dados.cep) : undefined,
-     dados.logradouro, dados.numero, dados.complemento, dados.bairro, dados.cidade,
-     dados.estado, dados.responsavel, dados.email, dados.telefone,
-     dados.config_sla !== undefined ? JSON.stringify(dados.config_sla) : undefined,
-     dados.ativo,
-     dados.permite_automatico === undefined ? undefined : !!dados.permite_automatico,
-     dados.permite_manual === undefined ? undefined : !!dados.permite_manual,
-     dados.modo_padrao || undefined]
+    `UPDATE lojas SET ${set.join(', ')} WHERE id = $1 AND empresa_id = $2 RETURNING *`,
+    params
   );
 
   // Propaga e-mail/senha para o usuário de acesso da loja (tabela `usuarios`).
