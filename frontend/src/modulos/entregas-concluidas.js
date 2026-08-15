@@ -300,7 +300,7 @@ export async function montarConcluidas(container, filtroInicial) {
         el('tr', {},
           el('th', { style: 'width:36px;padding:9px 8px' }),
           el('th', { style: 'width:40px;padding:9px 8px' }),
-          ...['Protocolo','NF','Status','Data','Motoboy','Pontos','Km'].map((h,i) =>
+          ...['Protocolo','Cliente','NF','Status','Data','Motoboy','Pontos','Km'].map((h,i) =>
             el('th', { style: `text-align:${i===5?'center':'left'};padding:9px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--lx-tinta-2)` }, h)))),
       tbody));
 
@@ -320,7 +320,7 @@ export async function montarConcluidas(container, filtroInicial) {
       (_filtro === 'entregue'  && e.status === 'entregue') ||
       (_filtro === 'cancelada' && e.status === 'cancelada'));
     if (!lista.length) {
-      tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:40px;text-align:center;color:var(--lx-tinta-2);font-size:13px' }, 'Nenhuma entrega nesta categoria.')));
+      tbody.append(el('tr', {}, el('td', { colSpan: 10, style: 'padding:40px;text-align:center;color:var(--lx-tinta-2);font-size:13px' }, 'Nenhuma entrega nesta categoria.')));
       return;
     }
     lista.forEach(e => {
@@ -350,6 +350,9 @@ export async function montarConcluidas(container, filtroInicial) {
         el('td', { style: 'padding:10px 8px;text-align:center' }, foto),
         el('td', { style: 'padding:10px 12px;font-weight:700;color:var(--lx-tinta)' }, e.protocolo || '—'),
         el('td', { style: 'padding:10px 12px' },
+          el('div', { style: 'font-weight:600;color:var(--lx-tinta);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px' }, e.loja_nome || '—'),
+          e.centro_nome ? el('div', { style: 'font-size:11px;color:var(--lx-tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px' }, (e.centro_codigo ? e.centro_codigo + ' · ' : '') + e.centro_nome) : null),
+        el('td', { style: 'padding:10px 12px' },
           e.primeira_nf
             ? el('span', { style: 'font-size:11.5px;color:var(--lx-ok,#1D9E75);font-weight:600' }, e.primeira_nf)
             : el('span', { style: 'color:var(--lx-tinta-3,#8AA2BE)' }, '—')),
@@ -360,7 +363,7 @@ export async function montarConcluidas(container, filtroInicial) {
         el('td', { style: 'padding:10px 12px;color:var(--lx-tinta-2)' }, kmStr));
 
       const trDetalhe = el('tr', { style: 'display:none' });
-      const tdDetalhe = el('td', { colSpan: 9 });
+      const tdDetalhe = el('td', { colSpan: 10 });
       trDetalhe.append(tdDetalhe);
 
       tr.addEventListener('click', async () => {
@@ -395,7 +398,7 @@ export async function montarConcluidas(container, filtroInicial) {
     if (reset) {
       _offset = 0; _lista = [];
       tbody.innerHTML = '';
-      tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:32px;text-align:center;color:var(--lx-tinta-2)' }, 'Carregando…')));
+      tbody.append(el('tr', {}, el('td', { colSpan: 10, style: 'padding:32px;text-align:center;color:var(--lx-tinta-2)' }, 'Carregando…')));
     }
     try {
       if (reset) {
@@ -414,7 +417,7 @@ export async function montarConcluidas(container, filtroInicial) {
       renderTabela();
     } catch {
       tbody.innerHTML = '';
-      tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:24px;color:var(--lx-erro)' }, 'Erro ao carregar.')));
+      tbody.append(el('tr', {}, el('td', { colSpan: 10, style: 'padding:24px;color:var(--lx-erro)' }, 'Erro ao carregar.')));
     } finally { _carregando = false; }
   }
 

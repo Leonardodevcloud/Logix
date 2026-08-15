@@ -218,11 +218,15 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId 
             ) AS distancia_km,
             e.coleta_endereco, e.criado_em, e.concluida_em, e.cancelada_em, e.motivo_cancelamento,
             m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone,
+            l.nome_fantasia AS loja_nome, l.codigo AS loja_codigo,
+            cc.nome AS centro_nome, cc.codigo AS centro_codigo,
             (SELECT count(*)::int FROM entregas_pontos p WHERE p.entrega_id = e.id) AS total_pontos,
             (SELECT ep.numero_nf FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf IS NOT NULL ORDER BY ep.ordem LIMIT 1) AS primeira_nf,
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
+       LEFT JOIN lojas l ON l.id = e.loja_id
+       LEFT JOIN cliente_centros_custo cc ON cc.id = e.centro_custo_id
        WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT $${pLim} OFFSET $${pOff}`,
     params
   );
