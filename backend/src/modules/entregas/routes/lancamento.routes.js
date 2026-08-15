@@ -2,6 +2,7 @@ const express = require('express');
 const { exigirTenant } = require('../../../middleware/tenant');
 const { exigirPermissao } = require('../../../middleware/permissoes');
 const service = require('../entregas.service');
+const { query } = require('../../../shared/db');
 
 // Lançamento e listagem de entregas.
 module.exports = function lancamentoRoutes() {
@@ -23,6 +24,17 @@ module.exports = function lancamentoRoutes() {
         if (!podeEscolher) { motoboyId = undefined; distribuicao = 'automatica'; }
       }
 
+      // Centro de custo da corrida: usa o enviado; senão, deriva do centro do
+      // usuário logado (se ele pertence a um centro) — assim toda corrida lançada
+      // de dentro de um centro registra de qual centro veio.
+      let centroCustoId = req.body.centro_custo_id || null;
+      if (!centroCustoId && req.lojaId && req.usuario) {
+        try {
+          const { rows } = await query(`SELECT centro_id FROM cliente_centro_usuarios WHERE usuario_id = $1 LIMIT 1`, [req.usuario.id]);
+          if (rows[0]) centroCustoId = rows[0].centro_id;
+        } catch {}
+      }
+
       const r = await service.criarEntrega({
         empresaId: req.empresaId,
         lojaId,
@@ -32,7 +44,7 @@ module.exports = function lancamentoRoutes() {
         distribuicao,
         motoboyId,
         modalidadeId: req.body.modalidade_id,
-        centroCustoId: req.body.centro_custo_id,
+        centroCustoId,
         ip: req.ip,
       });
       res.status(201).json(r);
