@@ -193,7 +193,7 @@ export async function montar(container) {
 
   // "Pesquisar por" — escolhe o campo da busca (ou tudo). Muda o placeholder.
   let _campo = '';
-  const selCampo = el('select', { class: 'lx-input', style: 'height:34px;flex:none;min-width:150px' },
+  const selCampo = el('select', { class: 'lx-input', style: 'height:34px;line-height:1.4;padding-top:0;padding-bottom:0;flex:none;min-width:150px' },
     el('option', { value: '' }, 'Tudo'),
     el('option', { value: 'protocolo' }, 'Protocolo / pedido'),
     el('option', { value: 'motoboy' }, 'Motoboy'),
