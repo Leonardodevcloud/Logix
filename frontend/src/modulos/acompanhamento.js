@@ -235,11 +235,11 @@ export async function montar(container) {
   const dropCategorias = dropMulti('Todas as categorias', [], filtros.categorias || [], arr => { filtros.categorias = arr; });
 
   // Filtro por MOTOBOY (single-select). "Todos" = sem filtro.
-  const selMotoboy = el('select', { class: 'lx-input', style: 'height:36px' }, el('option', { value: '' }, 'Todos os motoboys'));
+  const selMotoboy = el('select', { class: 'lx-input', style: 'height:36px;line-height:1.4;padding-top:0;padding-bottom:0' }, el('option', { value: '' }, 'Todos os motoboys'));
   selMotoboy.onchange = () => { filtros.motoboy = selMotoboy.value; };
   // Filtro por CENTRO DE CUSTO — depende da loja selecionada (só aparece quando
   // exatamente uma loja está selecionada). "Todos" = corridas de qualquer centro.
-  const selCentro = el('select', { class: 'lx-input', style: 'height:36px' }, el('option', { value: '' }, 'Todos os centros'));
+  const selCentro = el('select', { class: 'lx-input', style: 'height:36px;line-height:1.4;padding-top:0;padding-bottom:0' }, el('option', { value: '' }, 'Todos os centros'));
   selCentro.onchange = () => { filtros.centro = selCentro.value; };
   const colCentroWrap = el('div', { style: 'display:none' });
 
