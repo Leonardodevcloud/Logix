@@ -110,6 +110,10 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
   if (enviado('permite_automatico')) add('permite_automatico', !!dados.permite_automatico);
   if (enviado('permite_manual')) add('permite_manual', !!dados.permite_manual);
   if (enviado('modo_padrao')) add('modo_padrao', dados.modo_padrao || 'auto');
+  // Se o endereço de cadastro mudou/limpou, zera o cache de coordenadas para o
+  // mapa recalcular a posição (ou não mostrar pin, se o endereço ficou vazio).
+  const mexeuEndereco = ['cep', 'logradouro', 'numero', 'bairro', 'cidade', 'estado'].some(enviado);
+  if (mexeuEndereco) { add('lat', null); add('lng', null); }
   set.push('atualizado_em = now()');
 
   const { rows } = await query(
