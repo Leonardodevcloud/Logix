@@ -427,7 +427,7 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
 // Filtros: lojaIds[] (OR), cidades[] (OR, via cidade da loja), de/ate (range de datas).
 // q (busca): quando presente, IGNORA os demais filtros e procura em protocolo/NF/endereço.
 // lojaIdToken: trava de segurança — usuário de loja só vê a própria, sempre.
-async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null, categoriaIds = null, motoboyId = null, centroId = null, de = null, ate = null, q = null, lojaIdToken = null }) {
+async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null, categoriaIds = null, motoboyId = null, centroId = null, de = null, ate = null, q = null, campo = null, lojaIdToken = null }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
 
   // Trava de segurança: usuário de loja nunca escapa da própria loja.
@@ -435,15 +435,27 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
 
   const buscando = q && String(q).trim();
   if (buscando) {
-    // Busca = override temporário: ignora loja/cidade/data, procura em tudo
-    // (protocolo, endereço, NF e também nome/código do motoboy).
+    // Busca = override temporário: ignora loja/cidade/data. Se um "campo" for
+    // informado, procura só nele; senão, procura em tudo.
     params.push(`%${String(q).trim()}%`);
     const i = params.length;
-    cond.push(`(e.protocolo ILIKE $${i}
+    const porCampo = {
+      protocolo: `e.protocolo ILIKE $${i}`,
+      motoboy: `EXISTS (SELECT 1 FROM motoboys mb WHERE mb.id = e.motoboy_id AND (mb.nome_completo ILIKE $${i} OR CAST(mb.codigo AS TEXT) ILIKE $${i}))`,
+      loja: `EXISTS (SELECT 1 FROM lojas lj WHERE lj.id = e.loja_id AND (lj.nome_fantasia ILIKE $${i} OR CAST(lj.codigo AS TEXT) ILIKE $${i}))`,
+      centro: `EXISTS (SELECT 1 FROM cliente_centros_custo ccx WHERE ccx.id = e.centro_custo_id AND (ccx.nome ILIKE $${i} OR ccx.codigo ILIKE $${i}))`,
+      nf: `EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND ep.numero_nf ILIKE $${i})`,
+    };
+    if (campo && porCampo[campo]) {
+      cond.push(`(${porCampo[campo]})`);
+    } else {
+      cond.push(`(e.protocolo ILIKE $${i}
        OR e.coleta_endereco ILIKE $${i}
-       OR EXISTS (SELECT 1 FROM motoboys mb WHERE mb.id = e.motoboy_id AND (mb.nome_completo ILIKE $${i} OR CAST(mb.codigo AS TEXT) ILIKE $${i}))
-       OR EXISTS (SELECT 1 FROM lojas lj WHERE lj.id = e.loja_id AND (lj.nome_fantasia ILIKE $${i} OR CAST(lj.codigo AS TEXT) ILIKE $${i}))
+       OR ${porCampo.motoboy}
+       OR ${porCampo.loja}
+       OR ${porCampo.centro}
        OR EXISTS (SELECT 1 FROM entregas_pontos ep WHERE ep.entrega_id = e.id AND (ep.numero_nf ILIKE $${i} OR ep.endereco ILIKE $${i})))`);
+    }
   } else {
     if (Array.isArray(lojaIds) && lojaIds.length) {
       params.push(lojaIds); cond.push(`e.loja_id = ANY($${params.length}::uuid[])`);

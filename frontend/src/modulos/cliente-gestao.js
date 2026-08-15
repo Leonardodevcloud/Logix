@@ -554,7 +554,7 @@ function abaMotos(loja) {
     ms.forEach(m => lista.append(
       el('div', { style: 'border:1px solid var(--lx-linha);border-radius:var(--lx-raio);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px' },
         el('div', { style: 'display:flex;align-items:center;gap:10px' },
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:13px' }, '#' + String(m.codigo || 0).padStart(3, '0')),
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:13px' }, String(m.codigo || 0)),
           el('div', {},
             el('div', { style: 'font-weight:700;font-size:14px' }, m.nome_completo, ' ', m.online ? el('span', { style: 'font-size:11px' }, '🟢') : el('span', { style: 'font-size:11px' }, '⚪')),
             el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin-top:2px' },
@@ -577,10 +577,10 @@ function abaMotos(loja) {
     function renderMb() {
       const f = buscaMb.value.toLowerCase().replace('#', '').trim();
       selMb.innerHTML = '';
-      const vis = motoboys.filter(m => { const cod = String(m.codigo || '').padStart(3, '0'); return !f || cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
+      const vis = motoboys.filter(m => { const cod = String(m.codigo || ''); return !f || cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
       vis.slice(0, 30).forEach(m => {
         const row = el('div', { style: `display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;border-radius:6px;font-size:13px;${mbEscolhido?.id === m.id ? 'background:var(--lx-info-bg)' : ''}`, onClick: () => { mbEscolhido = m; renderMb(); } },
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, '#' + String(m.codigo || 0).padStart(3, '0')),
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, String(m.codigo || 0)),
           el('span', {}, m.nome_completo));
         selMb.append(row);
       });

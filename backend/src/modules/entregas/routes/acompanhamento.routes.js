@@ -59,6 +59,7 @@ module.exports = function acompanhamentoRoutes() {
         centroId: req.query.centro_id || null,
         de: req.query.de || null, ate: req.query.ate || null,
         q: req.query.q || null,
+        campo: req.query.campo || null,
         lojaIdToken: req.lojaId || null, // trava de segurança p/ usuário de loja
       }));
     } catch (e) { next(e); }

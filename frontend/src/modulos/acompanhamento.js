@@ -191,6 +191,18 @@ export async function montar(container) {
   const bIcon = el('span', { style: 'position:absolute;left:11px;display:inline-flex;color:var(--lx-tinta-3)' }); bIcon.append(svgIcone(P.busca));
   buscaWrap.append(bIcon, inpBusca);
 
+  // "Pesquisar por" — escolhe o campo da busca (ou tudo). Muda o placeholder.
+  let _campo = '';
+  const selCampo = el('select', { class: 'lx-input', style: 'height:34px;width:auto;flex:none' },
+    el('option', { value: '' }, 'Tudo'),
+    el('option', { value: 'protocolo' }, 'Protocolo / pedido'),
+    el('option', { value: 'motoboy' }, 'Motoboy'),
+    el('option', { value: 'loja' }, 'Loja / cliente'),
+    el('option', { value: 'centro' }, 'Centro de custo'),
+    el('option', { value: 'nf' }, 'Nota fiscal'));
+  const phCampo = { '': 'Pesquisar protocolo, NF, endereço ou motoboy…', protocolo: 'Digite o protocolo (ex.: LX-20149) ou pedido…', motoboy: 'Digite o número ou nome do motoboy…', loja: 'Digite o código ou nome da loja…', centro: 'Digite o código ou nome do centro…', nf: 'Digite o número da nota fiscal…' };
+  selCampo.onchange = () => { _campo = selCampo.value; inpBusca.placeholder = phCampo[_campo] || phCampo['']; if (_busca) carregar(); };
+
   // ── Botão Filtros (recolhível) ──────────────────────────────────
   const badgeAtivos = el('span', { style: 'display:none;font-size:11px;background:var(--lx-azul-primario);color:#fff;border-radius:9px;padding:1px 7px;margin-left:2px' }, '0');
   const btnFiltros = el('button', { class: 'lx-btn lx-btn-secundario', style: 'height:34px;display:inline-flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap' },
@@ -235,7 +247,7 @@ export async function montar(container) {
     selMotoboy.innerHTML = '';
     selMotoboy.append(el('option', { value: '' }, 'Todos os motoboys'));
     (_motoboys || []).slice().sort((a,b) => (a.codigo||0)-(b.codigo||0)).forEach(m => {
-      selMotoboy.append(el('option', { value: m.id }, '#' + String(m.codigo||0).padStart(3,'0') + ' · ' + (m.nome_completo||'')));
+      selMotoboy.append(el('option', { value: m.id }, String(m.codigo||0) + ' · ' + (m.nome_completo||'')));
     });
     selMotoboy.value = filtros.motoboy || '';
   }
@@ -303,7 +315,7 @@ export async function montar(container) {
     badgeAtivos.style.display = n ? 'inline' : 'none';
   }
 
-  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, buscaWrap, btnFiltros);
+  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, selCampo, buscaWrap, btnFiltros);
 
   // Aviso de busca ativa (override)
   const avisoEl = el('div', { style: 'display:none;font-size:12px;color:var(--lx-azul-primario);background:var(--lx-superficie-2);border-radius:8px;padding:8px 12px;margin-bottom:12px;align-items:center;gap:8px' });
@@ -345,7 +357,7 @@ export async function montar(container) {
   async function carregarMotoboys() { if (_motoboys.length) return; try { _motoboys = await get('/filas/motoboys-ativos'); } catch { toast('Erro ao carregar motoboys', 'erro'); } }
   async function abrirAtribuir(c, troca = false) {
     await carregarMotoboys();
-    const fmtCod = m => '#' + String(m.codigo || 0).padStart(3, '0');
+    const fmtCod = m => String(m.codigo || 0);
     let escolhido = null;
 
     const busca = el('input', { class: 'lx-input', placeholder: 'Buscar por nº (#001) ou nome…', style: 'margin-bottom:8px' });
@@ -359,7 +371,7 @@ export async function montar(container) {
         return;
       }
       const vis = _motoboys.filter(m => {
-        const cod = String(m.codigo || '').padStart(3, '0');
+        const cod = String(m.codigo || '');
         return cod.includes(f) || String(m.codigo || '') === f || (m.nome_completo || '').toLowerCase().includes(f);
       });
       if (!vis.length) { lista.append(el('div', { style: 'padding:16px;text-align:center;font-size:12px;color:var(--lx-tinta-2)' }, 'Nenhum motoboy encontrado.')); return; }
@@ -898,7 +910,7 @@ export async function montar(container) {
     if (!c.motoboy_nome) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, 'sem motoboy');
     return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3;min-width:0' },
       el('span', { style: 'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome),
-      c.motoboy_codigo ? el('span', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700' }, '#' + String(c.motoboy_codigo).padStart(3, '0')) : el('span', {}));
+      c.motoboy_codigo ? el('span', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700' }, String(c.motoboy_codigo)) : el('span', {}));
   }
 
   // Badge da categoria de frete (modalidade) da corrida.
@@ -1130,10 +1142,10 @@ export async function montar(container) {
         const f = buscaMb.value.toLowerCase().replace('#', '').trim();
         listaMb.innerHTML = '';
         if (!f) { listaMb.style.display = 'none'; return; }
-        const vis = _motoboys.filter(m => { const cod = String(m.codigo || '').padStart(3, '0'); return cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
+        const vis = _motoboys.filter(m => { const cod = String(m.codigo || ''); return cod.includes(f) || (m.nome_completo || '').toLowerCase().includes(f); });
         if (!vis.length) { listaMb.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--lx-tinta-2)">Nenhum motoboy</div>'; listaMb.style.display = 'block'; return; }
-        vis.forEach(m => listaMb.append(el('div', { style: 'display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `#${String(m.codigo||0).padStart(3,'0')} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, '#' + String(m.codigo||0).padStart(3,'0')),
+        vis.forEach(m => listaMb.append(el('div', { style: 'display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;border-bottom:0.5px solid var(--lx-linha)', onClick: () => { mbEscolhido = m; buscaMb.value = `${String(m.codigo||0)} ${m.nome_completo}`; listaMb.style.display = 'none'; } },
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, String(m.codigo||0)),
           el('span', { style: 'flex:1;font-size:12px' }, m.nome_completo),
           el('span', { style: 'font-size:11px' }, m.online ? '\ud83d\udfe2' : '\u26aa'))));
         listaMb.style.display = 'block';
@@ -1189,7 +1201,7 @@ export async function montar(container) {
   }
   async function carregar() {
     const params = new URLSearchParams();
-    if (_busca) { params.set('q', _busca); }
+    if (_busca) { params.set('q', _busca); if (_campo) params.set('campo', _campo); }
     else {
       const { de, ate } = periodoParaDatas();
       if (de) params.set('de', de);

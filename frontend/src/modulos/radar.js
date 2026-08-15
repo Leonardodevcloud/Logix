@@ -83,7 +83,7 @@ function abaAlertas(ehLoja) {
       el('div', { style: 'width:40px;height:40px;border-radius:50%;background:#dcebfb;display:grid;place-items:center;font-weight:800;color:var(--lx-azul-primario);flex:none' }, iniciais),
       el('div', { style: 'min-width:150px' },
         el('div', { style: 'font-weight:700;font-size:14px' }, a.motoboy_nome || '—'),
-        el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);font-weight:600' }, '#' + String(a.motoboy_codigo || 0).padStart(3, '0'))),
+        el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);font-weight:600' }, String(a.motoboy_codigo || 0))),
       el('div', { style: 'min-width:160px' },
         el('div', { style: `font-weight:800;font-size:15px;color:${cor}` }, (semSinal ? 'Sem sinal há ' : 'Parado há ') + a.minutos + ' min'),
         el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, semSinal ? 'App fechado ou GPS off?' : 'Corrida em rota')),

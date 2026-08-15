@@ -222,7 +222,7 @@ function abaMotoboy(periodo) {
       const seta = el('span', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, expandido.has(m.motoboy_id) ? '▼' : '▶');
       const linha = el('div', { style: `display:grid;grid-template-columns:${COLS};gap:10px;padding:13px 16px;align-items:center;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);cursor:pointer;background:var(--lx-superficie)`, onClick: () => toggle(m, bloco) },
         el('div', { style: 'display:flex;align-items:center;gap:10px;min-width:0' },
-          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, '#' + String(m.motoboy_codigo || 0).padStart(3, '0')),
+          el('span', { style: 'font-weight:800;color:var(--lx-azul-primario);font-size:12px' }, String(m.motoboy_codigo || 0)),
           el('span', { style: 'font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, m.motoboy_nome || '—')),
         el('div', { style: 'text-align:right;font-size:12.5px;color:var(--lx-tinta-2)' }, reais(m.total_corridas_cent) + ` (${m.qtd_corridas})`),
         el('div', { style: 'text-align:right;font-weight:700;color:var(--lx-ok)' }, m.creditos_cent ? '+ ' + reais(m.creditos_cent) : '—'),
@@ -292,7 +292,7 @@ function renderCorridas(container, corridas, tipo) {
     el('div', {}, 'Protocolo'), el('div', {}, tipo === 'cliente' ? 'Motoboy' : 'Cliente'), el('div', { style: 'text-align:right' }, 'Km'), el('div', {}, 'Concluída'), el('div', { style: 'text-align:right' }, 'Valor')));
   corridas.forEach(c => {
     const ref = tipo === 'cliente'
-      ? (c.motoboy_nome ? `${c.motoboy_nome}${c.motoboy_codigo ? ' #' + String(c.motoboy_codigo).padStart(3, '0') : ''}` : '—')
+      ? (c.motoboy_nome ? `${c.motoboy_nome}${c.motoboy_codigo ? ' #' + String(c.motoboy_codigo) : ''}` : '—')
       : (c.loja_nome || '—');
     tabela.append(el('div', { style: 'display:grid;grid-template-columns:90px 1fr 70px 110px 100px;gap:10px;padding:8px 12px;align-items:center;font-size:12px;border-top:0.5px solid var(--lx-linha)' },
       el('div', { style: 'font-weight:700;color:var(--lx-azul-primario)' }, c.protocolo),
@@ -359,7 +359,7 @@ async function formLancamento(m, tipoInicial, aoSalvar) {
     sel.append(el('option', { value: '' }, 'Escolha o motoboy…'));
     try {
       const arr = (await get('/financeiro/motoboys-lista')).motoboys || [];
-      arr.forEach(mb => sel.append(el('option', { value: mb.motoboy_id }, '#' + String(mb.motoboy_codigo || 0).padStart(3, '0') + ' · ' + mb.motoboy_nome)));
+      arr.forEach(mb => sel.append(el('option', { value: mb.motoboy_id }, String(mb.motoboy_codigo || 0) + ' · ' + mb.motoboy_nome)));
     } catch {}
     sel.addEventListener('change', () => { motoboyId = sel.value || null; motoboyNome = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ''; });
     seletorMb = campoF('Motoboy', sel);
@@ -455,7 +455,7 @@ function abaFechamentos() {
       }
       lista.append(el('div', { style: 'display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);background:var(--lx-superficie);flex-wrap:wrap' },
         el('div', { style: 'min-width:180px' },
-          el('div', { style: 'font-weight:700;font-size:14px' }, '#' + String(f.motoboy_codigo || 0).padStart(3, '0') + ' ' + f.motoboy_nome),
+          el('div', { style: 'font-weight:700;font-size:14px' }, String(f.motoboy_codigo || 0) + ' ' + f.motoboy_nome),
           el('div', { style: 'font-size:12px;color:var(--lx-tinta-2)' }, dataDia(f.periodo_de) + ' a ' + dataDia(f.periodo_ate) + ` · ${f.qtd_corridas} corridas`)),
         el('div', { style: 'font-weight:800;font-size:16px' }, reais(f.saldo_liquido_cent)),
         badge,
