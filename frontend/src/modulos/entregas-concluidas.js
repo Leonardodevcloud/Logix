@@ -310,7 +310,7 @@ export async function montarConcluidas(container, filtroInicial) {
       t.style.background = k===f ? 'var(--lx-azul-primario)' : 'none';
       t.style.color = k===f ? '#fff' : 'var(--lx-tinta-2)';
     });
-    renderTabela();
+    carregar(true);
   }
 
   function renderTabela() {
@@ -386,27 +386,46 @@ export async function montarConcluidas(container, filtroInicial) {
     });
   }
 
-  async function carregar() {
-    tbody.innerHTML = '';
-    tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:32px;text-align:center;color:var(--lx-tinta-2)' }, 'Carregando…')));
+  let _offset = 0; let _carregando = false;
+  const PAGINA = 100;
+  const btnMais = el('button', { style: 'margin:14px auto;display:none;padding:8px 18px;border-radius:8px;border:0.5px solid var(--lx-linha);background:var(--lx-superficie);cursor:pointer;font-size:12.5px;color:var(--lx-azul-primario);font-weight:700', onClick: () => carregar(false) }, 'Carregar mais');
+
+  async function carregar(reset = true) {
+    if (_carregando) return; _carregando = true;
+    if (reset) {
+      _offset = 0; _lista = [];
+      tbody.innerHTML = '';
+      tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:32px;text-align:center;color:var(--lx-tinta-2)' }, 'Carregando…')));
+    }
     try {
-      _lista = await get('/entregas/concluidas');
-      const entregues = _lista.filter(e => e.status === 'entregue');
-      const canceladas = _lista.filter(e => e.status === 'cancelada');
-      const km = entregues.reduce((s, e) => s + (parseFloat(e.distancia_km) || 0), 0);
-      kpiEntregues.textContent  = entregues.length;
-      kpiCanceladas.textContent = canceladas.length;
-      kpiKm.textContent = km > 0 ? km.toFixed(1) + ' km' : '—';
+      if (reset) {
+        // Contagens + km do período vêm prontos do banco (não puxa linhas para somar).
+        const r = await get('/entregas/concluidas/resumo').catch(() => ({}));
+        kpiEntregues.textContent  = r.entregues ?? 0;
+        kpiCanceladas.textContent = r.canceladas ?? 0;
+        const km = Number(r.km_total || 0);
+        kpiKm.textContent = km > 0 ? km.toFixed(1) + ' km' : '—';
+      }
+      const st = _filtro === 'todas' ? '' : _filtro;
+      const pagina = await get(`/entregas/concluidas?limite=${PAGINA}&offset=${_offset}${st ? '&status=' + st : ''}`);
+      _lista = reset ? pagina : _lista.concat(pagina);
+      _offset += pagina.length;
+      btnMais.style.display = (pagina.length === PAGINA) ? 'block' : 'none';
       renderTabela();
     } catch {
       tbody.innerHTML = '';
       tbody.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:24px;color:var(--lx-erro)' }, 'Erro ao carregar.')));
-    }
+    } finally { _carregando = false; }
   }
 
   container.innerHTML = '';
   container.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
-  if (filtroInicial) setFiltro(filtroInicial);
-  container.append(kpisEl, tabFiltros, tabelaWrap);
+  // Aplica o filtro inicial (só estilo) e faz uma carga única.
+  _filtro = filtroInicial || 'todas';
+  Object.entries(tabEls).forEach(([k,t]) => {
+    t.style.background = k===_filtro ? 'var(--lx-azul-primario)' : 'none';
+    t.style.color = k===_filtro ? '#fff' : 'var(--lx-tinta-2)';
+  });
+  container.append(kpisEl, tabFiltros, tabelaWrap, btnMais);
   carregar();
 }

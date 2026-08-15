@@ -2,6 +2,7 @@ const express = require('express');
 const AppError = require('../../shared/AppError');
 const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
+const { limiteRastreamentoMotoboy } = require('../../middleware/rateLimit');
 const storage = require('../../shared/storage');
 const push = require('../../shared/push');
 let emitirParaEmpresa = () => {};
@@ -304,7 +305,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // POST /motoboys/app/posicao
-  router.post('/app/posicao', verificarTokenMotoboy, async (req, res, next) => {
+  router.post('/app/posicao', verificarTokenMotoboy, limiteRastreamentoMotoboy, async (req, res, next) => {
     try {
       const { lat, lng, entrega_id } = req.body;
       if (!lat || !lng) throw AppError.validacao('lat e lng obrigatórios');

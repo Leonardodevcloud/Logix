@@ -152,7 +152,7 @@ async function listar({ empresaId, status, motoboyId, lojaId = null }) {
              (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
-       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 200`,
+       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 300`,
     params
   );
   return rows;
@@ -180,16 +180,25 @@ async function resolverSelfies(rows) {
   return rows;
 }
 
-async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId = null }) {
+async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId = null, limite = 100, offset = 0 }) {
   const cond = ['e.empresa_id = $1']; const params = [empresaId];
   // status: 'entregue' | 'cancelada' | null (todas)
   if (status === 'entregue') cond.push("e.status = 'entregue'");
   else if (status === 'cancelada') cond.push("e.status = 'cancelada'");
   else cond.push("e.status IN ('entregue','cancelada')");
-  if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
-  if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
+  // Range de data: se nada for informado, últimos 30 dias — evita varrer todo o
+  // histórico (que cresce sem limite). O front pode pedir períodos maiores.
+  if (!de && !ate) { cond.push(`e.criado_em >= now() - interval '30 days'`); }
+  else {
+    if (de) { params.push(de); cond.push(`e.criado_em >= $${params.length}`); }
+    if (ate) { params.push(ate); cond.push(`e.criado_em <= $${params.length}`); }
+  }
   if (motoboyId) { params.push(motoboyId); cond.push(`e.motoboy_id = $${params.length}`); }
   if (lojaId) { params.push(lojaId); cond.push(`e.loja_id = $${params.length}`); }
+  const lim = Math.min(Math.max(Number(limite) || 100, 1), 200);
+  const off = Math.max(Number(offset) || 0, 0);
+  params.push(lim); const pLim = params.length;
+  params.push(off); const pOff = params.length;
   const { rows } = await query(
     `SELECT e.id, e.protocolo, e.status, e.motoboy_id,
             -- Usa distancia_km do banco; se null/zero/NaN e existem coordenadas de coleta e destino,
@@ -214,11 +223,36 @@ async function listarConcluidas({ empresaId, de, ate, motoboyId, status, lojaId 
             (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem LIMIT 1) AS destino_endereco
        FROM entregas e
        LEFT JOIN motoboys m ON m.id = e.motoboy_id
-       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT 500`,
+       WHERE ${cond.join(' AND ')} ORDER BY e.criado_em DESC LIMIT $${pLim} OFFSET $${pOff}`,
     params
   );
   await resolverSelfies(rows);   // troca a foto_url velha pela selfie assinada fresca
   return rows;
+}
+
+// Resumo do período (contagens + km) calculado NO BANCO — não puxa linhas para o
+// cliente somar. Mesmos filtros da listagem.
+async function resumoConcluidas({ empresaId, de, ate, motoboyId, status, lojaId = null }) {
+  const cond = ['empresa_id = $1']; const params = [empresaId];
+  if (status === 'entregue') cond.push("status = 'entregue'");
+  else if (status === 'cancelada') cond.push("status = 'cancelada'");
+  else cond.push("status IN ('entregue','cancelada')");
+  if (!de && !ate) { cond.push(`criado_em >= now() - interval '30 days'`); }
+  else {
+    if (de) { params.push(de); cond.push(`criado_em >= $${params.length}`); }
+    if (ate) { params.push(ate); cond.push(`criado_em <= $${params.length}`); }
+  }
+  if (motoboyId) { params.push(motoboyId); cond.push(`motoboy_id = $${params.length}`); }
+  if (lojaId) { params.push(lojaId); cond.push(`loja_id = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT count(*) FILTER (WHERE status = 'entregue')::int AS entregues,
+            count(*) FILTER (WHERE status = 'cancelada')::int AS canceladas,
+            COALESCE(sum(CASE WHEN status = 'entregue' AND distancia_km IS NOT NULL
+                              AND distancia_km <> 'NaN'::numeric THEN distancia_km ELSE 0 END), 0) AS km_total
+       FROM entregas WHERE ${cond.join(' AND ')}`,
+    params
+  );
+  return rows[0] || { entregues: 0, canceladas: 0, km_total: 0 };
 }
 
 // Detalhe de uma entrega concluída: pontos + protocolos (fotos)
@@ -1261,7 +1295,7 @@ async function liberarPonto({ empresaId, entregaId, pontoId, usuarioId, ip }) {
 }
 
 module.exports = { cancelarEntrega, liberarPonto,
-  criarEntrega, obter, listar, resumoEntregas, configLancamentoLoja, listarConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  criarEntrega, obter, listar, resumoEntregas, configLancamentoLoja, listarConcluidas, resumoConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
   listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 

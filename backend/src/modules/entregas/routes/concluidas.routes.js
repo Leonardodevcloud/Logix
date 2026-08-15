@@ -15,6 +15,20 @@ module.exports = function concluidasRoutes() {
         de: req.query.de, ate: req.query.ate,
         motoboyId: req.query.motoboy_id,
         lojaId: req.lojaId || req.query.loja_id || null,
+        limite: req.query.limite, offset: req.query.offset,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  // GET /entregas/concluidas/resumo — contagens + km do período (calculado no banco)
+  router.get('/concluidas/resumo', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      res.json(await service.resumoConcluidas({
+        empresaId: req.empresaId,
+        status: req.query.status || null,
+        de: req.query.de, ate: req.query.ate,
+        motoboyId: req.query.motoboy_id,
+        lojaId: req.lojaId || req.query.loja_id || null,
       }));
     } catch (e) { next(e); }
   });
