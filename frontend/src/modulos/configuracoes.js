@@ -39,7 +39,7 @@ export async function montar(container) {
     { id: 'valores', rotulo: 'Tabela de Valores Global' },
     { id: 'ocorrencias', rotulo: 'Ocorrências de marcação' },
   ];
-  if (auth.pode('precos.ver')) abas.push({ id: 'precos', rotulo: 'Preço dinâmico' });
+  if (auth.pode('precos.ver')) ABAS.push({ id: 'precos', rotulo: 'Preço dinâmico' });
   let _aba = 'fretes';
 
   const navAbas = el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid var(--lx-linha);margin-bottom:20px' });
