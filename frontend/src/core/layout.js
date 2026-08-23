@@ -46,8 +46,9 @@ function gruposNav() {
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
-  // Financeiro: faturamento de clientes e motoboys (central + permissão financeiro).
-  if (central && auth.temModulo('financeiro') && auth.pode('financeiro.ver'))
+  // Financeiro: ferramenta da central — aparece por permissão (não é módulo
+  // vendável por cliente, então não depende de temModulo).
+  if (central && auth.pode('financeiro.ver'))
     operacao.push({ rota: '/financeiro', rotulo: 'Financeiro', icone: 'financeiro' });
 
   const config = [];
