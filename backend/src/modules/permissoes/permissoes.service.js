@@ -3,6 +3,10 @@ const AppError = require('../../shared/AppError');
 const { MODULOS, CATALOGO, TODAS_PERMISSOES, MODULOS_PADRAO } = require('./permissoes.shared');
 
 const CODIGOS_MODULO = new Set(MODULOS.map((m) => m.codigo));
+// Ferramentas da CENTRAL — sempre disponíveis (não são módulos vendáveis que se
+// ligam/desligam por cliente). Suas permissões não devem ser filtradas por
+// "módulo ativo"; quem controla o acesso é a permissão do usuário.
+const MODULOS_CENTRAL = new Set(['financeiro', 'bi', 'maquininhas', 'marca', 'usuarios', 'precos']);
 
 // ---------- Camada 1: módulos por cliente (master) ----------
 
@@ -173,22 +177,25 @@ async function permissoesEfetivas(usuario) {
   // Dono da central (central_admin SEM papel atribuído) = acesso total, retro-
   // compatível. Membros criados pela Equipe recebem um papel e são governados por ele.
   if (usuario.perfil === 'central_admin' && (!doPapel || doPapel.length === 0)) {
-    return { perfil: 'central_admin', modulos: [...ativos], permissoes: ['*'], lojaId: null };
+    return { perfil: 'central_admin', modulos: [...new Set([...ativos, ...MODULOS_CENTRAL])], permissoes: ['*'], lojaId: null };
   }
   const permissoes = [...doPapel].filter((p) => {
     const codigo = p.split('.')[0];
+    if (MODULOS_CENTRAL.has(codigo)) return true; // ferramentas da central nunca são removidas
     return !CODIGOS_MODULO.has(codigo) || ativos.has(codigo);
   });
   // Retorna o perfil REAL (central_admin / loja / cliente legado), não um valor fixo —
   // o frontend usa o perfil para decidir o menu (ex.: 'Lojas' só para central_admin).
-  return { perfil: usuario.perfil || 'loja', modulos: [...ativos], permissoes, lojaId: usuario.lojaId || null };
+  const perfilReal = usuario.perfil || 'loja';
+  const modsRet = (perfilReal === 'central_admin' || perfilReal === 'super_admin') ? [...new Set([...ativos, ...MODULOS_CENTRAL])] : [...ativos];
+  return { perfil: perfilReal, modulos: modsRet, permissoes, lojaId: usuario.lojaId || null };
 }
 
 // Catálogo de permissões (módulos -> ações com rótulo) para o editor de papéis.
 // Filtra pelos módulos ativos da empresa, mais 'usuarios' (base, sempre presente).
 async function catalogoPermissoes(empresaId) {
   const ativos = await modulosAtivos(empresaId);
-  return CATALOGO.filter((m) => m.modulo === 'usuarios' || ativos.has(m.modulo));
+  return CATALOGO.filter((m) => m.modulo === 'usuarios' || MODULOS_CENTRAL.has(m.modulo) || ativos.has(m.modulo));
 }
 
 module.exports = {
