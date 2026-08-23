@@ -46,6 +46,20 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     const preco = await configService.precificar({ empresaId, lojaId, km: distanciaKm });
     valorClienteCent = preco.valor_cliente_cent;
     valorMotoboyCent = preco.valor_motoboy_cent;
+
+    // Preço dinâmico: soma o ajuste da regra que bater (no máx. uma — anti-choque).
+    try {
+      const precosService = require('../precos').service;
+      const dyn = await precosService.calcularDinamica({
+        empresaId, lojaId, centroId: centroCustoId, modalidadeId,
+        coletaLat: coleta && coleta.lat, coletaLng: coleta && coleta.lng,
+        motoboyId, quando: new Date(),
+      });
+      if (dyn) {
+        if (valorClienteCent != null) valorClienteCent += (dyn.add_cliente_cent || 0);
+        if (valorMotoboyCent != null) valorMotoboyCent += (dyn.add_motoboy_cent || 0);
+      }
+    } catch (e) { /* nunca bloqueia o lançamento por causa da dinâmica */ }
   } catch (e) {
     console.warn('[entregas] precificação indisponível:', e.message);
   }

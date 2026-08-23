@@ -74,6 +74,10 @@ const CATALOGO = [
     { codigo: 'marca.ver',    rotulo: 'Ver marca',    desc: 'Visualizar a identidade white-label' },
     { codigo: 'marca.editar', rotulo: 'Editar marca', desc: 'Alterar logo, cores e identidade' },
   ]},
+  { modulo: 'precos', nome: 'Preço dinâmico', categoria: 'Configuração', acoes: [
+    { codigo: 'precos.ver',       rotulo: 'Ver preço dinâmico',       desc: 'Visualizar as regras de preço dinâmico' },
+    { codigo: 'precos.gerenciar', rotulo: 'Gerenciar preço dinâmico', desc: 'Criar, editar e ativar regras de ajuste de valor' },
+  ]},
   { modulo: 'usuarios', nome: 'Equipe e permissões', categoria: 'Configuração', acoes: [
     { codigo: 'usuarios.ver',       rotulo: 'Ver equipe',                desc: 'Visualizar membros da equipe' },
     { codigo: 'usuarios.gerenciar', rotulo: 'Gerenciar equipe e permissões', desc: 'Criar usuários e definir permissões' },

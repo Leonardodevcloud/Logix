@@ -28,6 +28,7 @@ const clientehub = require('./src/modules/clientehub');
 const financeiro = require('./src/modules/financeiro');
 const radar = require('./src/modules/radar');
 const mapa = require('./src/modules/mapa');
+const precos = require('./src/modules/precos');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -43,6 +44,7 @@ async function migrar() {
   await clientehub.initClienteHubTables();  // depois de config (FK -> frete_categorias) e motoboys
   await branding.initBrandingTables();
   await mapa.initMapaTables();    // depois de clientehub (coluna em cliente_regras_acionamento)
+  await precos.initPrecosTables();
   await financeiro.initFinanceiroTables();  // tabelas de lancamentos/fechamentos + ALTER entregas
   await radar.initRadarTables();            // config + alertas do radar operacional
   console.log('[migrations] tabelas verificadas/criadas');
@@ -89,6 +91,7 @@ function montarApp() {
   api.use('/financeiro', financeiro.initFinanceiroRoutes());
   api.use('/radar', radar.initRadarRoutes());
   api.use('/mapa', mapa.initMapaRoutes());
+  api.use('/precos', precos.initPrecosRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último
