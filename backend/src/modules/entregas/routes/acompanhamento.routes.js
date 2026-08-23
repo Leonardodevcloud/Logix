@@ -141,8 +141,8 @@ module.exports = function acompanhamentoRoutes() {
     } catch (e) { next(e); }
   });
 
-  // PATCH /entregas/:id/valores — edita valor cliente/motoboy (só central)
-  router.patch('/:id/valores', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+  // PATCH /entregas/:id/valores — edita valor cliente/motoboy (permissão específica)
+  router.patch('/:id/valores', exigirTenant, exigirPermissao('entregas.ajustar_valor'), async (req, res, next) => {
     try {
       // Usuário de loja não edita valores.
       if (req.lojaId) throw AppError.proibido('Apenas a central pode editar valores');

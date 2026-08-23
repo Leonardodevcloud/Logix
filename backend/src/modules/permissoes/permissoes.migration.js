@@ -58,6 +58,15 @@ async function initPermissoesTables() {
                   WHERE perfil = 'cliente' AND loja_id IS NULL AND empresa_id IS NOT NULL`);
   } catch {}
 
+  // Retrocompat: quem já podia editar a corrida (entregas.editar) ganha também a
+  // nova permissão granular de ajustar valor, para não perder acesso na migração.
+  try {
+    await query(`INSERT INTO papel_permissoes (papel_id, permissao)
+                 SELECT papel_id, 'entregas.ajustar_valor' FROM papel_permissoes
+                  WHERE permissao = 'entregas.editar'
+                 ON CONFLICT DO NOTHING`);
+  } catch {}
+
   console.log('[permissoes] catálogo e templates verificados');
 }
 

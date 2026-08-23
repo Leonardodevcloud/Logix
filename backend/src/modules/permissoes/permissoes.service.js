@@ -1,6 +1,6 @@
 const { query, pool } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
-const { MODULOS, TODAS_PERMISSOES, MODULOS_PADRAO } = require('./permissoes.shared');
+const { MODULOS, CATALOGO, TODAS_PERMISSOES, MODULOS_PADRAO } = require('./permissoes.shared');
 
 const CODIGOS_MODULO = new Set(MODULOS.map((m) => m.codigo));
 
@@ -165,8 +165,15 @@ async function permissoesEfetivas(usuario) {
   return { perfil: usuario.perfil || 'loja', modulos: [...ativos], permissoes, lojaId: usuario.lojaId || null };
 }
 
+// Catálogo de permissões (módulos -> ações com rótulo) para o editor de papéis.
+// Filtra pelos módulos ativos da empresa, mais 'usuarios' (base, sempre presente).
+async function catalogoPermissoes(empresaId) {
+  const ativos = await modulosAtivos(empresaId);
+  return CATALOGO.filter((m) => m.modulo === 'usuarios' || ativos.has(m.modulo));
+}
+
 module.exports = {
   listarModulos, modulosDaEmpresa, modulosAtivos, empresaTemModulo, definirModulosDaEmpresa,
   habilitarModulosPadrao, listarPapeis, obterPapel, criarPapel, idDoTemplate,
-  permissoesDoUsuario, atribuirPapel, permissoesEfetivas,
+  permissoesDoUsuario, atribuirPapel, permissoesEfetivas, catalogoPermissoes,
 };

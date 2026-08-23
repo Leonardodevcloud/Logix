@@ -3,6 +3,7 @@ const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./equipe.service');
+const permissoesService = require('../permissoes/permissoes.service');
 
 function initEquipeRoutes() {
   const router = express.Router();
@@ -10,6 +11,21 @@ function initEquipeRoutes() {
 
   router.get('/', async (req, res, next) => { try { res.json(await service.listarEquipe(req.empresaId)); } catch (e) { next(e); } });
   router.get('/papeis', async (req, res, next) => { try { res.json(await service.listarPapeis(req.empresaId)); } catch (e) { next(e); } });
+
+  // Catálogo de permissões (para o editor de papéis) e criação de papel personalizado.
+  router.get('/catalogo', async (req, res, next) => {
+    try { res.json(await permissoesService.catalogoPermissoes(req.empresaId)); } catch (e) { next(e); }
+  });
+  router.post('/papeis', async (req, res, next) => {
+    try {
+      res.status(201).json(await permissoesService.criarPapel({
+        empresaId: req.empresaId,
+        nome: req.body.nome,
+        descricao: req.body.descricao || null,
+        permissoes: Array.isArray(req.body.permissoes) ? req.body.permissoes : [],
+      }));
+    } catch (e) { next(e); }
+  });
 
   router.post('/', async (req, res, next) => {
     try {

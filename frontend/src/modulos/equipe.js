@@ -29,7 +29,12 @@ export async function montar(container) {
   const lista = el('div', { class: 'lx-card', style: 'overflow:hidden' },
     el('div', { style: 'padding:16px 18px;color:var(--lx-tinta-2);font-size:13px' }, 'Carregando…'));
 
-  area.append(secHeader('Novo membro'), formNovo(papeis, carregar, notif), toast, secHeader('Usuários'), lista);
+  area.append(secHeader('Novo membro'), formNovo(papeis, carregar, notif), toast, secHeader('Papéis e permissões'), painelPapeis(() => recarregarPapeis(), notif), secHeader('Usuários'), lista);
+
+  async function recarregarPapeis() {
+    try { papeis = await get('/equipe/papeis'); } catch {}
+    carregar();
+  }
 
   async function carregar() {
     lista.innerHTML = '';
@@ -147,4 +152,75 @@ function formNovo(papeis, aoCriar, notif) {
       campo('Senha inicial', senha),
       campo('Papel', sel)),
     el('div', { style: 'display:flex;align-items:center;gap:14px;margin-top:4px' }, botao, msg));
+}
+
+// Painel de papéis: lista os papéis existentes e permite criar um novo, com
+// checkboxes gerados a partir do catálogo (permissões novas aparecem sozinhas).
+function painelPapeis(aoMudar, notif) {
+  const wrap = el('div', { class: 'lx-card', style: 'padding:16px 18px;margin-bottom:8px' });
+  const info = el('div', { style: 'font-size:13px;color:var(--lx-tinta-2);margin-bottom:12px' },
+    'Papéis definem o que cada usuário pode ver e fazer. Crie um papel personalizado marcando exatamente as permissões desejadas.');
+  const btnNovo = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: abrir }, '+ Novo papel');
+  wrap.append(info, btnNovo);
+
+  async function abrir() {
+    let catalogo = [];
+    try { catalogo = await get('/equipe/catalogo'); } catch { notif('Não foi possível carregar o catálogo.', 'erro'); return; }
+
+    const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(4,20,40,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:1000;overflow:auto' });
+    const nome = el('input', { class: 'lx-input', placeholder: 'Nome do papel (ex.: Supervisor)' });
+    const desc = el('input', { class: 'lx-input', placeholder: 'Descrição (opcional)' });
+    const marcados = new Set();
+
+    const grupos = catalogo.map((m) => {
+      const linhas = m.acoes.map((a) => {
+        const cb = el('input', { type: 'checkbox' });
+        cb.onchange = () => { cb.checked ? marcados.add(a.codigo) : marcados.delete(a.codigo); };
+        return el('label', { style: 'display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer;font-size:13px' },
+          cb,
+          el('div', {},
+            el('div', { style: 'font-weight:600;color:var(--lx-tinta)' }, a.rotulo),
+            a.desc ? el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2)' }, a.desc) : null));
+      });
+      // Botão "marcar tudo" do módulo, para agilizar.
+      const todos = el('button', { type: 'button', class: 'lx-btn lx-btn-secundario', style: 'font-size:11px;padding:3px 10px', onClick: () => {
+        const alvo = m.acoes.map((a) => a.codigo);
+        const jaTodos = alvo.every((c) => marcados.has(c));
+        alvo.forEach((c) => jaTodos ? marcados.delete(c) : marcados.add(c));
+        overlay.querySelectorAll(`input[data-mod="${m.modulo}"]`).forEach((x) => { x.checked = !jaTodos; });
+      } }, 'Alternar todos');
+      linhas.forEach((l, i) => { l.querySelector('input').setAttribute('data-mod', m.modulo); });
+      return el('div', { style: 'border:1px solid var(--lx-linha);border-radius:10px;padding:12px 14px;margin-bottom:10px' },
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px' },
+          el('div', { style: 'font-weight:700;font-size:12.5px;color:var(--lx-tinta)' }, m.nome),
+          todos),
+        ...linhas);
+    });
+
+    async function salvar() {
+      if (!nome.value.trim()) { notif('Dê um nome ao papel.', 'erro'); return; }
+      if (!marcados.size) { notif('Marque ao menos uma permissão.', 'erro'); return; }
+      try {
+        await post('/equipe/papeis', { nome: nome.value.trim(), descricao: desc.value.trim() || undefined, permissoes: [...marcados] });
+        notif('Papel criado.', 'ok');
+        document.body.removeChild(overlay);
+        aoMudar();
+      } catch (e) { notif('Erro: ' + e.message, 'erro'); }
+    }
+
+    const card = el('div', { class: 'lx-card', style: 'max-width:560px;width:100%;padding:20px 22px' },
+      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px' },
+        el('h3', { style: 'margin:0;font-size:16px' }, 'Novo papel'),
+        el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:16px;padding:2px 10px', onClick: () => document.body.removeChild(overlay) }, '×')),
+      campo('Nome', nome), campo('Descrição', desc),
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin:14px 0 8px' }, 'Permissões'),
+      ...grupos,
+      el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px' },
+        el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:13px', onClick: () => document.body.removeChild(overlay) }, 'Cancelar'),
+        el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: salvar }, 'Criar papel')));
+    overlay.append(card);
+    document.body.append(overlay);
+  }
+
+  return wrap;
 }

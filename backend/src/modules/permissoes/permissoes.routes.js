@@ -28,6 +28,11 @@ function initPermissoesRoutes() {
   });
 
   // --- Cliente: papéis e atribuição a usuários ---
+  // Catálogo de permissões para o editor (módulos ativos + ações com rótulo).
+  router.get('/catalogo', resolverTenant, exigirTenant, async (req, res, next) => {
+    try { res.json(await service.catalogoPermissoes(req.empresaId)); } catch (e) { next(e); }
+  });
+
   router.get('/papeis', resolverTenant, exigirTenant, async (req, res, next) => {
     try { res.json(await service.listarPapeis(req.empresaId)); } catch (e) { next(e); }
   });
