@@ -151,6 +151,11 @@ async function permissoesEfetivas(usuario) {
   }
   const ativos = await modulosAtivos(usuario.empresaId);
   const doPapel = await permissoesDoUsuario(usuario.id);
+  // Dono da central (central_admin SEM papel atribuído) = acesso total, retro-
+  // compatível. Membros criados pela Equipe recebem um papel e são governados por ele.
+  if (usuario.perfil === 'central_admin' && (!doPapel || doPapel.length === 0)) {
+    return { perfil: 'central_admin', modulos: [...ativos], permissoes: ['*'], lojaId: null };
+  }
   const permissoes = [...doPapel].filter((p) => {
     const codigo = p.split('.')[0];
     return !CODIGOS_MODULO.has(codigo) || ativos.has(codigo);

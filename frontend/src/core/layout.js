@@ -24,36 +24,37 @@ function gruposNav() {
     ];
   }
 
+  const central = a.perfil === 'central_admin';
   const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
   // Central tem a tela de Acompanhamento (visão de todas as lojas).
-  if (a.perfil === 'central_admin' && auth.temModulo('entregas'))
+  if (central && auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
   // Rastreio logo abaixo de Acompanhamento.
-  if (auth.temModulo('rastreamento') && auth.pode('entregas.ver'))
+  if (auth.temModulo('rastreamento') && auth.pode('rastreamento.ver'))
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });
   // Mapa em tempo real logo abaixo do Rastreio (abre em aba dedicada).
-  if (a.perfil === 'central_admin')
+  if (central && auth.temModulo('rastreamento') && auth.pode('rastreamento.ver'))
     operacao.push({ rota: '/mapa', rotulo: 'Mapa em tempo real', icone: 'mapa', novaAba: true });
   // Radar operacional: motoboys parados/sem sinal em corridas em rota.
   // Central vê tudo (+ configura); loja vê só os alertas das entregas dela.
-  if (a.perfil === 'central_admin' || a.perfil === 'loja')
+  if ((central || a.perfil === 'loja') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/radar', rotulo: 'Radar', icone: 'acompanhamento' });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
-  // Lojas: só para a administração da central (central_admin), não para usuários de loja.
-  if (auth.temModulo('lojas') && a.perfil === 'central_admin')
+  // Lojas (clientes): gestão da central, quem tem permissão de lojas.
+  if (central && auth.temModulo('lojas') && auth.pode('lojas.ver'))
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
     operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
-  // Financeiro: faturamento de clientes e motoboys (só central).
-  if (a.perfil === 'central_admin')
+  // Financeiro: faturamento de clientes e motoboys (central + permissão financeiro).
+  if (central && auth.temModulo('financeiro') && auth.pode('financeiro.ver'))
     operacao.push({ rota: '/financeiro', rotulo: 'Financeiro', icone: 'financeiro' });
 
   const config = [];
   if (auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });
-  // Configurações da operação — só para a administração da central.
-  if (a.perfil === 'central_admin')
+  // Configurações da operação — administradores da central (gerência de usuários).
+  if (central && auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/configuracoes', rotulo: 'Configurações', icone: 'config' });
 
   const grupos = [{ titulo: 'Operação', itens: operacao }];

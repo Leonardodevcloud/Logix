@@ -49,6 +49,15 @@ async function initPermissoesTables() {
   await query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS papel_id UUID REFERENCES papeis(id)`);
 
   await semear();
+  // Migração de perfil: membros DA CENTRAL foram criados como 'cliente' (legado,
+  // equivalente a loja) e por isso caíam na tela de loja. Quem é da central
+  // (empresa definida, SEM loja) passa a 'central_admin' — o acesso continua
+  // governado pelo papel de cada um. Usuários de loja (com loja_id) não mudam.
+  try {
+    await query(`UPDATE usuarios SET perfil = 'central_admin'
+                  WHERE perfil = 'cliente' AND loja_id IS NULL AND empresa_id IS NOT NULL`);
+  } catch {}
+
   console.log('[permissoes] catálogo e templates verificados');
 }
 
