@@ -138,27 +138,46 @@ async function abrirEditor(regra, recarregar) {
 
   // -- Raio (mapa)
   const mapaDiv = el('div', { style: 'height:320px;border-radius:10px;overflow:hidden;border:1px solid var(--lx-linha)' });
-  const infoRaio = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:6px 0' }, 'Clique no mapa para marcar os cantos da área. A dinâmica vale quando a COLETA cai dentro.');
+  const infoRaio = el('div', { style: 'font-size:12px;color:var(--lx-tinta-2);margin:6px 0;line-height:1.5' },
+    'Clique no mapa para adicionar cantos. Arraste as bolinhas para ajustar. Clique com o botão direito num ponto para removê-lo. A dinâmica vale quando a COLETA cai dentro da área.');
+  const btnDesfazer = el('button', { type: 'button', class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => { poligono.pop(); redesenhar(); } }, 'Desfazer último');
   const btnLimpar = el('button', { type: 'button', class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => { poligono = []; redesenhar(); } }, 'Limpar área');
   const contadorPts = el('span', { style: 'font-size:12px;color:var(--lx-tinta-3);margin-left:8px' }, '');
-  blocoRaio.append(infoRaio, el('div', { style: 'display:flex;align-items:center;margin-bottom:8px' }, btnLimpar, contadorPts), mapaDiv);
+  blocoRaio.append(infoRaio, el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:8px' }, btnDesfazer, btnLimpar, contadorPts), mapaDiv);
 
   let mapa = null, camadaPoli = null, marcadores = [];
-  function redesenhar() {
-    if (!mapa || !window.L) return;
-    marcadores.forEach(m => mapa.removeLayer(m)); marcadores = [];
+
+  const iconePonto = () => window.L.divIcon({
+    className: '',
+    html: '<div style="width:16px;height:16px;border-radius:50%;background:#185FA5;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);cursor:move"></div>',
+    iconSize: [16, 16], iconAnchor: [8, 8],
+  });
+
+  // Só a forma (polígono/linha) — redesenhada durante o arraste, sem recriar os pinos.
+  function desenharForma() {
     if (camadaPoli) { mapa.removeLayer(camadaPoli); camadaPoli = null; }
-    poligono.forEach((p) => {
-      const mk = window.L.circleMarker(p, { radius: 5, color: '#185FA5', fillColor: '#185FA5', fillOpacity: 1 });
-      mk.addTo(mapa); marcadores.push(mk);
-    });
-    if (poligono.length >= 3) {
-      camadaPoli = window.L.polygon(poligono, { color: '#185FA5', weight: 2, fillOpacity: 0.15 }).addTo(mapa);
-    } else if (poligono.length === 2) {
-      camadaPoli = window.L.polyline(poligono, { color: '#185FA5', weight: 2, dashArray: '4' }).addTo(mapa);
-    }
+    if (poligono.length >= 3) camadaPoli = window.L.polygon(poligono, { color: '#185FA5', weight: 2, fillOpacity: 0.15 }).addTo(mapa);
+    else if (poligono.length === 2) camadaPoli = window.L.polyline(poligono, { color: '#185FA5', weight: 2, dashArray: '4' }).addTo(mapa);
     contadorPts.textContent = poligono.length + ' ponto(s)' + (poligono.length < 3 ? ' — mínimo 3' : '');
   }
+
+  // Recria os pinos arrastáveis (só quando adiciona/remove ponto).
+  function reconstruirPinos() {
+    marcadores.forEach((m) => mapa.removeLayer(m)); marcadores = [];
+    poligono.forEach((p, i) => {
+      const mk = window.L.marker(p, { draggable: true, icon: iconePonto() }).addTo(mapa);
+      mk.on('drag', () => { const ll = mk.getLatLng(); poligono[i] = [ll.lat, ll.lng]; desenharForma(); });
+      mk.on('contextmenu', (e) => { window.L.DomEvent.stop(e); poligono.splice(i, 1); redesenhar(); });
+      marcadores.push(mk);
+    });
+  }
+
+  function redesenhar() {
+    if (!mapa || !window.L) return;
+    reconstruirPinos();
+    desenharForma();
+  }
+
   async function initMapa() {
     await garantirLeaflet();
     const centro = poligono.length ? poligono[0] : [-12.9718, -38.5011]; // Salvador como fallback
