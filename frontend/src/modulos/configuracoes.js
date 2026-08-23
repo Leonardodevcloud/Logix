@@ -3,6 +3,8 @@ import { el } from '../core/ui.js';
 import { get, post, put, patch, del } from '../core/api.js';
 import { EditorSla } from './sla-editor.js';
 import { EditorValores } from './valores-editor.js';
+import { abaPrecoDinamico } from './preco-dinamico.js';
+import * as auth from '../core/auth.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:2000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -37,6 +39,7 @@ export async function montar(container) {
     { id: 'valores', rotulo: 'Tabela de Valores Global' },
     { id: 'ocorrencias', rotulo: 'Ocorrências de marcação' },
   ];
+  if (auth.pode('precos.ver')) abas.push({ id: 'precos', rotulo: 'Preço dinâmico' });
   let _aba = 'fretes';
 
   const navAbas = el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid var(--lx-linha);margin-bottom:20px' });
@@ -58,6 +61,7 @@ export async function montar(container) {
     else if (_aba === 'sla') painel.append(abaSlaGlobal());
     else if (_aba === 'valores') painel.append(abaValoresGlobal());
     else if (_aba === 'ocorrencias') painel.append(abaOcorrencias());
+    else if (_aba === 'precos') painel.append(abaPrecoDinamico());
   }
 
   conteudo.append(navAbas, painel);
