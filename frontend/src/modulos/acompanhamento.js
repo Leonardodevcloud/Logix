@@ -944,10 +944,10 @@ export async function montar(container) {
 
   function linha(c) {
     // Colunas por aba. Todas têm Categoria, Valor e Direção (após Trajeto).
-    const cols = _aba === 'sem' ? '40px 90px 1.4fr 130px 120px 90px 140px 150px 230px'
-      : _aba === 'and' ? '90px 1.4fr 130px 120px 90px 150px 140px 150px 200px'
-      : _aba === 'con' ? '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px 150px'
-      : '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px'; // canceladas
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 230px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 200px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 150px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -983,13 +983,13 @@ export async function montar(container) {
     celulas.push(acoes(c));
 
     const destaque = _aba === 'sem' && _sel.has(c.id) ? 'background:var(--lx-info-bg)' : 'background:var(--lx-superficie)';
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1200px;${destaque}` }, ...celulas);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1360px;${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '40px 90px 1.4fr 130px 120px 90px 140px 150px 230px'
-      : _aba === 'and' ? '90px 1.4fr 130px 120px 90px 150px 140px 150px 200px'
-      : _aba === 'con' ? '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px 150px'
-      : '90px 1.4fr 130px 120px 90px 150px 140px 140px 150px';
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 230px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 200px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 150px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Solicitação', 'Status', 'Ações']
       : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Status', 'Ações']
       : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
@@ -1002,7 +1002,7 @@ export async function montar(container) {
       todas.onchange = () => { if (todas.checked) lista.forEach(c => _sel.add(c.id)); else _sel.clear(); renderTabela(); atualizarBarraSel(); };
       cels[0] = el('div', { style: 'display:flex;justify-content:center' }, todas);
     }
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha);min-width:1200px` }, ...cels);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha);min-width:1360px` }, ...cels);
   }
   function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }
 
