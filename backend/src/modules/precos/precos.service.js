@@ -64,7 +64,7 @@ function horariosSobrepoe(a, b) {
 // ---------------------------------------------------------------------------
 async function acharConflito({ empresaId, id = null, regra }) {
   const { rows } = await query(
-    `SELECT * FROM precos_dinamicos WHERE empresa_id = $1 AND ativo = TRUE AND tipo = $2 AND id <> COALESCE($3,'00000000-0000-0000-0000-000000000000')`,
+    `SELECT * FROM precos_dinamicos WHERE empresa_id = $1 AND ativo = TRUE AND tipo = $2 AND id <> COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
     [empresaId, regra.tipo, id]
   );
   for (const outra of rows) {
