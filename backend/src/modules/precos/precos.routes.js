@@ -15,12 +15,20 @@ function initPrecosRoutes() {
 
   router.post('/', exigirPermissao('precos.gerenciar'), async (req, res, next) => {
     try { res.status(201).json(await service.criar({ empresaId: req.empresaId, dados: req.body, usuarioId: req.usuario.id })); }
-    catch (e) { next(e); }
+    catch (e) {
+      if (e && e.operacional) return next(e);
+      console.error('[precos.criar]', e);
+      return res.status(400).json({ erro: 'Falha ao salvar: ' + (e.message || 'erro interno') });
+    }
   });
 
   router.put('/:id', exigirPermissao('precos.gerenciar'), async (req, res, next) => {
     try { res.json(await service.atualizar({ empresaId: req.empresaId, id: req.params.id, dados: req.body })); }
-    catch (e) { next(e); }
+    catch (e) {
+      if (e && e.operacional) return next(e);
+      console.error('[precos.atualizar]', e);
+      return res.status(400).json({ erro: 'Falha ao salvar: ' + (e.message || 'erro interno') });
+    }
   });
 
   router.patch('/:id/ativo', exigirPermissao('precos.gerenciar'), async (req, res, next) => {

@@ -3,6 +3,7 @@ const { query } = require('../../shared/db');
 // Preço dinâmico: regras que somam um valor (cliente e/ou motoboy) ao preço base
 // de uma corrida no lançamento, conforme o gatilho (horário, volume, raio).
 async function initPrecosTables() {
+  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
   await query(`
     CREATE TABLE IF NOT EXISTS precos_dinamicos (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

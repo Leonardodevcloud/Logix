@@ -98,15 +98,15 @@ async function abrirEditor(regra, recarregar) {
 
   // Campos comuns
   const inpNome = el('input', { class: 'lx-input', placeholder: 'Nome da regra (ex.: Segunda à noite)', value: r.nome || '' });
-  const selTipo = el('select', { class: 'lx-input', style: 'height:38px' }, ...TIPOS.map(t => el('option', { value: t.id }, t.rotulo)));
+  const selTipo = el('select', { class: 'lx-input', style: 'height:38px;line-height:1.4;padding-top:0;padding-bottom:0' }, ...TIPOS.map(t => el('option', { value: t.id }, t.rotulo)));
   selTipo.value = r.tipo || 'horario';
   const inpCliente = el('input', { class: 'lx-input', placeholder: '0,00', value: r.add_cliente_cent ? (r.add_cliente_cent / 100).toFixed(2).replace('.', ',') : '' });
   const inpMotoboy = el('input', { class: 'lx-input', placeholder: '0,00', value: r.add_motoboy_cent ? (r.add_motoboy_cent / 100).toFixed(2).replace('.', ',') : '' });
 
   // Escopo
-  const selLoja = el('select', { class: 'lx-input', style: 'height:38px' }, el('option', { value: '' }, 'Todas as lojas'));
-  const selCentro = el('select', { class: 'lx-input', style: 'height:38px' }, el('option', { value: '' }, 'Todos os centros'));
-  const selModalidade = el('select', { class: 'lx-input', style: 'height:38px' }, el('option', { value: '' }, 'Todas as modalidades'));
+  const selLoja = el('select', { class: 'lx-input', style: 'height:38px;line-height:1.4;padding-top:0;padding-bottom:0' }, el('option', { value: '' }, 'Todas as lojas'));
+  const selCentro = el('select', { class: 'lx-input', style: 'height:38px;line-height:1.4;padding-top:0;padding-bottom:0' }, el('option', { value: '' }, 'Todos os centros'));
+  const selModalidade = el('select', { class: 'lx-input', style: 'height:38px;line-height:1.4;padding-top:0;padding-bottom:0' }, el('option', { value: '' }, 'Todas as modalidades'));
 
   // Blocos por tipo
   const blocoHorario = el('div', {});
@@ -131,7 +131,7 @@ async function abrirEditor(regra, recarregar) {
 
   // -- Volume
   const inpVolN = el('input', { class: 'lx-input', type: 'number', min: '1', placeholder: 'ex.: 10', value: r.volume_a_partir_de || '' });
-  const selReset = el('select', { class: 'lx-input', style: 'height:38px' }, ...RESET.map(([lbl, v]) => el('option', { value: v }, lbl)));
+  const selReset = el('select', { class: 'lx-input', style: 'height:38px;line-height:1.4;padding-top:0;padding-bottom:0' }, ...RESET.map(([lbl, v]) => el('option', { value: v }, lbl)));
   if (r.volume_reset) selReset.value = r.volume_reset;
   const rotVol = el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;margin-bottom:8px' }, 'A partir de qual pedido/nota aplica');
   blocoVolume.append(rotVol, dois(campo('A partir de (Nº)', inpVolN), campo('Contagem reinicia a cada', selReset)));
