@@ -46,6 +46,18 @@ function initEquipeRoutes() {
     } catch (e) { next(e); }
   });
 
+  // Permissões DIRETAS de um usuário (o editor no modal lê e grava aqui).
+  router.get('/:id/permissoes', async (req, res, next) => {
+    try { res.json({ permissoes: await permissoesService.permissoesDiretas(req.params.id) }); }
+    catch (e) { next(e); }
+  });
+  router.put('/:id/permissoes', async (req, res, next) => {
+    try {
+      const lista = Array.isArray(req.body.permissoes) ? req.body.permissoes : [];
+      res.json({ permissoes: await permissoesService.definirPermissoesUsuario(req.params.id, lista) });
+    } catch (e) { next(e); }
+  });
+
   return router;
 }
 module.exports = { initEquipeRoutes };

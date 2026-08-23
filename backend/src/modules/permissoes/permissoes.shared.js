@@ -13,53 +13,62 @@ const MODULOS = [
 ];
 
 // ============================================================================
-// CATÁLOGO DE AÇÕES — a FONTE ÚNICA da verdade de permissões.
+// CATÁLOGO DE AÇÕES — FONTE ÚNICA da verdade de permissões (auditável).
 //
-// Toda ação do sistema (atual e futura) deve estar aqui, no formato
-// `modulo.acao`, com um rótulo legível. A partir dele são derivados:
-//   - PERMISSOES (mapa modulo -> [codigos])   — usado no backend
-//   - TODAS_PERMISSOES (lista achatada)        — validação e template Admin
-//   - o EDITOR de papéis                       — renderiza os checkboxes daqui
+// Cada micro-ação do sistema tem um código `modulo.acao` e um rótulo legível.
+// Dele derivam: PERMISSOES, TODAS_PERMISSOES, os templates e o EDITOR (checkboxes).
 //
-// >>> Para adicionar uma permissão nova (nova função/módulo), basta acrescentar
-//     uma linha em `acoes`. Ela aparece AUTOMATICAMENTE no editor de papéis,
-//     entra no papel Administrador e fica disponível para gate no backend/front.
-//     Não precisa mexer em mais lugar nenhum. <<<
+// >>> PARA ADICIONAR UMA PERMISSÃO NOVA: acrescente uma linha em `acoes`. Ela
+//     aparece sozinha no editor, entra no papel Administrador e fica pronta para
+//     ser exigida no backend (exigirPermissao) e escondida no front (pode()).
+//     É o único lugar a editar. <<<
 // ============================================================================
 const CATALOGO = [
   { modulo: 'entregas', nome: 'Entregas', categoria: 'Operação', acoes: [
-    { codigo: 'entregas.ver',           rotulo: 'Ver entregas e acompanhamento', desc: 'Visualizar painel, corridas e acompanhamento' },
+    { codigo: 'entregas.ver',           rotulo: 'Ver entregas e acompanhamento', desc: 'Visualizar painel, corridas, acompanhamento e histórico' },
     { codigo: 'entregas.criar',         rotulo: 'Lançar corrida',                desc: 'Criar novas entregas' },
-    { codigo: 'entregas.editar',        rotulo: 'Editar corrida (endereços)',    desc: 'Alterar endereços e dados da corrida' },
-    { codigo: 'entregas.ajustar_valor', rotulo: 'Ajustar valor',                 desc: 'Alterar o valor/preço de uma corrida' },
+    { codigo: 'entregas.editar',        rotulo: 'Editar endereços da corrida',   desc: 'Alterar endereços/pontos de uma corrida' },
+    { codigo: 'entregas.ajustar_valor', rotulo: 'Ajustar valor',                 desc: 'Alterar o valor cliente/motoboy de uma corrida' },
+    { codigo: 'entregas.liberar_ponto', rotulo: 'Liberar/aprovar ponto',         desc: 'Aprovar liberação de ponto de uma corrida' },
+    { codigo: 'entregas.finalizar',     rotulo: 'Finalizar manualmente',         desc: 'Concluir uma corrida manualmente pela central' },
+    { codigo: 'entregas.reabrir',       rotulo: 'Reabrir corrida',               desc: 'Reabrir uma corrida concluída/cancelada' },
     { codigo: 'entregas.cancelar',      rotulo: 'Cancelar corrida',              desc: 'Cancelar entregas' },
+  ]},
+  { modulo: 'filas', nome: 'Filas e ofertas', categoria: 'Operação', acoes: [
+    { codigo: 'filas.ver',         rotulo: 'Ver filas',            desc: 'Visualizar a fila de corridas e motoboys ativos' },
+    { codigo: 'filas.gerenciar',   rotulo: 'Atribuir em lote',     desc: 'Atribuir corridas a motoboys em lote' },
+    { codigo: 'filas.disparar',    rotulo: 'Disparar oferta (raio)', desc: 'Ofertar a corrida aos motoboys no raio' },
+    { codigo: 'filas.reatribuir',  rotulo: 'Trocar/reatribuir motoboy', desc: 'Reatribuir a corrida a outro motoboy' },
+    { codigo: 'filas.desatribuir', rotulo: 'Desatribuir motoboy',  desc: 'Remover o motoboy da corrida' },
   ]},
   { modulo: 'motoboys', nome: 'Motoboys', categoria: 'Operação', acoes: [
     { codigo: 'motoboys.ver',       rotulo: 'Ver motoboys',       desc: 'Visualizar a lista de motoboys' },
-    { codigo: 'motoboys.gerenciar', rotulo: 'Gerenciar motoboys', desc: 'Cadastrar, editar, ativar/inativar e atribuir' },
+    { codigo: 'motoboys.gerenciar', rotulo: 'Gerenciar motoboys', desc: 'Cadastrar, editar, ativar/inativar' },
+    { codigo: 'motoboys.atribuir',  rotulo: 'Atribuir motoboy à loja', desc: 'Vincular motoboys a clientes/centros' },
   ]},
   { modulo: 'rastreamento', nome: 'Rastreamento', categoria: 'Operação', acoes: [
     { codigo: 'rastreamento.ver', rotulo: 'Ver rastreio e mapa', desc: 'Acompanhar posição dos motoboys em tempo real' },
   ]},
-  { modulo: 'filas', nome: 'Filas', categoria: 'Operação', acoes: [
-    { codigo: 'filas.ver',       rotulo: 'Ver filas',       desc: 'Visualizar a fila de corridas' },
-    { codigo: 'filas.gerenciar', rotulo: 'Gerenciar filas', desc: 'Operar e disparar ofertas' },
-  ]},
   { modulo: 'lojas', nome: 'Lojas (Clientes)', categoria: 'Operação', acoes: [
-    { codigo: 'lojas.ver',       rotulo: 'Ver lojas/clientes', desc: 'Visualizar os clientes da central' },
-    { codigo: 'lojas.gerenciar', rotulo: 'Gerenciar lojas',    desc: 'Criar, editar, configurar e desativar clientes' },
+    { codigo: 'lojas.ver',        rotulo: 'Ver lojas/clientes',   desc: 'Visualizar os clientes da central' },
+    { codigo: 'lojas.gerenciar',  rotulo: 'Gerenciar lojas',      desc: 'Criar, editar, configurar e desativar clientes' },
+    { codigo: 'lojas.enderecos',  rotulo: 'Gerenciar endereços da loja', desc: 'Editar os endereços salvos de um cliente' },
+    { codigo: 'lojas.centros',    rotulo: 'Gerenciar centros de custo', desc: 'Criar/editar centros de custo de um cliente' },
   ]},
   { modulo: 'financeiro', nome: 'Financeiro', categoria: 'Gestão', acoes: [
-    { codigo: 'financeiro.ver',       rotulo: 'Ver financeiro',        desc: 'Visualizar faturamento e extratos' },
-    { codigo: 'financeiro.sacar',     rotulo: 'Aprovar/realizar saque', desc: 'Operar saques de motoboys' },
-    { codigo: 'financeiro.gerenciar', rotulo: 'Gerenciar financeiro',  desc: 'Ajustes, extras e controle financeiro' },
+    { codigo: 'financeiro.ver',        rotulo: 'Ver financeiro',         desc: 'Faturamento de clientes e motoboys, extratos' },
+    { codigo: 'financeiro.sacar',      rotulo: 'Aprovar/realizar saque', desc: 'Operar saques de motoboys' },
+    { codigo: 'financeiro.extras',     rotulo: 'Lançar extras/ajustes',  desc: 'Adicionar bônus, descontos e ajustes' },
+    { codigo: 'financeiro.categorias', rotulo: 'Gerenciar categorias/valores', desc: 'Definir tabelas de preço e categorias' },
+    { codigo: 'financeiro.gerenciar',  rotulo: 'Gerenciar financeiro',   desc: 'Controle financeiro geral' },
   ]},
   { modulo: 'maquininhas', nome: 'Maquininhas', categoria: 'Gestão', acoes: [
     { codigo: 'maquininhas.ver',       rotulo: 'Ver maquininhas',       desc: '' },
     { codigo: 'maquininhas.gerenciar', rotulo: 'Gerenciar maquininhas', desc: '' },
   ]},
   { modulo: 'bi', nome: 'Relatórios', categoria: 'Gestão', acoes: [
-    { codigo: 'bi.ver', rotulo: 'Ver relatórios', desc: 'Acessar relatórios e BI' },
+    { codigo: 'bi.ver',       rotulo: 'Ver relatórios',      desc: 'Acessar dashboards e relatórios' },
+    { codigo: 'bi.exportar',  rotulo: 'Exportar relatórios',  desc: 'Baixar/exportar dados dos relatórios' },
   ]},
   { modulo: 'marca', nome: 'Marca (White-label)', categoria: 'Configuração', acoes: [
     { codigo: 'marca.ver',    rotulo: 'Ver marca',    desc: 'Visualizar a identidade white-label' },
@@ -67,28 +76,26 @@ const CATALOGO = [
   ]},
   { modulo: 'usuarios', nome: 'Equipe e permissões', categoria: 'Configuração', acoes: [
     { codigo: 'usuarios.ver',       rotulo: 'Ver equipe',                desc: 'Visualizar membros da equipe' },
-    { codigo: 'usuarios.gerenciar', rotulo: 'Gerenciar equipe e papéis', desc: 'Criar usuários, papéis e permissões' },
+    { codigo: 'usuarios.gerenciar', rotulo: 'Gerenciar equipe e permissões', desc: 'Criar usuários e definir permissões' },
   ]},
 ];
 
-// Permissões por módulo (derivado do catálogo) — formato modulo.acao.
+// Derivados (retrocompatível).
 const PERMISSOES = Object.fromEntries(CATALOGO.map((m) => [m.modulo, m.acoes.map((a) => a.codigo)]));
-
 const TODAS_PERMISSOES = CATALOGO.flatMap((m) => m.acoes.map((a) => a.codigo));
 
-// Módulos habilitados por padrão ao criar um cliente (o master ajusta depois).
 const MODULOS_PADRAO = ['entregas', 'motoboys', 'rastreamento', 'filas', 'lojas', 'marca'];
 
-// Papéis-modelo (templates do sistema, empresa_id = NULL). O cliente usa ou clona/cria os seus.
+// Papéis-modelo (atalhos: aplicam um conjunto de permissões de uma vez no editor).
 const TEMPLATES = [
-  { nome: 'Administrador', descricao: 'Acesso total à operação do cliente', permissoes: TODAS_PERMISSOES },
+  { nome: 'Administrador', descricao: 'Acesso total à operação', permissoes: TODAS_PERMISSOES },
   {
     nome: 'Operador', descricao: 'Operação de entregas e motoboys (sem financeiro)',
     permissoes: [...PERMISSOES.entregas, ...PERMISSOES.motoboys, ...PERMISSOES.rastreamento, ...PERMISSOES.filas, ...PERMISSOES.lojas, 'bi.ver'],
   },
   {
     nome: 'Financeiro', descricao: 'Financeiro e relatórios',
-    permissoes: [...PERMISSOES.financeiro, 'bi.ver', 'entregas.ver', 'rastreamento.ver'],
+    permissoes: [...PERMISSOES.financeiro, 'bi.ver', 'bi.exportar', 'entregas.ver', 'rastreamento.ver'],
   },
   {
     nome: 'Loja', descricao: 'Usuário da loja-cliente: cria e acompanha as próprias entregas',

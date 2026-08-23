@@ -124,11 +124,30 @@ async function idDoTemplate(nome) {
 }
 
 async function permissoesDoUsuario(usuarioId) {
+  // Efetivas = permissões do papel (se houver) UNIÃO permissões diretas do usuário.
   const { rows } = await query(
-    `SELECT pp.permissao FROM usuarios u JOIN papel_permissoes pp ON pp.papel_id = u.papel_id WHERE u.id = $1`,
+    `SELECT pp.permissao FROM usuarios u JOIN papel_permissoes pp ON pp.papel_id = u.papel_id WHERE u.id = $1
+     UNION
+     SELECT permissao FROM usuario_permissoes WHERE usuario_id = $1`,
     [usuarioId]
   );
   return new Set(rows.map((r) => r.permissao));
+}
+
+// Permissões DIRETAS (só as do próprio usuário — o que o editor gerencia).
+async function permissoesDiretas(usuarioId) {
+  const { rows } = await query(`SELECT permissao FROM usuario_permissoes WHERE usuario_id = $1`, [usuarioId]);
+  return rows.map((r) => r.permissao);
+}
+
+// Substitui o conjunto de permissões diretas do usuário pela lista informada.
+async function definirPermissoesUsuario(usuarioId, permissoes = []) {
+  const validas = [...new Set(permissoes)].filter((p) => TODAS_PERMISSOES.includes(p));
+  await query(`DELETE FROM usuario_permissoes WHERE usuario_id = $1`, [usuarioId]);
+  for (const perm of validas) {
+    await query(`INSERT INTO usuario_permissoes (usuario_id, permissao) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [usuarioId, perm]);
+  }
+  return validas;
 }
 
 async function atribuirPapel({ empresaId, usuarioId, papelId }) {
@@ -175,5 +194,5 @@ async function catalogoPermissoes(empresaId) {
 module.exports = {
   listarModulos, modulosDaEmpresa, modulosAtivos, empresaTemModulo, definirModulosDaEmpresa,
   habilitarModulosPadrao, listarPapeis, obterPapel, criarPapel, idDoTemplate,
-  permissoesDoUsuario, atribuirPapel, permissoesEfetivas, catalogoPermissoes,
+  permissoesDoUsuario, permissoesDiretas, definirPermissoesUsuario, atribuirPapel, permissoesEfetivas, catalogoPermissoes,
 };

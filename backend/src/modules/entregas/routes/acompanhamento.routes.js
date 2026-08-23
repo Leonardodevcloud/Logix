@@ -156,7 +156,7 @@ module.exports = function acompanhamentoRoutes() {
   });
 
   // PATCH /entregas/:id/finalizar — finalização manual pela central
-  router.patch('/:id/finalizar', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+  router.patch('/:id/finalizar', exigirTenant, exigirPermissao('entregas.finalizar'), async (req, res, next) => {
     try {
       res.json(await service.finalizarManual({
         empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip,
@@ -165,7 +165,7 @@ module.exports = function acompanhamentoRoutes() {
   });
 
   // PATCH /entregas/:id/reabrir — reabre corrida concluída (volta para a fila, sem motoboy)
-  router.patch('/:id/reabrir', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+  router.patch('/:id/reabrir', exigirTenant, exigirPermissao('entregas.reabrir'), async (req, res, next) => {
     try {
       res.json(await service.reabrirEntrega({
         empresaId: req.empresaId, id: req.params.id, usuarioId: req.usuario.id, ip: req.ip,
@@ -189,7 +189,7 @@ module.exports = function acompanhamentoRoutes() {
 
   // POST /entregas/:id/pontos/:pontoId/liberar — central libera a marcação de um
   // ponto (aprova a solicitação do motoboy OU libera preventivamente).
-  router.post('/:id/pontos/:pontoId/liberar', exigirTenant, exigirPermissao('entregas.editar'), async (req, res, next) => {
+  router.post('/:id/pontos/:pontoId/liberar', exigirTenant, exigirPermissao('entregas.liberar_ponto'), async (req, res, next) => {
     try {
       res.json(await service.liberarPonto({
         empresaId: req.empresaId, entregaId: req.params.id, pontoId: req.params.pontoId,

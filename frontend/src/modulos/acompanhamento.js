@@ -172,6 +172,11 @@ function dropMulti(titulo, itens, selecionados, onMudar) {
 export async function montar(container) {
   const podeGerenciar = auth.pode('filas.gerenciar');
   const podeEditar = auth.pode('entregas.editar');
+  const podeLiberar = auth.pode('entregas.liberar_ponto');
+  const podeFinalizar = auth.pode('entregas.finalizar');
+  const podeReabrir = auth.pode('entregas.reabrir');
+  const podeCancelar = auth.pode('entregas.cancelar');
+  const podeDisparar = auth.pode('filas.disparar') || auth.pode('filas.gerenciar');
   const _acesso = auth.acessoAtual();
   const _ehCentral = _acesso.perfil === 'super_admin' || _acesso.perfil === 'central_admin';
 
@@ -724,31 +729,31 @@ export async function montar(container) {
     if (_aba === 'sem') {
       if (podeGerenciar) {
         const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px;grid-column:1 / -1;width:100%', onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
-        w.append(bAtr, botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
+        w.append(bAtr); if (podeDisparar) w.append(botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
-      if (podeEditar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
+      if (podeLiberar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
-      w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
+      if (podeCancelar) w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'and') {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.mapa, 'Rastreio ao vivo (nova guia)', () => { window.open(location.origin + location.pathname + '#/rastreio', '_blank'); }));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
-      if (podeEditar) { w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c)), botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)')); }
-      if (podeEditar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
+      if (podeEditar) w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c))); if (podeFinalizar) w.append(botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)'));
+      if (podeLiberar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
-      w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
+      if (podeCancelar) w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'con') {
       w.append(botaoIcone(P.rota, 'Ver rota do GPS', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
-      if (podeEditar) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
+      if (podeReabrir) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
     } else { // canceladas
       w.append(botaoIcone(P.rota, 'Ver rota', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver detalhes', () => abrirProtocolo(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
-      if (podeEditar) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
+      if (podeReabrir) w.append(botaoIcone(P.reabrir, 'Reabrir corrida', () => abrirReabrir(c), 'var(--lx-azul-primario)'));
     }
     return w;
   }

@@ -67,6 +67,23 @@ async function initPermissoesTables() {
                  ON CONFLICT DO NOTHING`);
   } catch {}
 
+  // Permissões DIRETAS por usuário (cada usuário tem o seu conjunto, auditável).
+  await query(`CREATE TABLE IF NOT EXISTS usuario_permissoes (
+    usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    permissao  TEXT NOT NULL,
+    PRIMARY KEY (usuario_id, permissao)
+  )`);
+
+  // Split de 'entregas.editar' em ações finas: quem já editava ganha as novas
+  // (finalizar, reabrir, liberar ponto) para não perder acesso.
+  try {
+    await query(`INSERT INTO papel_permissoes (papel_id, permissao)
+                 SELECT papel_id, x.perm FROM papel_permissoes,
+                        (VALUES ('entregas.finalizar'),('entregas.reabrir'),('entregas.liberar_ponto'),('entregas.ajustar_valor')) AS x(perm)
+                  WHERE permissao = 'entregas.editar'
+                 ON CONFLICT DO NOTHING`);
+  } catch {}
+
   console.log('[permissoes] catálogo e templates verificados');
 }
 
