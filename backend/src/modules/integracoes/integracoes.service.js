@@ -166,14 +166,31 @@ async function logarRequisicao(d) {
   } catch (e) { /* log não bloqueia */ }
 }
 
-function urlRastreio(basePublico, token) {
-  const base = M.s(basePublico || process.env.RASTREIO_BASE_URL).replace(/\/$/, '');
-  if (!base || !token) return '';
-  return `${base}/rastreio.html?t=${token}`;
+// Base pública de rastreio RESOLVIDA POR TENANT (nunca global). Cada corrida gera
+// o link no domínio do próprio cliente, replicável para todos sem exceção:
+//   1) domínio próprio (empresa_branding.dominio) -> https://dominio-do-cliente
+//   2) subdomínio (empresa_branding.subdominio)    -> https://slug.<DOMINIO_BASE>
+//   3) sem nada configurado -> vazio (melhor vazio do que apontar errado)
+async function baseRastreioDaEmpresa(empresaId) {
+  if (!empresaId) return '';
+  try {
+    const { rows } = await query(
+      `SELECT dominio, subdominio FROM empresa_branding WHERE empresa_id = $1`, [empresaId]);
+    const b = rows[0];
+    if (b && b.dominio) return 'https://' + M.s(b.dominio).replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (b && b.subdominio) return `https://${M.s(b.subdominio)}.${process.env.DOMINIO_BASE || 'logix.com.br'}`;
+  } catch (e) { /* segue sem URL */ }
+  return ''; // sem domínio configurado no tenant: link vazio (nada de env global)
+}
+
+function montarUrlRastreio(base, token) {
+  const b = M.s(base).replace(/\/$/, '');
+  if (!b || !token) return '';
+  return `${b}/rastreio.html?t=${token}`;
 }
 
 // ── GRAVAR SERVIÇO (criar corrida) ───────────────────────────────────────────
-async function gravarServico({ credencial, body, ip, basePublico }) {
+async function gravarServico({ credencial, body, ip }) {
   const pontos = Array.isArray(body.pontos) ? body.pontos : [];
   if (pontos.length < 2) throw AppError.validacao('Favor, informar 2 ou mais pontos!');
   if (pontos.length > 80) throw AppError.validacao('Limite de endereços excedido. Favor informar um número igual ou menor que 80 pontos.');
@@ -196,7 +213,7 @@ async function gravarServico({ credencial, body, ip, basePublico }) {
       [credencial.chaveId, referenciaExterna]
     );
     if (ja[0]) {
-      const resp = await montarRespostaGravar(ja[0].entrega_id, basePublico);
+      const resp = await montarRespostaGravar(ja[0].entrega_id);
       if (resp) return resp;
     }
   }
@@ -226,16 +243,17 @@ async function gravarServico({ credencial, body, ip, basePublico }) {
     ip,
   });
 
-  const resp = await montarRespostaGravar(entrega.id, basePublico);
+  const resp = await montarRespostaGravar(entrega.id);
   return resp;
 }
 
-async function montarRespostaGravar(entregaId, basePublico) {
+async function montarRespostaGravar(entregaId) {
   const { rows } = await query(
-    `SELECT protocolo, distancia_km, tempo_estimado_min, valor_cliente_cent, rastreio_token
+    `SELECT empresa_id, protocolo, distancia_km, tempo_estimado_min, valor_cliente_cent, rastreio_token
        FROM entregas WHERE id = $1`, [entregaId]);
   const e = rows[0];
   if (!e) return null;
+  const base = await baseRastreioDaEmpresa(e.empresa_id);
   return {
     Sucesso: e.protocolo,
     detalhes: {
@@ -243,7 +261,7 @@ async function montarRespostaGravar(entregaId, basePublico) {
       duracao: M.formatarDuracao(e.tempo_estimado_min),
       valor: M.centavosParaValor(e.valor_cliente_cent),
       obs: '',
-      urlRastreamento: urlRastreio(basePublico, e.rastreio_token),
+      urlRastreamento: montarUrlRastreio(base, e.rastreio_token),
     },
     _entregaId: entregaId,
   };
@@ -328,9 +346,10 @@ async function montarStatusEntrega(ent) {
     codigo: '', codigoCompleto: '', descricao: '', codigoFinalizarEnd: '',
   }));
 
+  const base = ent.rastreio_token ? await baseRastreioDaEmpresa(ent.empresa_id) : '';
   return {
     status: M.statusParaSigla(ent.status, ent.motoboy_id),
-    urlRastreamento: ent.rastreio_token ? urlRastreio(process.env.RASTREIO_BASE_URL, ent.rastreio_token) : '',
+    urlRastreamento: montarUrlRastreio(base, ent.rastreio_token),
     pontos,
     dadosProfissional: ent.motoboy_id
       ? { nome: ent.motoboy_nome || '', cpf: '', placa: '' }
@@ -469,4 +488,5 @@ module.exports = {
   listarChaves, criarChave, atualizarChave, alternarAtiva, revogarChave, regenerarToken,
   resolverCredencial, logarRequisicao,
   gravarServico, statusServico, cancelarServico, calcularServico, rastreioPublico,
+  baseRastreioDaEmpresa, montarUrlRastreio,
 };

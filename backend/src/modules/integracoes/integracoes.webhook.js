@@ -54,7 +54,7 @@ async function ultimaPosicao(motoboyId) {
 }
 
 // Monta o corpo da notificação para um momento.
-function montarPayload({ entrega, momento, ponto, posicao, urlRastreio }) {
+function montarPayload({ entrega, momento, ponto, posicao, urlRastreamento }) {
   const idStatus = momento; // 0, 0.5, 0.75, 1, 2, 3
   const base = {
     ID: entrega.protocolo,
@@ -64,7 +64,7 @@ function montarPayload({ entrega, momento, ponto, posicao, urlRastreio }) {
       telefone: entrega.motoboy_telefone || '',
       dataHora: fmt(new Date()),
     },
-    UrlRastreamento: urlRastreio || '',
+    UrlRastreamento: urlRastreamento || "",
     coordenadasMotoboy: posicao ? { lat: posicao.lat, lng: posicao.lng, em: posicao.em } : null,
     valorServico: entrega.valor_cliente_cent != null ? Number((entrega.valor_cliente_cent / 100).toFixed(2)) : null,
     valorProfissional: entrega.valor_motoboy_cent != null ? Number((entrega.valor_motoboy_cent / 100).toFixed(2)) : null,
@@ -148,7 +148,7 @@ async function reconciliarWebhooks() {
       ORDER BY e.criado_em DESC
       LIMIT 200`);
 
-  const base = process.env.RASTREIO_BASE_URL || '';
+  const service = require('./integracoes.service');
   let enviados = 0;
 
   for (const c of candidatas) {
@@ -160,7 +160,9 @@ async function reconciliarWebhooks() {
     const jaMomentos = new Set((estRows[0]?.momentos_enviados) || []);
     const jaPontos = new Set((estRows[0]?.pontos_enviados) || []);
 
-    const urlR = e.rastreio_token && base ? `${base.replace(/\/$/, '')}/rastreio.html?t=${e.rastreio_token}` : '';
+    // URL de rastreio no domínio do PRÓPRIO cliente (resolvida por tenant).
+    const baseR = await service.baseRastreioDaEmpresa(e.empresa_id);
+    const urlR = service.montarUrlRastreio(baseR, e.rastreio_token);
     const novosMomentos = [];
     const novosPontos = [];
 
@@ -168,7 +170,7 @@ async function reconciliarWebhooks() {
     for (const m of momentosAtingidos(e)) {
       if (jaMomentos.has(m)) continue;
       const posicao = await ultimaPosicao(e.motoboy_id);
-      const payload = montarPayload({ entrega: e, momento: m, posicao, urlRastreio: urlR });
+      const payload = montarPayload({ entrega: e, momento: m, posicao, urlRastreamento: urlR });
       const r = await enviar(e.url_notificacao, payload, e.notif_segredo);
       await registrarLog({ entregaId: e.id, chaveId: e.chave_id, momento: m, url: e.url_notificacao, ...r });
       novosMomentos.push(m); enviados++;
@@ -179,7 +181,7 @@ async function reconciliarWebhooks() {
       const finalizado = ['entregue', 'insucesso'].includes(p.status) && (p.finalizado_em || p.entregue_em);
       if (!finalizado || jaPontos.has(p.id)) continue;
       const posicao = await ultimaPosicao(e.motoboy_id);
-      const payload = montarPayload({ entrega: e, momento: '1', ponto: p, posicao, urlRastreio: urlR });
+      const payload = montarPayload({ entrega: e, momento: '1', ponto: p, posicao, urlRastreamento: urlR });
       const r = await enviar(e.url_notificacao, payload, e.notif_segredo);
       await registrarLog({ entregaId: e.id, chaveId: e.chave_id, momento: '1', url: e.url_notificacao, ...r });
       novosPontos.push(p.id); enviados++;

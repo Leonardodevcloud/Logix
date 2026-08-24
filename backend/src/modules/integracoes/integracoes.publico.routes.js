@@ -6,12 +6,8 @@ const service = require('./integracoes.service');
 // corridas. Autenticação por cod_cliente + token no CORPO (não usa JWT).
 // Montada FORA dos guards de módulo; tem limitador próprio por chave.
 
-// Base pública para a URL de rastreio. Deve apontar para o domínio do FRONTEND
-// (onde vive rastreio.html) — nunca o host da API. Vem do env RASTREIO_BASE_URL;
-// sem ele, a URL de rastreio sai vazia (melhor vazia do que apontando errado).
-function basePublicoDe(req) {
-  return process.env.RASTREIO_BASE_URL || '';
-}
+// A URL de rastreio é resolvida por tenant dentro do service (domínio do próprio
+// cliente), então a rota não precisa passar base nenhuma.
 
 // Chave do limitador = cod_cliente (cai no IP se ausente).
 const chaveLimite = (req) => (req.body && req.body.codCliente) ? String(req.body.codCliente) : req.ip;
@@ -57,7 +53,7 @@ function initIntegracoesPublicRoutes() {
   router.post('/gravar', limiteGravar, autenticar('gravar'), async (req, res) => {
     try {
       const resp = await service.gravarServico({
-        credencial: req.credencial, body: req.body, ip: req.ip, basePublico: basePublicoDe(req),
+        credencial: req.credencial, body: req.body, ip: req.ip,
       });
       service.logarRequisicao({
         empresaId: req.credencial.empresaId, chaveId: req.credencial.chaveId, operacao: 'gravar',

@@ -153,7 +153,8 @@ function cardChave(c, lojas, recarregar) {
 
 // ── Bloco de documentação (endpoint + exemplo) ───────────────────────────────
 function blocoDocs() {
-  const baseUrl = location.origin + '/api/v1/integracao';
+  const baseApi = (window.LOGIX_API || (location.origin + '/api/v1')).replace(/\/$/, '');
+  const baseUrl = baseApi + '/integracao';
   const exemplo =
 `POST ${baseUrl}/gravar
 Content-Type: application/json
