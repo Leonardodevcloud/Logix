@@ -95,6 +95,8 @@
     <a href="#cancelar">Cancelar corrida</a>
     <a href="#calcular">Calcular preço</a>
     <a href="#centros">Centros de custo</a>
+    <a href="#categorias">Categorias</a>
+    <a href="#profissionais">Profissionais</a>
     <div class="grp">Acompanhamento</div>
     <a href="#rastreio">Link de rastreio</a>
     <a href="#webhook">Webhook de notificação</a>
@@ -186,6 +188,8 @@ POST  /calcular   <span class="c">previa de distancia e valor</span></pre>
       <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Código da loja.</td></tr>
       <tr><td><code>pontos</code></td><td>lista</td><td><span class="obg">obrigatório</span></td><td>Coleta e entregas. Veja <a href="#campos-ponto">campos do ponto</a>.</td></tr>
       <tr><td><code>centroCusto</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Centro de custo da loja para o qual a corrida será gerada. Informe o <b>código</b> ou o <b>nome</b> do centro. Veja como obter a lista em <a href="#centros">centros disponíveis</a>.</td></tr>
+      <tr><td><code>categoria</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Categoria (modalidade) da corrida. Informe o <b>nome</b> da categoria disponível para a loja. Veja <a href="#categorias">categorias disponíveis</a>.</td></tr>
+      <tr><td><code>codigoProf</code></td><td>número</td><td><span class="opc">opcional</span></td><td>Direciona a corrida para um profissional específico, pelo <b>código</b> dele. O profissional precisa estar vinculado à loja e a loja precisa ter permissão de escolher o profissional. Veja <a href="#profissionais">profissionais disponíveis</a>.</td></tr>
       <tr><td><code>numeroPedido</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Número do pedido ou nota no sistema da loja. Serve para reconciliar e evita duplicar a corrida se a mesma requisição for reenviada (idempotência).</td></tr>
       <tr><td><code>semProfissional</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Se <code>"S"</code>, a corrida entra na fila mas não é ofertada automaticamente aos profissionais (a central despacha depois).</td></tr>
       <tr><td><code>ordenar</code></td><td>texto</td><td><span class="opc">opcional</span></td><td><code>"false"</code> mantém a ordem dos pontos como enviada. Caso contrário, a plataforma otimiza a rota. Com <code>"true"</code> o limite é de 20 pontos.</td></tr>
@@ -203,6 +207,8 @@ Content-Type: application/json
   "semProfissional": "N",
   "ordenar": "true",
   "centroCusto": "MATRIZ",
+  "categoria": "Moto",
+  "codigoProf": 12,
   "pontos": [
     {
       "rua": "Av. Tancredo Neves", "numero": "620",
@@ -241,6 +247,15 @@ Content-Type: application/json
       <tr><td><code>detalhes.urlRastreamento</code></td><td>Link público para o cliente final acompanhar a entrega.</td></tr>
     </tbody>
   </table>
+  <div class="box info"><div class="t">Quando você direciona a um profissional (codigoProf)</div>
+    A corrida é sempre criada. Se o profissional não puder assumir (por exemplo, por já estar no limite de corridas do cliente, por estar offline, por não ser exclusivo desta modalidade, ou por a loja não ter permissão de escolher o profissional), a corrida é criada mesmo assim, sem o profissional, e o motivo volta em <code>detalhes</code>:
+    <pre style="margin-top:10px">"detalhes": {
+  "distancia": 8.7, "duracao": "00:21:00", "valor": "25.50",
+  "urlRastreamento": "...",
+  "profissionalNaoAlocado": true,
+  "codigoProfInformado": 12,
+  "mensagem": "Você já está com 5 corrida(s) em andamento, o limite para este cliente é 5. A corrida foi criada sem profissional definido."
+}</pre></div>
 
   <h3>Respostas de erro</h3>
   <div class="box err"><div class="t">Falha (HTTP 200 com a chave Erro)</div></div>
@@ -404,6 +419,45 @@ Content-Type: application/json
 
   <hr />
 
+  <h2 id="categorias"><span class="met post">POST</span> Categorias disponíveis</h2>
+  <p class="rota">/api/v1/integracao/categorias</p>
+  <p>Lista as categorias (modalidades) disponíveis para a loja. Use para saber quais valores aceitar no campo <code>categoria</code> ao <a href="#gravar">criar a corrida</a>. Usa o token de <b>status</b>.</p>
+  <h3>Exemplo de requisição</h3>
+  <pre>{
+  "token": "&lt;segredo&gt;-status",
+  "codCliente": "&lt;codigo da loja&gt;"
+}</pre>
+  <div class="box ok"><div class="t">Sucesso (HTTP 200)</div></div>
+  <pre>{
+  "Sucesso": [
+    { "nome": "Moto" },
+    { "nome": "Carro" }
+  ]
+}</pre>
+  <p>Se o valor enviado em <code>categoria</code> não existir para a loja, a criação retorna <code>Categoria não encontrada para esta loja.</code></p>
+
+  <hr />
+
+  <h2 id="profissionais"><span class="met post">POST</span> Profissionais disponíveis</h2>
+  <p class="rota">/api/v1/integracao/profissionais</p>
+  <p>Lista os profissionais vinculados à loja, com o código de cada um. Use para saber qual valor enviar em <code>codigoProf</code> ao <a href="#gravar">criar a corrida</a> e direcionar a um profissional específico. Usa o token de <b>status</b>.</p>
+  <h3>Exemplo de requisição</h3>
+  <pre>{
+  "token": "&lt;segredo&gt;-status",
+  "codCliente": "&lt;codigo da loja&gt;"
+}</pre>
+  <div class="box ok"><div class="t">Sucesso (HTTP 200)</div></div>
+  <pre>{
+  "Sucesso": [
+    { "codigoProf": 12, "nome": "João Silva" },
+    { "codigoProf": 27, "nome": "Maria Souza" }
+  ]
+}</pre>
+  <div class="box info"><div class="t">Regras do direcionamento</div>
+    O direcionamento respeita a configuração do cliente: a loja precisa ter permissão de escolher o profissional, o profissional precisa estar vinculado à loja e disponível, e o limite de corridas simultâneas continua valendo. Se alguma regra impedir, a corrida é criada sem o profissional e o motivo volta em <code>detalhes</code> (veja <a href="#gravar">criar corrida</a>).</div>
+
+  <hr />
+
   <h2 id="rastreio">Link de rastreio</h2>
   <p>Toda corrida recebe um link público de rastreio (campo <code>urlRastreamento</code> nas respostas e nas notificações). Ele abre uma página com o mapa, a posição do entregador em tempo real e o andamento de cada ponto, pronta para repassar ao cliente final.</p>
   <div class="box info"><div class="t">No domínio e com a marca da loja</div>
@@ -510,6 +564,7 @@ if (esperado !== req.headers['x-lx-signature']) { <span class="c">/* rejeitar */
       <tr><td>Código do serviço não informado.</td><td>Na consulta ou cancelamento, informe a OS.</td></tr>
       <tr><td>Serviço não encontrado.</td><td>A OS não existe ou não é desta loja.</td></tr>
       <tr><td>Centro de custo não encontrado para esta loja.</td><td>O <code>centroCusto</code> informado não corresponde a nenhum centro ativo da loja. Consulte os centros disponíveis.</td></tr>
+      <tr><td>Categoria não encontrada para esta loja.</td><td>O <code>categoria</code> informado não corresponde a nenhuma categoria da loja. Consulte as categorias disponíveis.</td></tr>
       <tr><td>Alocado</td><td>Não dá para cancelar: a corrida já está associada a um profissional (e a loja não pode cancelar associadas) ou já foi finalizada.</td></tr>
       <tr><td>Só é permitido solicitar 2 serviços por segundo.</td><td>Reduza o ritmo de criação.</td></tr>
       <tr><td>É permitido realizar uma consulta a cada 30 segundos.</td><td>Aguarde 30 segundos entre consultas de status.</td></tr>

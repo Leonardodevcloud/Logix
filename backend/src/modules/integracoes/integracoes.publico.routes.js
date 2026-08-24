@@ -118,6 +118,24 @@ function initIntegracoesPublicRoutes() {
     }
   });
 
+  // CATEGORIAS (lista as categorias disponíveis para a loja) — leitura, usa o token de status.
+  router.post('/categorias', limiteStatus, autenticar('status'), async (req, res) => {
+    try {
+      res.status(200).json(await service.listarCategorias({ credencial: req.credencial }));
+    } catch (e) {
+      res.status(200).json({ Erro: e.message || 'Erro ao listar categorias' });
+    }
+  });
+
+  // PROFISSIONAIS (lista os profissionais vinculados à loja) — leitura, usa o token de status.
+  router.post('/profissionais', limiteStatus, autenticar('status'), async (req, res) => {
+    try {
+      res.status(200).json(await service.listarProfissionais({ credencial: req.credencial }));
+    } catch (e) {
+      res.status(200).json({ Erro: e.message || 'Erro ao listar profissionais' });
+    }
+  });
+
   // RASTREIO PÚBLICO (consumido pela página do cliente) — o token é o segredo.
   router.get('/rastreio/:token', async (req, res) => {
     try { res.json(await service.rastreioPublico(req.params.token)); }

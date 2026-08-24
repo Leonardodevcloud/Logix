@@ -217,6 +217,51 @@ async function listarCentros({ credencial }) {
   return { Sucesso: rows.map((r) => ({ codigo: r.codigo || '', nome: r.nome })) };
 }
 
+// ── Categorias (modalidades da loja) ─────────────────────────────────────────
+// Resolve a categoria informada (nome) para a modalidade da loja (id usado na
+// entrega). Retorna null quando nada foi informado; lança erro se não bater.
+async function resolverModalidade(lojaId, valor) {
+  const v = M.s(valor);
+  if (!v || !lojaId) return null;
+  const { rows } = await query(
+    `SELECT cm.id
+       FROM cliente_modalidades cm
+       JOIN frete_categorias c ON c.id = cm.categoria_id
+      WHERE cm.loja_id = $1 AND cm.ativo IS NOT FALSE AND c.nome ILIKE $2
+      ORDER BY c.nome LIMIT 1`,
+    [lojaId, v]
+  );
+  if (!rows[0]) throw AppError.validacao('Categoria não encontrada para esta loja.');
+  return rows[0].id;
+}
+
+// Lista as categorias disponíveis para a loja da credencial.
+async function listarCategorias({ credencial }) {
+  if (!credencial.lojaId) return { Sucesso: [] };
+  const { rows } = await query(
+    `SELECT c.nome
+       FROM cliente_modalidades cm
+       JOIN frete_categorias c ON c.id = cm.categoria_id
+      WHERE cm.loja_id = $1 AND cm.ativo IS NOT FALSE ORDER BY c.nome`,
+    [credencial.lojaId]
+  );
+  return { Sucesso: rows.map((r) => ({ nome: r.nome })) };
+}
+
+// Lista os profissionais vinculados à loja (código numérico + nome).
+async function listarProfissionais({ credencial }) {
+  if (!credencial.lojaId) return { Sucesso: [] };
+  const { rows } = await query(
+    `SELECT DISTINCT m.codigo, m.nome_completo AS nome
+       FROM cliente_motoboys cm
+       JOIN motoboys m ON m.id = cm.motoboy_id
+      WHERE cm.loja_id = $1 AND m.status = 'ativo'
+      ORDER BY m.codigo`,
+    [credencial.lojaId]
+  );
+  return { Sucesso: rows.map((r) => ({ codigoProf: r.codigo, nome: r.nome })) };
+}
+
 // ── GRAVAR SERVIÇO (criar corrida) ───────────────────────────────────────────
 async function gravarServico({ credencial, body, ip }) {
   const pontos = Array.isArray(body.pontos) ? body.pontos : [];
@@ -256,6 +301,36 @@ async function gravarServico({ credencial, body, ip }) {
 
   const rastreioToken = hexAleatorio(12);
   const centroCustoId = await resolverCentroCusto(credencial.lojaId, body.centroCusto || body.centro_custo);
+  const modalidadeId = await resolverModalidade(credencial.lojaId, body.categoria);
+
+  // Direcionamento a um profissional específico (codigoProf): respeita a permissão
+  // da loja (pode_escolher_profissional) e o vínculo do motoboy com a loja. A
+  // atribuição em si (mais abaixo) ainda valida exclusividade, limite e online.
+  const codigoProf = M.s(body.codigoProf || body.codigoProfissional);
+  let motoboyAlvo = null, avisoProf = null;
+  if (codigoProf) {
+    const clienteHub = require('../clientehub/clientehub.service');
+    const podeEscolher = credencial.lojaId ? await clienteHub.lojaPode(credencial.lojaId, 'pode_escolher_profissional') : true;
+    if (!podeEscolher) {
+      avisoProf = { profissionalNaoAlocado: true, codigoProfInformado: codigoProf,
+        mensagem: 'Esta loja não tem permissão para escolher o profissional. A corrida foi criada sem profissional definido.' };
+    } else {
+      const { rows: mb } = await query(
+        `SELECT m.id FROM motoboys m
+          WHERE m.empresa_id = $1 AND m.codigo = $2
+            AND EXISTS (SELECT 1 FROM cliente_motoboys cmx WHERE cmx.loja_id = $3 AND cmx.motoboy_id = m.id)
+          LIMIT 1`,
+        [credencial.empresaId, Number(codigoProf) || -1, credencial.lojaId]
+      );
+      if (!mb[0]) {
+        avisoProf = { profissionalNaoAlocado: true, codigoProfInformado: codigoProf,
+          mensagem: 'Profissional não encontrado ou não vinculado a esta loja. A corrida foi criada sem profissional definido.' };
+      } else {
+        motoboyAlvo = mb[0].id;
+      }
+    }
+  }
+
   const entregasService = require('../entregas/entregas.service');
   const entrega = await entregasService.criarEntrega({
     empresaId: credencial.empresaId,
@@ -264,7 +339,10 @@ async function gravarServico({ credencial, body, ip }) {
     coleta, destinos,
     distribuicao: 'automatica',
     centroCustoId,
-    naoDispararAutomatico: M.ehSim(body.semProfissional),
+    modalidadeId,
+    // Se vamos direcionar a um motoboy específico, não dispara oferta automática
+    // antes; tentamos a atribuição direta logo abaixo.
+    naoDispararAutomatico: M.ehSim(body.semProfissional) || !!motoboyAlvo,
     naoOtimizar: !ordenarOn,
     referenciaExterna,
     origem: 'integracao',
@@ -273,7 +351,25 @@ async function gravarServico({ credencial, body, ip }) {
     ip,
   });
 
+  // Atribuição direta ao profissional escolhido (valida exclusividade, limite de
+  // corridas e disponibilidade). Se não der, a corrida fica criada sem profissional
+  // e o motivo volta na resposta (não bloqueia o lançamento).
+  if (motoboyAlvo) {
+    const filasService = require('../filas/filas.service');
+    try {
+      await filasService.atribuir({ empresaId: credencial.empresaId, entregaId: entrega.id, motoboyId: motoboyAlvo, usuarioId: null, ip });
+    } catch (e) {
+      avisoProf = { profissionalNaoAlocado: true, codigoProfInformado: codigoProf,
+        mensagem: (e.message || 'Não foi possível alocar o profissional') + ' A corrida foi criada sem profissional definido.' };
+      // Fallback: se não pediu semProfissional, oferta automaticamente para não ficar parada.
+      if (!M.ehSim(body.semProfissional)) {
+        try { await filasService.dispararOferta({ empresaId: credencial.empresaId, entregaId: entrega.id, usuarioId: null, ip, automatico: true }); } catch (e2) {}
+      }
+    }
+  }
+
   const resp = await montarRespostaGravar(entrega.id);
+  if (resp && avisoProf) Object.assign(resp.detalhes, avisoProf);
   return resp;
 }
 
@@ -526,6 +622,7 @@ module.exports = {
   OPS,
   listarChaves, criarChave, atualizarChave, alternarAtiva, revogarChave, regenerarToken,
   resolverCredencial, logarRequisicao,
-  gravarServico, statusServico, cancelarServico, calcularServico, listarCentros, rastreioPublico,
+  gravarServico, statusServico, cancelarServico, calcularServico,
+  listarCentros, listarCategorias, listarProfissionais, rastreioPublico,
   baseRastreioDaEmpresa, montarUrlRastreio,
 };
