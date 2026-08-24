@@ -198,147 +198,150 @@ async function dashCliente(content) {
   const { secHeader, estadoVazio, statusBadge } = await import('../core/ui.js');
   const perfil = auth.acessoAtual().perfil;
   const ehCentral = perfil === 'super_admin' || perfil === 'central_admin';
-
   const estado = { preset: 'hoje', de: null, ate: null, loja_id: '', centro_id: '' };
 
-  // ---- barra de filtros ----
-  const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias'], ['custom', 'Personalizado']];
-  const btns = presets.map(([id, rot]) => el('button', {
-    class: 'lx-btn lx-btn-secundario', style: 'font-size:12.5px;padding:7px 13px',
-    onClick: () => { estado.preset = id; estado.de = null; estado.ate = null; sinc(); recarregar(); },
-  }, rot));
-  btns.forEach((b, i) => (b.dataset.preset = presets[i][0]));
-  function sinc() {
-    btns.forEach((b) => {
-      const on = b.dataset.preset === estado.preset;
-      b.classList.toggle('lx-btn-primario', on);
-      b.classList.toggle('lx-btn-secundario', !on);
-    });
-    caixaCustom.style.display = estado.preset === 'custom' ? 'flex' : 'none';
+  // ---------- helpers de gráfico (SVG puro) ----------
+  function areaChart(serie) {
+    const pts = (serie && serie.pontos) || [];
+    const tipo = (serie && serie.tipo) || 'hora';
+    let dom = [];
+    if (tipo === 'hora') { const mp = {}; pts.forEach(p => mp[p.k] = p.v); for (let h = 6; h <= 22; h++) dom.push({ lbl: (h < 10 ? '0' + h : h) + 'h', v: mp[h] || 0 }); }
+    else dom = pts.map(p => ({ lbl: p.k, v: p.v }));
+    if (!dom.length) return '<div style="color:var(--lx-tinta-3);font-size:13px;padding:40px 0;text-align:center">Sem dados no período.</div>';
+    const W = 640, H = 170, maxV = Math.max(1, ...dom.map(d => d.v)), n = dom.length;
+    const x = i => n === 1 ? W / 2 : (i / (n - 1)) * W;
+    const y = v => H - (v / maxV) * (H - 24) - 4;
+    const linha = dom.map((d, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(d.v).toFixed(1)).join(' ');
+    const area = 'M' + x(0).toFixed(1) + ',' + H + ' ' + dom.map((d, i) => 'L' + x(i).toFixed(1) + ',' + y(d.v).toFixed(1)).join(' ') + ' L' + x(n - 1).toFixed(1) + ',' + H + ' Z';
+    const eixo = dom.filter((_, i) => n <= 8 || i % Math.ceil(n / 8) === 0).map(d => '<span>' + d.lbl + '</span>').join('');
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="170" preserveAspectRatio="none">' +
+      '<defs><linearGradient id="lxar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#185FA5" stop-opacity="0.26"/><stop offset="1" stop-color="#185FA5" stop-opacity="0"/></linearGradient></defs>' +
+      '<line x1="0" y1="43" x2="640" y2="43" stroke="#EEF3F9"/><line x1="0" y1="90" x2="640" y2="90" stroke="#EEF3F9"/><line x1="0" y1="137" x2="640" y2="137" stroke="#EEF3F9"/>' +
+      '<path d="' + area + '" fill="url(#lxar)"/><path d="' + linha + '" fill="none" stroke="#185FA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--lx-tinta-3);margin-top:4px">' + eixo + '</div>';
   }
+  function donut(segs, big, small) {
+    const total = segs.reduce((s, x) => s + x.v, 0);
+    let acc = 0;
+    const arcs = total ? segs.filter(s => s.v > 0).map(s => { const len = s.v / total * 100; const c = '<circle cx="21" cy="21" r="15.9" fill="none" stroke="' + s.cor + '" stroke-width="6" stroke-dasharray="' + len.toFixed(2) + ' ' + (100 - len).toFixed(2) + '" stroke-dashoffset="' + (25 - acc).toFixed(2) + '"/>'; acc += len; return c; }).join('')
+      : '<circle cx="21" cy="21" r="15.9" fill="none" stroke="#EEF3F9" stroke-width="6"/>';
+    return '<div style="position:relative;width:140px;height:140px;flex:0 0 140px">' +
+      '<svg width="140" height="140" viewBox="0 0 42 42">' + arcs + '</svg>' +
+      '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
+      '<b style="font-size:26px;font-weight:900;color:var(--lx-navy,#042C53)">' + big + '</b>' +
+      '<span style="font-size:11px;color:var(--lx-tinta-2)">' + small + '</span></div></div>';
+  }
+  const legenda = (cor, txt, val) => el('div', { style: 'font-size:12px;margin-bottom:7px' },
+    el('span', { style: 'display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:7px;background:' + cor }),
+    txt + ' ', el('b', {}, String(val)));
 
+  // ---------- filtros ----------
+  const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias'], ['custom', 'Personalizado']];
+  const btns = presets.map(([id, rot]) => el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12.5px;padding:7px 13px',
+    onClick: () => { estado.preset = id; estado.de = null; estado.ate = null; sinc(); recarregar(); } }, rot));
+  btns.forEach((b, i) => (b.dataset.preset = presets[i][0]));
+  function sinc() { btns.forEach(b => { const on = b.dataset.preset === estado.preset; b.classList.toggle('lx-btn-primario', on); b.classList.toggle('lx-btn-secundario', !on); }); caixaCustom.style.display = estado.preset === 'custom' ? 'flex' : 'none'; }
   const inDe = el('input', { type: 'date', class: 'lx-input', style: 'font-size:12.5px' });
   const inAte = el('input', { type: 'date', class: 'lx-input', style: 'font-size:12.5px' });
-  const caixaCustom = el('div', { style: 'display:none;gap:8px;align-items:center' },
-    inDe, el('span', { style: 'color:var(--lx-tinta-3);font-size:12px' }, 'até'), inAte,
-    el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px',
-      onClick: () => { estado.de = inDe.value || null; estado.ate = inAte.value || null; recarregar(); } }, 'Aplicar'));
-
-  const selLoja = el('select', { class: 'lx-input', style: 'font-size:12.5px',
-    onChange: async () => { estado.loja_id = selLoja.value; estado.centro_id = ''; await carregarCentros(); recarregar(); } },
-    el('option', { value: '' }, 'Todas as lojas'));
-  const selCentro = el('select', { class: 'lx-input', style: 'font-size:12.5px',
-    onChange: () => { estado.centro_id = selCentro.value; recarregar(); } },
-    el('option', { value: '' }, 'Todos os centros'));
+  const caixaCustom = el('div', { style: 'display:none;gap:8px;align-items:center' }, inDe, el('span', { style: 'color:var(--lx-tinta-3);font-size:12px' }, 'até'), inAte,
+    el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px', onClick: () => { estado.de = inDe.value || null; estado.ate = inAte.value || null; recarregar(); } }, 'Aplicar'));
+  const selLoja = el('select', { class: 'lx-input', style: 'font-size:12.5px', onChange: async () => { estado.loja_id = selLoja.value; estado.centro_id = ''; await carregarCentros(); recarregar(); } }, el('option', { value: '' }, 'Todas as lojas'));
+  const selCentro = el('select', { class: 'lx-input', style: 'font-size:12.5px', onChange: () => { estado.centro_id = selCentro.value; recarregar(); } }, el('option', { value: '' }, 'Todos os centros'));
   selCentro.disabled = true;
-
   async function carregarCentros() {
-    selCentro.innerHTML = '';
-    selCentro.append(el('option', { value: '' }, 'Todos os centros'));
+    selCentro.innerHTML = ''; selCentro.append(el('option', { value: '' }, 'Todos os centros'));
     if (!estado.loja_id) { selCentro.disabled = true; return; }
-    try {
-      const centros = await get('/clientehub/' + estado.loja_id + '/contexto/centros');
-      (centros || []).forEach((c) => selCentro.append(el('option', { value: c.id }, c.nome || c.codigo || c.id)));
-      selCentro.disabled = false;
-    } catch { selCentro.disabled = true; }
+    try { const c = await get('/clientehub/' + estado.loja_id + '/contexto/centros'); (c || []).forEach(x => selCentro.append(el('option', { value: x.id }, x.nome || x.codigo || x.id))); selCentro.disabled = false; } catch { selCentro.disabled = true; }
   }
-
-  const barra = el('div', { class: 'lx-card lx-card-pad', style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px' },
-    el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, ...btns), caixaCustom);
+  const barra = el('div', { class: 'lx-card lx-card-pad', style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px' }, el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, ...btns), caixaCustom);
   if (ehCentral) barra.append(el('div', { style: 'flex:1;min-width:12px' }), selLoja, selCentro);
   content.append(barra);
 
-  // ---- grades ----
-  const gradeAgora = el('div', { class: 'lx-grid-kpi' });
-  const gradePeriodo = el('div', { class: 'lx-grid-kpi' });
-  const slaBox = el('div', { class: 'lx-card lx-card-pad', style: 'margin:14px 0' });
+  // ---------- áreas ----------
+  const gradeKpi = el('div', { style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px' });
+  const linha1 = el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px' });
+  const linha2 = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px' });
+  const cardArea = el('div', { class: 'lx-card lx-card-pad' });
+  const cardSla = el('div', { class: 'lx-card lx-card-pad' });
+  const cardStatus = el('div', { class: 'lx-card lx-card-pad' });
+  const cardLojas = el('div', { class: 'lx-card lx-card-pad' });
+  linha1.append(cardArea, cardSla); linha2.append(cardStatus, cardLojas);
   const listaAtivas = el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Carregando…');
-  const lateralAtivas = el('div', { class: 'lx-card lx-card-pad' },
-    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' },
-      el('b', { style: 'font-size:14px' }, 'Entregas ativas'),
-      el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, '…')),
-    listaAtivas);
+  const lateralAtivas = el('div', { class: 'lx-card lx-card-pad' }, el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, el('b', { style: 'font-size:14px' }, 'Entregas ativas'), el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, '…')), listaAtivas);
+  content.append(gradeKpi, linha1, linha2, secHeader('Em andamento'), lateralAtivas);
 
-  content.append(secHeader('Agora'), gradeAgora, secHeader('No período'), gradePeriodo, slaBox, secHeader('Em andamento'), lateralAtivas);
-
-  const kpi = (val, lbl, cor) => el('div', { class: 'lx-card lx-kpi' },
-    el('div', { class: 'k-val', style: 'font-size:26px' + (cor ? ';color:' + cor : '') }, String(val)),
-    el('div', { class: 'k-lbl' }, lbl));
+  function kpi(icone, iconBg, iconCor, corridas, notas, label) {
+    return el('div', { class: 'lx-card', style: 'padding:14px 15px' },
+      el('div', { style: 'width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:9px;background:' + iconBg + ';color:' + iconCor }, icone),
+      el('div', { style: 'font-size:25px;font-weight:900;color:var(--lx-navy,#042C53);line-height:1' }, String(corridas)),
+      el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);margin-top:4px' }, label),
+      el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:1px' }, (notas != null ? notas + ' notas' : 'corridas')));
+  }
+  const cardTitulo = (t, s) => el('div', {}, el('div', { style: 'font-size:14px;font-weight:800;color:var(--lx-navy,#042C53)' }, t), el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);margin:2px 0 12px' }, s));
 
   async function carregarAtivas() {
     try {
       const q = estado.loja_id ? '?loja_id=' + estado.loja_id : '';
       const entregas = auth.temModulo('entregas') ? await get('/entregas' + q).catch(() => []) : [];
-      const ativas = entregas.filter((e) => ['aguardando_coleta', 'em_coleta', 'em_rota'].includes(e.status));
+      const ativas = entregas.filter(e => ['aguardando_coleta', 'em_coleta', 'em_rota'].includes(e.status));
       lateralAtivas.querySelector('span').textContent = ativas.length + ' ativas';
       listaAtivas.innerHTML = '';
       if (!ativas.length) { listaAtivas.append(estadoVazio('entregas', 'Nenhuma entrega em andamento', '')); return; }
-      ativas.slice(0, 10).forEach((e) => listaAtivas.append(
-        el('div', { style: 'display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--lx-linha)' },
-          el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '-'),
-          el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, e.motoboy_nome || '-'),
-          statusBadge(e.status))));
+      ativas.slice(0, 10).forEach(e => listaAtivas.append(el('div', { style: 'display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--lx-linha)' },
+        el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '-'), el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, e.motoboy_nome || '-'), statusBadge(e.status))));
     } catch (err) {}
   }
 
   async function recarregar() {
-    gradeAgora.innerHTML = ''; gradePeriodo.innerHTML = ''; slaBox.innerHTML = '';
+    gradeKpi.innerHTML = ''; [cardArea, cardSla, cardStatus, cardLojas].forEach(c => (c.innerHTML = ''));
     const qs = new URLSearchParams();
-    if (estado.preset === '7d' || estado.preset === '30d') {
-      const dias = estado.preset === '7d' ? 6 : 29;
-      const hoje = new Date(); const de = new Date(); de.setDate(hoje.getDate() - dias);
-      qs.set('de', de.toISOString().slice(0, 10)); qs.set('ate', hoje.toISOString().slice(0, 10));
-    } else {
-      if (estado.de) qs.set('de', estado.de);
-      if (estado.ate) qs.set('ate', estado.ate);
-    }
+    if (estado.preset === '7d' || estado.preset === '30d') { const dias = estado.preset === '7d' ? 6 : 29; const hoje = new Date(); const de = new Date(); de.setDate(hoje.getDate() - dias); qs.set('de', de.toISOString().slice(0, 10)); qs.set('ate', hoje.toISOString().slice(0, 10)); }
+    else { if (estado.de) qs.set('de', estado.de); if (estado.ate) qs.set('ate', estado.ate); }
     if (estado.loja_id) qs.set('loja_id', estado.loja_id);
     if (estado.centro_id) qs.set('centro_id', estado.centro_id);
-
     let d = {};
     try { d = await get('/entregas/dashboard' + (qs.toString() ? '?' + qs.toString() : '')); }
-    catch { gradeAgora.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, 'Erro ao carregar.')); return; }
+    catch { gradeKpi.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, 'Erro ao carregar.')); return; }
+    const ag = d.agora || {}, pe = d.periodo || {}, st = d.status || {};
 
-    let online = '-', total = '-';
-    if (auth.temModulo('motoboys')) {
-      try { const mb = await get('/motoboys'); total = mb.length; online = mb.filter((m) => m.online).length; } catch {}
-    }
+    gradeKpi.append(
+      kpi('▦', '#E4EEF9', 'var(--lx-azul,#185FA5)', pe.criadas || 0, pe.criadas_notas || 0, 'Criadas'),
+      kpi('✓', '#E4F5EE', 'var(--lx-ok,#1F9D6B)', pe.concluidas || 0, pe.concluidas_notas || 0, 'Concluídas'),
+      kpi('◴', '#FBF1DD', 'var(--lx-atencao,#C98A1A)', ag.em_andamento || 0, ag.em_andamento_notas || 0, 'Em andamento'),
+      kpi('≡', '#EEEDFE', '#6B4FC9', ag.na_fila || 0, ag.na_fila_notas || 0, 'Na fila'),
+      kpi('✕', '#FBE8E6', 'var(--lx-erro,#D0584F)', pe.canceladas || 0, pe.canceladas_notas || 0, 'Canceladas'));
 
-    const ag = d.agora || {}, pe = d.periodo || {};
-    gradeAgora.append(kpi(ag.em_andamento || 0, 'Em andamento'), kpi(ag.na_fila || 0, 'Na fila'));
-    if (auth.temModulo('motoboys')) gradeAgora.append(kpi(online + '/' + total, 'Motoboys online'));
-
-    gradePeriodo.append(
-      kpi(pe.concluidas || 0, 'Concluídas'),
-      kpi(pe.no_prazo || 0, 'No prazo', 'var(--lx-ok)'),
-      kpi(pe.fora_prazo || 0, 'Fora do prazo', (pe.fora_prazo ? 'var(--lx-erro)' : '')),
-      kpi(pe.canceladas || 0, 'Canceladas'),
-      kpi((pe.km_total || 0).toLocaleString('pt-BR') + ' km', 'Distância'),
-      kpi((pe.tempo_medio_min || 0) + ' min', 'Tempo médio'));
+    cardArea.append(cardTitulo('Entregas concluídas', d.serie && d.serie.tipo === 'dia' ? 'Por dia no período' : 'Por hora, hoje'), el('div', { html: areaChart(d.serie) }));
 
     const perc = pe.sla_perc;
-    if (perc == null) {
-      slaBox.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Sem entregas concluídas no período para calcular o SLA.'));
-    } else {
-      const corPerc = perc >= 90 ? 'var(--lx-ok)' : (perc >= 70 ? 'var(--lx-atencao,#C98A1A)' : 'var(--lx-erro)');
-      slaBox.append(
-        el('div', { style: 'display:flex;justify-content:space-between;margin-bottom:8px' },
-          el('b', { style: 'font-size:14px' }, 'Cumprimento de SLA'),
-          el('b', { style: 'font-size:14px;color:' + corPerc }, perc + '%')),
-        el('div', { style: 'height:12px;border-radius:8px;overflow:hidden;background:var(--lx-linha);display:flex' },
-          el('div', { style: 'width:' + perc + '%;background:var(--lx-ok)' }),
-          el('div', { style: 'flex:1;background:var(--lx-erro)' })),
-        el('div', { style: 'display:flex;justify-content:space-between;margin-top:6px;font-size:11.5px;color:var(--lx-tinta-2)' },
-          el('span', {}, (pe.no_prazo || 0) + ' no prazo'),
-          el('span', {}, (pe.fora_prazo || 0) + ' fora do prazo')));
-    }
+    cardSla.append(cardTitulo('Cumprimento de SLA', 'No prazo × fora do prazo'));
+    if (perc == null) cardSla.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Sem concluídas no período para calcular.'));
+    else cardSla.append(el('div', { style: 'display:flex;align-items:center;gap:16px' },
+      el('div', { html: donut([{ v: pe.no_prazo, cor: '#1F9D6B' }, { v: pe.fora_prazo, cor: '#D0584F' }], perc + '%', 'no prazo') }),
+      el('div', {}, legenda('#1F9D6B', 'No prazo', pe.no_prazo || 0), legenda('#D0584F', 'Fora do prazo', pe.fora_prazo || 0))));
+
+    cardStatus.append(cardTitulo('Status das corridas', 'Distribuição atual'));
+    const totSt = (st.em_rota + st.aguardando_coleta + st.em_coleta + st.na_fila + st.concluidas) || 0;
+    cardStatus.append(el('div', { style: 'display:flex;align-items:center;gap:16px' },
+      el('div', { html: donut([
+        { v: st.em_rota, cor: '#378ADD' }, { v: st.aguardando_coleta, cor: '#6B4FC9' }, { v: st.em_coleta, cor: '#185FA5' },
+        { v: st.na_fila, cor: '#C98A1A' }, { v: st.concluidas, cor: '#1F9D6B' }], String(totSt), 'corridas') }),
+      el('div', {}, legenda('#378ADD', 'Em rota', st.em_rota || 0), legenda('#6B4FC9', 'Aguardando coleta', st.aguardando_coleta || 0),
+        legenda('#C98A1A', 'Na fila', st.na_fila || 0), legenda('#1F9D6B', 'Concluídas', st.concluidas || 0))));
+
+    cardLojas.append(cardTitulo('Top lojas no período', 'Corridas · notas por loja'));
+    const tl = d.top_lojas || [];
+    if (!tl.length) cardLojas.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Sem dados no período.'));
+    else { const maxC = Math.max(1, ...tl.map(l => l.corridas)); const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:11px;margin-top:2px' });
+      tl.forEach(l => wrap.append(el('div', { style: 'display:flex;align-items:center;gap:10px;font-size:12px' },
+        el('span', { style: 'width:120px;color:var(--lx-tinta);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, l.nome),
+        el('span', { style: 'flex:1;height:10px;border-radius:6px;background:var(--lx-superficie-2,#F4F8FD);overflow:hidden' }, el('span', { style: 'display:block;height:100%;border-radius:6px;background:var(--lx-azul,#185FA5);width:' + Math.round(l.corridas / maxC * 100) + '%' })),
+        el('span', { style: 'width:70px;text-align:right;font-weight:700;color:var(--lx-navy,#042C53)' }, l.corridas + ' · ' + l.notas)))); cardLojas.append(wrap); }
 
     carregarAtivas();
   }
 
-  if (ehCentral) {
-    try { const lojas = await get('/lojas'); (lojas || []).forEach((l) => selLoja.append(el('option', { value: l.id }, l.nome_fantasia || l.nome || l.id))); } catch {}
-  }
+  if (ehCentral) { try { const lojas = await get('/lojas'); (lojas || []).forEach(l => selLoja.append(el('option', { value: l.id }, l.nome_fantasia || l.nome || l.id))); } catch {} }
   sinc();
   await recarregar();
 }

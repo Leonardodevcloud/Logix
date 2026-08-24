@@ -344,6 +344,67 @@ async function dashboardMetricas({ empresaId, lojaId = null, centroId = null, de
   }
   const avaliadas = noPrazo + foraPrazo;
 
+  // ---- NOTAS (paradas): cada linha de entregas_pontos é uma nota ----
+  const { rows: nrows } = await query(
+    `WITH p AS (SELECT COALESCE($4::date,(now() AT TIME ZONE 'America/Bahia')::date) AS de,
+                       COALESCE($5::date,(now() AT TIME ZONE 'America/Bahia')::date) AS ate)
+     SELECT
+       count(ep.id) FILTER (WHERE e.status='entregue'  AND (e.concluida_em AT TIME ZONE 'America/Bahia')::date BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int AS concluidas_notas,
+       count(ep.id) FILTER (WHERE e.status='cancelada' AND (e.cancelada_em AT TIME ZONE 'America/Bahia')::date BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int AS canceladas_notas,
+       count(ep.id) FILTER (WHERE (e.criado_em AT TIME ZONE 'America/Bahia')::date BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int AS criadas_notas,
+       count(ep.id) FILTER (WHERE e.status IN ('aguardando_coleta','em_coleta','em_rota'))::int AS em_andamento_notas,
+       count(ep.id) FILTER (WHERE e.status='aguardando_atribuicao')::int AS na_fila_notas
+       FROM entregas e JOIN entregas_pontos ep ON ep.entrega_id = e.id
+      WHERE e.empresa_id = $1 AND ($2::uuid IS NULL OR e.loja_id = $2) AND ($3::uuid IS NULL OR e.centro_custo_id = $3)`,
+    params
+  );
+  const n = nrows[0] || {};
+
+  // ---- SÉRIE do gráfico: concluídas por HORA (1 dia) ou por DIA (período) ----
+  const per = await query(
+    `SELECT COALESCE($1::date,(now() AT TIME ZONE 'America/Bahia')::date) AS de,
+            COALESCE($2::date,(now() AT TIME ZONE 'America/Bahia')::date) AS ate`, [de, ate]);
+  const pde = per.rows[0].de, pate = per.rows[0].ate;
+  const umDia = String(pde).slice(0, 10) === String(pate).slice(0, 10);
+  let serie;
+  if (umDia) {
+    const { rows: sr } = await query(
+      `SELECT EXTRACT(HOUR FROM (concluida_em AT TIME ZONE 'America/Bahia'))::int AS k, count(*)::int AS v
+         FROM entregas
+        WHERE empresa_id=$1 AND ($2::uuid IS NULL OR loja_id=$2) AND ($3::uuid IS NULL OR centro_custo_id=$3)
+          AND status='entregue' AND (concluida_em AT TIME ZONE 'America/Bahia')::date = COALESCE($4::date,(now() AT TIME ZONE 'America/Bahia')::date)
+        GROUP BY k ORDER BY k`,
+      [empresaId, lojaId, centroId, de]);
+    serie = { tipo: 'hora', pontos: sr };
+  } else {
+    const { rows: sr } = await query(
+      `SELECT to_char((concluida_em AT TIME ZONE 'America/Bahia')::date,'DD/MM') AS k, count(*)::int AS v
+         FROM entregas
+        WHERE empresa_id=$1 AND ($2::uuid IS NULL OR loja_id=$2) AND ($3::uuid IS NULL OR centro_custo_id=$3)
+          AND status='entregue'
+          AND (concluida_em AT TIME ZONE 'America/Bahia')::date BETWEEN COALESCE($4::date,(now() AT TIME ZONE 'America/Bahia')::date) AND COALESCE($5::date,(now() AT TIME ZONE 'America/Bahia')::date)
+        GROUP BY (concluida_em AT TIME ZONE 'America/Bahia')::date ORDER BY (concluida_em AT TIME ZONE 'America/Bahia')::date`,
+      params);
+    serie = { tipo: 'dia', pontos: sr };
+  }
+
+  // ---- TOP LOJAS no período (por criadas) ----
+  const { rows: topLojas } = await query(
+    `WITH p AS (SELECT COALESCE($4::date,(now() AT TIME ZONE 'America/Bahia')::date) AS de,
+                       COALESCE($5::date,(now() AT TIME ZONE 'America/Bahia')::date) AS ate)
+     SELECT COALESCE(l.nome_fantasia, 'Sem loja') AS nome,
+            count(DISTINCT e.id)::int AS corridas,
+            count(ep.id)::int AS notas
+       FROM entregas e
+       LEFT JOIN entregas_pontos ep ON ep.entrega_id = e.id
+       LEFT JOIN lojas l ON l.id = e.loja_id
+      WHERE e.empresa_id=$1 AND ($2::uuid IS NULL OR e.loja_id=$2) AND ($3::uuid IS NULL OR e.centro_custo_id=$3)
+        AND (e.criado_em AT TIME ZONE 'America/Bahia')::date BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p)
+      GROUP BY e.loja_id, l.nome_fantasia
+      ORDER BY corridas DESC LIMIT 6`,
+    params
+  );
+
   return {
     agora: {
       em_andamento: a.em_andamento || 0,
@@ -351,11 +412,16 @@ async function dashboardMetricas({ empresaId, lojaId = null, centroId = null, de
       aguardando_coleta: a.aguardando_coleta || 0,
       em_coleta: a.em_coleta || 0,
       em_rota: a.em_rota || 0,
+      em_andamento_notas: n.em_andamento_notas || 0,
+      na_fila_notas: n.na_fila_notas || 0,
     },
     periodo: {
+      criadas: a.criadas || 0,
       concluidas: a.concluidas || 0,
       canceladas: a.canceladas || 0,
-      criadas: a.criadas || 0,
+      criadas_notas: n.criadas_notas || 0,
+      concluidas_notas: n.concluidas_notas || 0,
+      canceladas_notas: n.canceladas_notas || 0,
       km_total: Math.round((Number(a.km_total) || 0) * 10) / 10,
       tempo_medio_min: Math.round(Number(a.tempo_medio_min) || 0),
       no_prazo: noPrazo,
@@ -363,6 +429,16 @@ async function dashboardMetricas({ empresaId, lojaId = null, centroId = null, de
       sem_sla: semSla,
       sla_perc: avaliadas ? Math.round((noPrazo * 100) / avaliadas) : null,
     },
+    status: {
+      na_fila: a.na_fila || 0,
+      aguardando_coleta: a.aguardando_coleta || 0,
+      em_coleta: a.em_coleta || 0,
+      em_rota: a.em_rota || 0,
+      concluidas: a.concluidas || 0,
+      canceladas: a.canceladas || 0,
+    },
+    serie,
+    top_lojas: topLojas,
   };
 }
 
