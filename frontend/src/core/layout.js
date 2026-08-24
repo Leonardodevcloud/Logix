@@ -4,6 +4,7 @@ import * as auth from './auth.js';
 import { reaplicarTema } from './tema.js';
 
 const iconeWhitelabel = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 22a10 10 0 1 1 0-20 8 8 0 0 1 0 16h-1.5a2.5 2.5 0 0 0 0 4z"/></svg>';
+const iconeApi = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 
 function gruposNav() {
   const a = auth.acessoAtual();
@@ -54,6 +55,9 @@ function gruposNav() {
   const config = [];
   if (auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });
+  // Integrações (API): ferramenta da central — aparece por permissão.
+  if (central && auth.pode('integracoes.ver'))
+    config.push({ rota: '/integracoes', rotulo: 'Integrações', icone: '__api__' });
   // Configurações da operação — administradores da central (gerência de usuários).
   if (central && auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/configuracoes', rotulo: 'Configurações', icone: 'config' });
@@ -65,6 +69,7 @@ function gruposNav() {
 
 function iconeNav(key) {
   if (key === '__whitelabel__') return iconeWhitelabel;
+  if (key === '__api__') return iconeApi;
   return icones[key] || '';
 }
 

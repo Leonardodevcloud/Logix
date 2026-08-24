@@ -15,7 +15,9 @@ async function comCoordenadas(ponto) {
 }
 
 // Lança uma nova entrega: geocoding, otimização de rota e gravação transacional.
-async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, modalidadeId = null, centroCustoId = null, ip }) {
+async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, destinos, distribuicao = 'automatica', motoboyId = null, modalidadeId = null, centroCustoId = null, ip,
+  // Integração externa (opcionais; não afetam o fluxo do painel):
+  naoOtimizar = false, naoDispararAutomatico = false, referenciaExterna = null, origem = null, integracaoChaveId = null, rastreioToken = null }) {
   if (!coleta || !coleta.endereco) throw AppError.validacao('Informe o ponto de coleta');
   if (!Array.isArray(destinos) || destinos.length === 0) throw AppError.validacao('Informe ao menos um destino');
 
@@ -28,7 +30,9 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
   let distanciaKm = null, tempoEstimado = null;
   try {
     const r = await otimizarRota({ coleta: coletaGeo, pontos: destinosGeo });
-    if (r.ordem.length === destinosGeo.length) ordem = r.ordem;
+    // naoOtimizar: mantém a ordem enviada pelo cliente, mas aproveita a distância/tempo
+    // calculados para não deixar a precificação sem km.
+    if (!naoOtimizar && r.ordem.length === destinosGeo.length) ordem = r.ordem;
     distanciaKm = r.distanciaKm; tempoEstimado = r.duracaoMin;
   } catch (e) {
     console.warn('[entregas] otimização indisponível, mantendo ordem original:', e.message);
@@ -70,11 +74,13 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     const { rows } = await cliente.query(
       `INSERT INTO entregas (empresa_id, loja_id, protocolo, motoboy_id, status, distribuicao,
          coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por,
-         modalidade_id, centro_custo_id, valor_cliente_cent, valor_motoboy_cent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+         modalidade_id, centro_custo_id, valor_cliente_cent, valor_motoboy_cent,
+         referencia_externa, origem, integracao_chave_id, rastreio_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
       [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
        coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null,
-       valorClienteCent, valorMotoboyCent]
+       valorClienteCent, valorMotoboyCent,
+       referenciaExterna || null, origem || null, integracaoChaveId || null, rastreioToken || null]
     );
     const entregaId = rows[0].id;
     let posicao = 1;
@@ -97,7 +103,7 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     // notifica os motoboys elegíveis (respeitando vínculo de loja/modalidade e raio).
     // Fire-and-forget: nunca trava a criação. "Sem motoboy" / "fora do raio" não é erro —
     // a entrega simplesmente fica na fila aguardando (ou um disparo manual depois).
-    if (status === STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO) {
+    if (status === STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO && !naoDispararAutomatico) {
       (async () => {
         try {
           const filasService = require('../filas/filas.service');

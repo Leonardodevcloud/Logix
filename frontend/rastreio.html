@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="robots" content="noindex" />
+  <title>Rastreio da entrega</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>window.LOGIX_API = 'https://logix-production-61ae.up.railway.app/api/v1';</script>
+  <style>
+    :root{
+      --navy:#042C53; --azul:#185FA5; --ok:#1f9d6b; --erro:#dc2626;
+      --tinta:#0f172a; --tinta2:#64748b; --linha:#e2e8f0; --fundo:#f1f5f9; --acento:#185FA5;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+    body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--fundo);color:var(--tinta);-webkit-font-smoothing:antialiased}
+    .wrap{max-width:520px;margin:0 auto;min-height:100%;background:#fff;display:flex;flex-direction:column}
+    header{padding:16px 18px;color:#fff;background:var(--acento);display:flex;align-items:center;gap:12px}
+    header img{height:34px;width:auto;border-radius:6px;background:#fff;padding:3px}
+    header .marca{font-weight:800;font-size:16px;letter-spacing:.2px}
+    header .os{margin-left:auto;font-size:12px;opacity:.85;font-weight:600}
+    .barra{padding:14px 18px;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .pill{font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px}
+    .pill.sp{background:#fff4e5;color:#b45309}
+    .pill.a{background:#e0edfb;color:var(--azul)}
+    .pill.f{background:#e6f6ef;color:var(--ok)}
+    .pill.c{background:#fdeaea;color:var(--erro)}
+    .info{font-size:12.5px;color:var(--tinta2)}
+    #mapa{height:300px;width:100%;background:#dbe4ee}
+    .moto{padding:14px 18px;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:12px}
+    .moto img{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--fundo)}
+    .moto .n{font-weight:700;font-size:14px}
+    .moto .s{font-size:12px;color:var(--tinta2)}
+    .timeline{padding:16px 18px 30px}
+    .timeline h3{font-size:13px;text-transform:uppercase;letter-spacing:.4px;color:var(--tinta2);margin:0 0 12px}
+    .ponto{position:relative;padding:0 0 16px 26px;border-left:2px solid var(--linha);margin-left:6px}
+    .ponto:last-child{border-left-color:transparent}
+    .ponto .dot{position:absolute;left:-8px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--linha)}
+    .ponto.done .dot{background:var(--ok);border-color:var(--ok)}
+    .ponto.fail .dot{background:var(--erro);border-color:var(--erro)}
+    .ponto .tit{font-weight:600;font-size:13.5px}
+    .ponto .end{font-size:12.5px;color:var(--tinta2);margin-top:2px}
+    .ponto .hora{font-size:11.5px;color:var(--tinta2);margin-top:3px}
+    .estado{padding:60px 24px;text-align:center;color:var(--tinta2)}
+    .estado b{display:block;color:var(--tinta);font-size:16px;margin-bottom:6px}
+    .rodape{margin-top:auto;padding:14px;text-align:center;font-size:11px;color:var(--tinta2)}
+    .leaflet-container{font-family:inherit}
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app">
+    <div class="estado" id="carregando"><b>Carregando…</b>Buscando os dados da entrega.</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+  (function () {
+    var API = window.LOGIX_API || '/api/v1';
+    var params = new URLSearchParams(location.search);
+    var token = params.get('t') || params.get('token') || '';
+    var app = document.getElementById('app');
+    var mapa = null, marcadores = {}, timerPoll = null;
+
+    var SIGLA = { SP:{c:'sp',txt:'Aguardando profissional'}, A:{c:'a',txt:'Em rota'}, F:{c:'f',txt:'Entregue'}, C:{c:'c',txt:'Cancelada'} };
+
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
+    function ativo(sigla){ return sigla==='SP'||sigla==='A'; }
+
+    function estado(titulo, msg){
+      app.innerHTML = '<div class="estado"><b>'+esc(titulo)+'</b>'+esc(msg||'')+'</div>';
+    }
+
+    function fmtHora(d){
+      if(!d) return '';
+      try{ return new Date(d).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+      catch(e){ return ''; }
+    }
+
+    async function carregar(primeira){
+      try{
+        var resp = await fetch(API + '/integracao/rastreio/' + encodeURIComponent(token));
+        if(!resp.ok) throw new Error('nao encontrado');
+        var d = await resp.json();
+        render(d, primeira);
+        if(!ativo(d.status_sigla) && timerPoll){ clearInterval(timerPoll); timerPoll = null; }
+      }catch(e){
+        if(primeira) estado('Rastreio não encontrado', 'Confira o link recebido ou fale com a loja.');
+      }
+    }
+
+    function render(d, primeira){
+      var sig = SIGLA[d.status_sigla] || {c:'sp',txt:d.status||''};
+      if(primeira){
+        var acento = (d.marca && d.marca.cor) ? d.marca.cor : '#185FA5';
+        document.documentElement.style.setProperty('--acento', acento);
+        app.innerHTML =
+          '<header>' +
+            (d.marca && d.marca.logo ? '<img src="'+esc(d.marca.logo)+'" alt="" onerror="this.style.display=\'none\'"/>' : '') +
+            '<span class="marca">'+esc((d.marca && d.marca.nome) || d.loja || 'Rastreio')+'</span>' +
+            '<span class="os">'+esc(d.protocolo||'')+'</span>' +
+          '</header>' +
+          '<div class="barra"><span class="pill '+sig.c+'" id="pill">'+esc(sig.txt)+'</span>' +
+            '<span class="info" id="info"></span></div>' +
+          '<div id="mapa"></div>' +
+          '<div id="moto"></div>' +
+          '<div class="timeline"><h3>Trajeto</h3><div id="pontos"></div></div>' +
+          '<div class="rodape">Rastreio em tempo real</div>';
+        iniciarMapa(d);
+      } else {
+        var pill = document.getElementById('pill');
+        if(pill){ pill.className = 'pill '+sig.c; pill.textContent = sig.txt; }
+      }
+
+      var info = document.getElementById('info');
+      if(info){
+        var partes = [];
+        if(d.distancia_km) partes.push(Number(d.distancia_km).toFixed(1).replace('.',',')+' km');
+        if(d.status_sigla==='F' && d.concluida_em) partes.push('Entregue '+fmtHora(d.concluida_em));
+        info.textContent = partes.join(' · ');
+      }
+
+      // Motoboy
+      var moto = document.getElementById('moto');
+      if(moto){
+        if(d.motoboy && d.motoboy.nome){
+          moto.className='moto';
+          moto.innerHTML =
+            (d.motoboy.foto ? '<img src="'+esc(d.motoboy.foto)+'" onerror="this.style.visibility=\'hidden\'"/>' : '<div style="width:44px;height:44px;border-radius:50%;background:var(--fundo);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--tinta2)">'+esc((d.motoboy.nome[0]||'').toUpperCase())+'</div>') +
+            '<div><div class="n">'+esc(d.motoboy.nome)+'</div><div class="s">Profissional responsável</div></div>';
+        } else { moto.className=''; moto.innerHTML=''; }
+      }
+
+      // Timeline
+      var pts = document.getElementById('pontos');
+      if(pts){
+        var html = '';
+        // coleta como primeiro item
+        html += itemPonto({ nome:'Coleta', endereco:d.coleta && d.coleta.endereco, status: (d.status_sigla==='SP'?'pendente':'coletado') });
+        (d.pontos||[]).forEach(function(p){ html += itemPonto(p); });
+        pts.innerHTML = html;
+      }
+
+      atualizarMapa(d);
+    }
+
+    function itemPonto(p){
+      var cls = ''; var hora = '';
+      if(p.status==='entregue' || p.status==='coletado'){ cls='done'; }
+      else if(p.status==='insucesso'){ cls='fail'; }
+      if(p.finalizado_em) hora = 'Concluído às '+fmtHora(p.finalizado_em);
+      else if(p.chegou_em) hora = 'Chegou às '+fmtHora(p.chegou_em);
+      return '<div class="ponto '+cls+'"><span class="dot"></span>' +
+        '<div class="tit">'+esc(p.nome || p.endereco || 'Ponto')+'</div>' +
+        (p.endereco ? '<div class="end">'+esc(p.endereco)+'</div>' : '') +
+        (hora ? '<div class="hora">'+esc(hora)+'</div>' : '') +
+        '</div>';
+    }
+
+    function iniciarMapa(d){
+      var alvo = (d.coleta && d.coleta.lat) ? [d.coleta.lat, d.coleta.lng] : [-12.9714, -38.5014];
+      mapa = L.map('mapa', { zoomControl:true, attributionControl:false }).setView(alvo, 13);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains:'abcd', maxZoom:20, detectRetina:true
+      }).addTo(mapa);
+      setTimeout(function(){ if(mapa) mapa.invalidateSize(); }, 200);
+    }
+
+    function icone(cor, txt){
+      return L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+        html:'<div style="width:26px;height:26px;border-radius:50%;background:'+cor+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">'+txt+'</div>' });
+    }
+
+    function atualizarMapa(d){
+      if(!mapa) return;
+      var pontos = [];
+      // coleta
+      if(d.coleta && d.coleta.lat){
+        setMarcador('coleta', d.coleta.lat, d.coleta.lng, icone('#042C53','C'), 'Coleta');
+        pontos.push([d.coleta.lat, d.coleta.lng]);
+      }
+      // destinos
+      (d.pontos||[]).forEach(function(p,i){
+        if(p.lat && p.lng){
+          var cor = p.status==='entregue' ? '#1f9d6b' : (p.status==='insucesso' ? '#dc2626' : '#185FA5');
+          setMarcador('p'+i, p.lat, p.lng, icone(cor, String(p.ordem||i+1)), p.nome || p.endereco || 'Ponto');
+          pontos.push([p.lat, p.lng]);
+        }
+      });
+      // motoboy
+      if(d.posicao_atual && d.posicao_atual.lat){
+        setMarcador('moto', d.posicao_atual.lat, d.posicao_atual.lng, icone('#f59e0b','●'), 'Motoboy');
+        pontos.push([d.posicao_atual.lat, d.posicao_atual.lng]);
+      } else if(marcadores.moto){ mapa.removeLayer(marcadores.moto); delete marcadores.moto; }
+
+      if(pontos.length && !mapa._ajustou){
+        try{ mapa.fitBounds(pontos, { padding:[40,40], maxZoom:15 }); mapa._ajustou = true; }catch(e){}
+      }
+    }
+
+    function setMarcador(id, lat, lng, ic, titulo){
+      if(marcadores[id]){ marcadores[id].setLatLng([lat,lng]); }
+      else { marcadores[id] = L.marker([lat,lng], { icon:ic, title:titulo }).addTo(mapa); if(titulo) marcadores[id].bindPopup(titulo); }
+    }
+
+    // ── início ──
+    if(!token){ estado('Link inválido', 'Falta o código de rastreio no endereço.'); }
+    else {
+      carregar(true);
+      timerPoll = setInterval(function(){ carregar(false); }, 15000);
+    }
+  })();
+  </script>
+</body>
+</html>

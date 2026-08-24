@@ -78,6 +78,10 @@ const CATALOGO = [
     { codigo: 'precos.ver',       rotulo: 'Ver preço dinâmico',       desc: 'Visualizar as regras de preço dinâmico' },
     { codigo: 'precos.gerenciar', rotulo: 'Gerenciar preço dinâmico', desc: 'Criar, editar e ativar regras de ajuste de valor' },
   ]},
+  { modulo: 'integracoes', nome: 'Integrações (API)', categoria: 'Configuração', acoes: [
+    { codigo: 'integracoes.ver',       rotulo: 'Ver integrações',       desc: 'Visualizar as chaves de API e o histórico de requisições' },
+    { codigo: 'integracoes.gerenciar', rotulo: 'Gerenciar integrações', desc: 'Criar/revogar chaves e configurar o webhook de notificação' },
+  ]},
   { modulo: 'usuarios', nome: 'Equipe e permissões', categoria: 'Configuração', acoes: [
     { codigo: 'usuarios.ver',       rotulo: 'Ver equipe',                desc: 'Visualizar membros da equipe' },
     { codigo: 'usuarios.gerenciar', rotulo: 'Gerenciar equipe e permissões', desc: 'Criar usuários e definir permissões' },

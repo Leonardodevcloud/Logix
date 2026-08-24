@@ -35,8 +35,20 @@ function iniciarCron(origem = 'worker') {
     catch (e) { console.error(`[cron:${origem}] radar falhou:`, e.message); }
   });
 
-  // TODO: reentrega de webhooks com falha (quando o módulo de integrações entrar).
-  console.log(`[cron:${origem}] agendado (retenção rastreamento=${RETENCAO_DIAS}d)`);
+  // Webhooks de integração: reconciliação de estado a cada 20s. Compara as colunas
+  // da entrega com o que já foi notificado e dispara os momentos que faltaram
+  // (0/0.5/0.75/1/2/3) para o sistema do cliente — sem tocar no motor de entrega.
+  const integracoes = require('../modules/integracoes');
+  let _reconciliando = false;
+  cron.schedule('*/20 * * * * *', async () => {
+    if (_reconciliando) return; // evita sobreposição se um ciclo demorar
+    _reconciliando = true;
+    try { await integracoes.reconciliarWebhooks(); }
+    catch (e) { console.error(`[cron:${origem}] webhook integração falhou:`, e.message); }
+    finally { _reconciliando = false; }
+  });
+
+  console.log(`[cron:${origem}] agendado (retenção rastreamento=${RETENCAO_DIAS}d, webhooks integração=20s)`);
 }
 
 module.exports = { iniciarCron };

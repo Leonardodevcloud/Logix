@@ -29,6 +29,7 @@ const financeiro = require('./src/modules/financeiro');
 const radar = require('./src/modules/radar');
 const mapa = require('./src/modules/mapa');
 const precos = require('./src/modules/precos');
+const integracoes = require('./src/modules/integracoes');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -47,6 +48,7 @@ async function migrar() {
   await precos.initPrecosTables();
   await financeiro.initFinanceiroTables();  // tabelas de lancamentos/fechamentos + ALTER entregas
   await radar.initRadarTables();            // config + alertas do radar operacional
+  await integracoes.initIntegracoesTables(); // chaves de API + ALTER entregas (referencia_externa, rastreio_token...)
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -65,6 +67,12 @@ function montarApp() {
   app.use(cookieParser());
   app.use(sanitizarEntrada);
   app.use(requestLogger);
+
+  // API PÚBLICA de integração (ERP dos clientes) — montada ANTES do limite global
+  // por IP: um ERP dispara muitas corridas do mesmo IP e tem limitador próprio por
+  // chave (2 gravar/s, 1 status/30s). Não usa JWT (auth por cod_cliente + token).
+  app.use('/api/v1/integracao', integracoes.initIntegracoesPublicRoutes());
+
   app.use(limiteGlobal);
 
   app.get('/health', (req, res) => res.json({ ok: true, servico: 'logix-api', em: new Date().toISOString() }));
@@ -92,6 +100,7 @@ function montarApp() {
   api.use('/radar', radar.initRadarRoutes());
   api.use('/mapa', mapa.initMapaRoutes());
   api.use('/precos', precos.initPrecosRoutes());
+  api.use('/integracoes', integracoes.initIntegracoesRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último
