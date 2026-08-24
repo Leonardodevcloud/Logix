@@ -42,6 +42,9 @@ function gruposNav() {
     operacao.push({ rota: '/radar', rotulo: 'Radar', icone: 'acompanhamento' });
   if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
+  // Relatórios: central e loja (loja vê só a própria). Gate por entregas.ver.
+  if (auth.pode('entregas.ver'))
+    operacao.push({ rota: '/relatorios', rotulo: 'Relatórios', icone: 'entregas' });
   // Lojas (clientes): gestão da central, quem tem permissão de lojas.
   if (central && auth.temModulo('lojas') && auth.pode('lojas.ver'))
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });

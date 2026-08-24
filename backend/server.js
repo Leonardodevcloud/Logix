@@ -30,6 +30,7 @@ const radar = require('./src/modules/radar');
 const mapa = require('./src/modules/mapa');
 const precos = require('./src/modules/precos');
 const integracoes = require('./src/modules/integracoes');
+const relatorios = require('./src/modules/relatorios');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -101,6 +102,7 @@ function montarApp() {
   api.use('/mapa', mapa.initMapaRoutes());
   api.use('/precos', precos.initPrecosRoutes());
   api.use('/integracoes', integracoes.initIntegracoesRoutes());
+  api.use('/relatorios', relatorios.initRelatoriosRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último
