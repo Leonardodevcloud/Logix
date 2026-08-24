@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Residencial Maria e José Cuidado Humanizado para Idosos | Zona Norte SP</title>
+  <meta name="description" content="Residencial para idosos na Zona Norte de São Paulo. Cuidado humanizado 24h, ambiente familiar e acolhedor que devolve tranquilidade para a família.">
+  <link rel="icon" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- NAV -->
+<header id="nav">
+  <div class="nav-in">
+    <a href="#inicio" class="nav-logo">Residencial Maria e José</a>
+    <nav class="nav-links">
+      <a href="#inicio">Início</a>
+      <a href="#metodo">Método</a>
+      <a href="#depoimentos">Depoimentos</a>
+      <a href="#diadia">Dia a dia</a>
+      <a href="#localizacao">Localização</a>
+      <a href="#sobre">Sobre</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <a href="https://wa.me/5511940198273?text=Ol%C3%A1!%20Gostaria%20de%20agendar%20uma%20visita%20ao%20Residencial%20Maria%20e%20Jos%C3%A9." target="_blank" rel="noopener" class="btn btn-p" style="font-size:13px;padding:10px 20px">
+        <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+        Agendar visita
+      </a>
+      <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobile-menu">
+  <a href="#inicio"      onclick="closeMobile()">Início</a>
+  <a href="#metodo"      onclick="closeMobile()">Método</a>
+  <a href="#depoimentos" onclick="closeMobile()">Depoimentos</a>
+  <a href="#diadia"      onclick="closeMobile()">Dia a dia</a>
+  <a href="#localizacao" onclick="closeMobile()">Localização</a>
+  <a href="#sobre"       onclick="closeMobile()">Sobre</a>
+  <a href="#faq"         onclick="closeMobile()">FAQ</a>
+  <a href="https://wa.me/5511940198273?text=Ol%C3%A1!" target="_blank" class="btn btn-p" style="justify-content:center;margin-top:8px;display:flex">Agendar visita</a>
+</div>
+
+<!-- HERO -->
+<section id="inicio" class="hero">
+  <div class="wrap hero-in">
+    <div class="hero-pills">
+      <span class="pill">📍 Zona Norte de São Paulo</span>
+      <span class="pill">🕐 Cuidado humanizado 24h</span>
+      <span class="pill">🏡 Ambiente familiar</span>
+    </div>
+    <h1>Famílias sobrecarregadas estão descobrindo que é possível continuar cuidando <span>sem viver em estado constante de culpa e exaustão.</span></h1>
+    <p class="hero-sub">No Residencial Maria e José, o cuidado é compartilhado com dignidade, presença e acolhimento para que o idoso viva com mais segurança e a família volte a ter tranquilidade no dia a dia.</p>
+    <div class="hero-video">
+      <video id="heroVid" class="hero-vid" src="videos/Primeiraseção.mov#t=0.1" autoplay muted loop playsinline preload="metadata"></video>
+      <div class="hero-ouvir" id="heroCtaOuvir" onclick="ouvirHero()">
+        <span class="t1">Seu vídeo já começou</span>
+        <svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+        <span class="t2">Clique para ouvir</span>
+      </div>
+      <div class="hero-controls">
+        <button class="vid-ctrl-btn" onclick="toggleHeroPlay()" title="Pausar/continuar" aria-label="Pausar ou continuar">
+          <svg id="heroIconPause" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <svg id="heroIconPlay" viewBox="0 0 24 24" style="display:none"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="vid-ctrl-btn" onclick="toggleHeroSound()" title="Ativar/desativar som" aria-label="Ativar ou desativar som">
+          <svg id="iconMuted" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+          <svg id="iconSound" viewBox="0 0 24 24" style="display:none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        </button>
+      </div>
+    </div>
+    <a href="https://wa.me/5511940198273?text=Ol%C3%A1!%20Gostaria%20de%20agendar%20uma%20visita%20ao%20Residencial%20Maria%20e%20Jos%C3%A9." target="_blank" rel="noopener" class="btn btn-p">
+      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+      Agende uma visita pelo WhatsApp
+    </a>
+  </div>
+</section>
+
+<!-- SINAIS -->
+<section class="sec sec-alt">
+  <div class="wrap">
+    <h2 class="rev">Quando o cuidado deixa de caber dentro de casa</h2>
+    <p class="sub rev">Alguns sinais costumam indicar que a rotina de cuidados já se tornou maior do que uma pessoa ou uma família consegue sustentar sozinha.</p>
+    <div class="sinais-grid">
+      <div class="sinal-card rev"><div class="sinal-n">01</div><p>Quedas frequentes ou risco constante de acidentes</p></div>
+      <div class="sinal-card rev"><div class="sinal-n">02</div><p>Dificuldade para administrar medicações corretamente</p></div>
+      <div class="sinal-card rev"><div class="sinal-n">03</div><p>Recusa de alimentação, higiene ou cuidados básicos</p></div>
+      <div class="sinal-card rev"><div class="sinal-n">04</div><p>Necessidade de supervisão constante ao longo do dia</p></div>
+      <div class="sinal-card rev"><div class="sinal-n">05</div><p>Exaustão física e emocional de quem cuida</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- MÉTODO -->
+<section id="metodo" class="sec">
+  <div class="wrap">
+    <h2 class="rev">Um modelo de cuidado humanizado que acolhe a família, reorganiza a rotina do idoso e devolve paz, dignidade e presença.</h2>
+    <div class="metodo-steps">
+      <div class="metodo-step rev"><div class="step-n">01</div><div class="step-body"><h3>Acolhimento da Família</h3><p>Antes de qualquer decisão, buscamos entender a rotina do idoso, o nível de dependência, os episódios de risco e os desafios que a família já não consegue sustentar sozinha. A partir dessa escuta, construímos um cuidado alinhado às necessidades de cada momento.</p></div></div>
+      <div class="metodo-step rev"><div class="step-n">02</div><div class="step-body"><h3>Adaptação Humanizada</h3><p>Cada idoso possui história, emoções e necessidades únicas. Por isso, a adaptação acontece de forma gradual, respeitosa e acolhedora, criando vínculo enquanto inserimos uma rotina mais saudável, segura e organizada.</p></div></div>
+      <div class="metodo-step rev"><div class="step-n">03</div><div class="step-body"><h3>Estabilização da Rotina</h3><p>Com acompanhamento contínuo, o idoso volta a ter alimentação supervisionada, higiene adequada, medicações corretas, atividades terapêuticas e uma rotina estruturada, trazendo mais segurança e estabilidade emocional.</p></div></div>
+      <div class="metodo-step rev"><div class="step-n">04</div><div class="step-body"><h3>Reconstrução da Qualidade de Vida</h3><p>Trabalhamos para preservar a autoestima, a autonomia possível e a identidade de cada idoso através de escolhas simples, convivência afetiva e cuidado com os detalhes.</p></div></div>
+      <div class="metodo-step rev"><div class="step-n">05</div><div class="step-body"><h3>Paz Contínua da Família</h3><p>A família volta a dormir melhor, trabalhar com tranquilidade, viajar sem desespero e visitar o familiar com mais leveza. Porque quando o cuidado deixa de ser sobrevivência, o vínculo familiar consegue florescer novamente.</p></div></div>
+    </div>
+    <div style="text-align:center;margin-top:40px" class="rev">
+      <a href="https://wa.me/5511940198273?text=Quero%20conhecer%20o%20Residencial!" target="_blank" rel="noopener" class="btn btn-p">Quero conhecer o Residencial Maria e José</a>
+    </div>
+  </div>
+</section>
+
+<!-- PARA QUEM -->
+<section class="sec sec-alt">
+  <div class="wrap">
+    <div class="pq-inner">
+      <div class="rev">
+        <img src="images/Cuidado e acompanhamento 24 horas.jpg" alt="Idoso em ambiente acolhedor" class="pq-img">
+      </div>
+      <div class="rev">
+        <h2>Atendemos idosos com diferentes níveis de dependência e oferecemos suporte humanizado para famílias que já não conseguem sustentar o cuidado sozinhas.</h2>
+        <p style="font-size:14px;color:var(--txt);margin:12px 0 4px">O Residencial Maria e José pode ser ideal para idosos que:</p>
+        <ul class="pq-list">
+          <li><span class="pq-check">✓</span>Ainda são independentes, mas precisam de convivência, supervisão e rotina organizada</li>
+          <li><span class="pq-check">✓</span>Precisam de ajuda para higiene, alimentação, medicação ou locomoção</li>
+          <li><span class="pq-check">✓</span>Vivem com Alzheimer, demência ou outras condições que exigem acompanhamento contínuo</li>
+          <li><span class="pq-check">✓</span>Correm risco de quedas, acidentes ou não devem permanecer sozinhos</li>
+          <li><span class="pq-check">✓</span>Necessitam de cuidados integrais, inclusive em situações de maior dependência física</li>
+          <li><span class="pq-check">✓</span>Precisam de um ambiente seguro, acolhedor e com atenção individualizada</li>
+        </ul>
+        <div style="margin-top:28px">
+          <a href="https://wa.me/5511940198273?text=Quero%20entender%20se%20é%20a%20melhor%20opção%20para%20o%20meu%20familiar." target="_blank" rel="noopener" class="btn btn-p">Entender se essa é a melhor opção para o meu familiar</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VÍDEOS DEPOIMENTOS -->
+<section id="depoimentos" class="vid-sec">
+  <div class="wrap">
+    <h2 class="rev">A decisão mais difícil da vida deles se transformou em paz.</h2>
+    <p class="sub rev">Veja o que familiares contam depois de confiar o cuidado de quem amam ao Residencial Maria e José.</p>
+    <div class="vid-list" id="vidList"></div>
+  </div>
+</section>
+
+<!-- CONVERSA HONESTA -->
+<section class="sec sec-alt">
+  <div class="wrap">
+    <div class="honest-inner">
+      <div class="rev">
+        <h2>Muitas famílias se perguntam: "Será que realmente chegou esse momento?"</h2>
+        <div class="honest-body">
+          <p>A verdade é que essa decisão raramente nasce da falta de amor. Ela costuma nascer da <strong>sobrecarga.</strong></p>
+          <p>Quando o idoso passa a precisar de supervisão constante, a rotina da família muda. As noites deixam de ser tranquilas, o cansaço se acumula e episódios de quedas, confusão mental ou recusas passam a exigir atenção o tempo inteiro.</p>
+          <p>E existe algo difícil de admitir, mas humano: <strong>nenhuma família consegue sustentar por muito tempo um cuidado de alta complexidade sem adoecer junto.</strong></p>
+          <p>É nesse momento que uma moradia assistida humanizada deixa de representar ausência de cuidado e passa a representar <strong>continuidade dele.</strong> O filho volta a ser filho.</p>
+        </div>
+      </div>
+      <div class="rev">
+        <div class="honest-card">
+          <h3>O que as famílias dizem depois de tomar a decisão:</h3>
+          <div class="q-bl"><p>"Eu sinto que garanti qualidade de vida para ela. Se estivesse em casa, talvez ela não tivesse sobrevivido."</p><cite>Karla, filha da Dona Alice</cite></div>
+          <div class="q-bl"><p>"Hoje eu entendo que institucionalizar não foi abandono. Foi o maior ato de amor que eu poderia ter feito."</p><cite>Cinthia, sobrinha da Cleusa</cite></div>
+          <div style="margin-top:20px">
+            <a href="https://wa.me/5511940198273?text=Quero%20conversar%20sobre%20essa%20decisão." target="_blank" rel="noopener" class="btn btn-p">Quero conversar sobre essa decisão</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DIA A DIA -->
+<section id="diadia" class="sec">
+  <div class="wrap">
+    <h2 class="tc rev">Como é o dia a dia de quem mora no Residencial Maria e José</h2>
+    <p class="sub tc rev">Cada detalhe da rotina é pensado para oferecer mais segurança, dignidade e qualidade de vida ao idoso.</p>
+    <div class="dia-grid">
+      <div class="dia-card rev"><img src="images/Alimentação adaptada a cada necessidade.jpg" alt="Alimentação" class="dia-img"><div class="dia-body"><h3>Alimentação adaptada a cada necessidade</h3><p>Refeições preparadas considerando as necessidades, preferências e limitações de cada idoso, garantindo segurança nutricional e respeito ao paladar.</p></div></div>
+      <div class="dia-card rev"><img src="images/Cuidado e acompanhamento 24 horas.jpg" alt="Cuidado 24h" class="dia-img"><div class="dia-body"><h3>Cuidado e acompanhamento 24 horas</h3><p>Nossa equipe acompanha os residentes continuamente com atenção individualizada em medicações, higiene, mobilidade e alimentação.</p></div></div>
+      <div class="dia-card rev"><img src="images/Estímulo, convivência e bem-estar.jpg" alt="Atividades" class="dia-img"><div class="dia-body"><h3>Estímulo, convivência e bem-estar</h3><p>Atividades adaptadas, música, estímulos cognitivos e experiências que ajudam a manter o idoso mais ativo e emocionalmente acolhido.</p></div></div>
+      <div class="dia-card rev"><img src="images/Momentos que merecem ser celebrados.jpg" alt="Comemorações" class="dia-img"><div class="dia-body"><h3>Momentos que merecem ser celebrados</h3><p>Aniversários, encontros e comemorações fazem parte da rotina para fortalecer vínculos e proporcionar alegria no dia a dia.</p></div></div>
+      <div class="dia-card rev"><img src="images/Cuidado que também preserva autoestima.jpg" alt="Autoestima" class="dia-img"><div class="dia-body"><h3>Cuidado que também preserva autoestima</h3><p>Incentivamos hábitos que contribuem para o bem-estar, autoestima e dignidade dos residentes, respeitando sua história e identidade.</p></div></div>
+      <div class="dia-card rev"><img src="images/Portas abertas para a família.jpg" alt="Família" class="dia-img"><div class="dia-body"><h3>Portas abertas para a família</h3><p>Mantemos a família próxima e incentivamos a presença, as visitas e a continuidade dos vínculos afetivos.</p></div></div>
+    </div>
+    <div style="text-align:center;margin-top:40px" class="rev">
+      <a href="https://wa.me/5511940198273?text=Quero%20conhecer%20o%20Residencial!" target="_blank" rel="noopener" class="btn btn-p">Quero conhecer o Residencial Maria e José</a>
+    </div>
+  </div>
+</section>
+
+<!-- LOCALIZAÇÃO -->
+<section id="localizacao" class="sec sec-alt">
+  <div class="wrap">
+    <h2 class="rev">Um residencial para idosos na Zona Norte de São Paulo</h2>
+    <p class="sub rev">Localizado na Zona Norte da capital paulista, em região de fácil acesso para famílias que procuram cuidado humanizado.</p>
+    <div class="loc-inner">
+      <div class="rev">
+        <div class="loc-mapa">
+          <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3659.234!2d-46.6328!3d-23.4832!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94cef5b7c8571d75%3A0x1a0d1cd8e94f82b0!2sR.%20Ol%C3%ADmpia%20Zamitti%20Mammana%2C%2057%20-%20Vila%20Vitorio%20Mazzei%2C%20S%C3%A3o%20Paulo%20-%20SP%2C%2002409-040!5e0!3m2!1spt-BR!2sbr!4v1" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>
+        </div>
+        <div class="loc-fachada">
+          <img src="images/Fachada(endereço).jpg" alt="Fachada do Residencial Maria e José">
+        </div>
+      </div>
+      <div class="loc-dados rev">
+        <div class="loc-item"><div class="loc-ico">📍</div><div class="loc-txt"><h4>Endereço</h4><p>R. Olímpia Zamitti Mammana, 57<br>Vila Vitorio Mazzei, São Paulo - SP<br>CEP: 02409-040</p></div></div>
+        <div class="loc-item"><div class="loc-ico">📞</div><div class="loc-txt"><h4>Telefone</h4><p><a href="tel:+551134672652" style="color:var(--laranja-d)">(11) 3467-2652</a></p></div></div>
+        <div class="loc-item"><div class="loc-ico">💬</div><div class="loc-txt"><h4>WhatsApp</h4><p><a href="https://wa.me/5511940198273" target="_blank" rel="noopener" style="color:var(--laranja-d)">(11) 3467-2652</a></p></div></div>
+        <div class="loc-item"><div class="loc-ico">🕐</div><div class="loc-txt"><h4>Visitas</h4><p>Todos os dias<br>Agende pelo WhatsApp</p></div></div>
+        <a href="https://maps.google.com/?q=R.+Olímpia+Zamitti+Mammana,+57,+São+Paulo" target="_blank" rel="noopener" class="btn btn-p" style="width:fit-content">Ver localização no mapa →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GESTORA -->
+<section id="sobre" class="sec">
+  <div class="wrap">
+    <div class="gest-inner">
+      <div class="rev">
+        <div class="gest-card">
+          <img src="images/Sobreagestora.jpg" alt="Luciana Luna" class="gest-foto">
+          <div class="gest-info">
+            <h3>Luciana Luna</h3>
+            <p>Gestora do Residencial Maria e José, enfermeira, especialista em Gerontologia, Estomaterapia e Gestão em Saúde.</p>
+            <div class="gest-tags">
+              <span class="gest-tag">Enfermeira</span>
+              <span class="gest-tag">Gerontologia</span>
+              <span class="gest-tag">Estomaterapia</span>
+              <span class="gest-tag">23+ anos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="gest-bio rev">
+        <h2>O que me trouxe até aqui</h2>
+        <p>Minha história com o cuidado ao idoso começou muito antes da minha formação profissional.</p>
+        <p>Quando eu tinha entre 7 e 8 anos de idade, morava no sul da Bahia e participava com minha família de projetos sociais através do Lions Club. O momento que eu mais gostava era visitar o asilo da cidade. Naquela época, eu fazia e vendia balas de jenipapo e bolos para juntar dinheiro e comprar bolachas que levava para os idosos.</p>
+        <p>Anos depois, enquanto cursava Engenharia, fui visitar minha avó após uma cirurgia. Presenciei uma situação de cuidado que me marcou profundamente. Foi a sensação de perceber que alguém que eu amava não estava sendo tratada com o respeito e a dignidade que merecia.</p>
+        <p>Voltei para São Paulo com aquilo no coração. Pouco tempo depois, <strong>deixei a Engenharia e comecei a estudar Enfermagem.</strong></p>
+        <p>Hoje atuo há mais de 23 anos na área da saúde, com especializações em Gerontologia, Estomaterapia e Gestão em Saúde.</p>
+        <blockquote><p>"cuidar de alguém exige respeito. Independentemente da idade, da condição física ou da história daquela pessoa, cuidado sem respeito não é cuidado."</p></blockquote>
+        <p>O Residencial Maria e José nasceu desse princípio: oferecer o cuidado que eu gostaria que os meus próprios familiares recebessem. Porque envelhecer com dignidade deveria ser um direito de todos.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-sec">
+  <div class="wrap">
+    <h2 class="rev">Quer entender se o Residencial Maria e José é a melhor opção para o seu familiar?</h2>
+    <p class="sub tc rev">Converse com nossa equipe e tire suas dúvidas. Sem pressão, sem compromisso.</p>
+    <div class="rev" style="display:flex;justify-content:center">
+      <a href="https://wa.me/5511940198273?text=Ol%C3%A1!%20Quero%20entender%20se%20o%20Residencial%20é%20a%20melhor%20opção%20para%20o%20meu%20familiar." target="_blank" rel="noopener" class="btn btn-p">
+        <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+        Falar no WhatsApp
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="sec sec-alt">
+  <div class="wrap">
+    <h2 class="tc rev">Dúvidas que ouvimos com mais frequência</h2>
+    <div class="faq-list">
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Meu familiar vai se adaptar?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>A adaptação é um processo gradual e individual. Nossa equipe acompanha cada residente de forma personalizada, respeitando seu ritmo, história e necessidades. Muitos familiares se surpreendem com o quanto o familiar melhora em pouco tempo.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Tenho medo de maus-tratos. Como posso ter certeza?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Mantemos portas abertas para visitas a qualquer momento, enviamos atualizações regulares e construímos uma relação de confiança com cada família. Nossa gestora Luciana Luna supervisiona pessoalmente todos os cuidados.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Tenho medo de estar abandonando meu familiar.<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Escolher um cuidado profissional e humanizado não é abandono — é o ato de amor mais difícil e corajoso que um familiar pode fazer. Quando o cuidado deixa de ser sobrevivência, o vínculo familiar consegue florescer novamente.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">O investimento vale a pena?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Quando comparamos o custo de cuidadoras particulares, adaptações domiciliares e o preço emocional da exaustão familiar, muitos descobrem que o residencial oferece um cuidado mais completo, seguro e sustentável.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Já tentamos cuidador e não deu certo. Por que seria diferente?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Uma estrutura residencial oferece o que nenhuma solução domiciliar pode: equipe disponível 24 horas, ambiente adaptado e seguro, rotina estruturada, convivência social e respaldo para emergências.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Vocês atendem idosos com Alzheimer ou demência?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Sim. Temos ampla experiência com Alzheimer, demência vascular, Parkinson e outras condições que exigem acompanhamento contínuo, sempre de forma humanizada.</p></div></div></div>
+      <div class="faq-item rev"><button class="faq-btn" onclick="toggleFaq(this)">Como funciona a rotina do idoso no residencial?<span class="faq-ico"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span></button><div class="faq-body"><div class="faq-inner"><p>Cada residente tem rotina personalizada com alimentação, higiene, medicação, atividades terapêuticas, convivência social e descanso. A família recebe atualizações regulares e pode visitar a qualquer momento.</p></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="footer-in">
+      <div class="footer-social">
+        <a href="https://www.instagram.com/residencialmj/" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg viewBox="0 0 24 24"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07M12 0C8.74 0 8.33.01 7.05.07 5.78.13 4.9.33 4.14.63c-.79.31-1.46.72-2.12 1.38C1.36 2.67.95 3.34.63 4.14.33 4.9.13 5.78.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.06 1.27.26 2.15.56 2.91.31.79.72 1.46 1.38 2.12.66.66 1.33 1.07 2.12 1.38.76.3 1.64.5 2.91.56C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c1.27-.06 2.15-.26 2.91-.56.79-.31 1.46-.72 2.12-1.38.66-.66 1.07-1.33 1.38-2.12.3-.76.5-1.64.56-2.91.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.27-.26-2.15-.56-2.91-.31-.79-.72-1.46-1.38-2.12-.66-.66-1.33-1.07-2.12-1.38-.76-.3-1.64-.5-2.91-.56C15.67.01 15.26 0 12 0zm0 5.84A6.16 6.16 0 1018.16 12 6.16 6.16 0 0012 5.84zM12 16a4 4 0 114-4 4 4 0 01-4 4zm6.41-10.85a1.44 1.44 0 11-1.44-1.44 1.44 1.44 0 011.44 1.44z"/></svg>
+        </a>
+        <a href="https://www.facebook.com/residencialmj/?locale=pt_BR" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        </a>
+        <a href="https://share.google/l2nxoQgXUUTi98q22" target="_blank" rel="noopener" aria-label="Google">
+          <svg viewBox="0 0 24 24"><path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"/></svg>
+        </a>
+        <a href="https://wa.me/5511940198273?text=Ol%C3%A1!%20Vim%20pelo%20site." target="_blank" rel="noopener" aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+        </a>
+      </div>
+      <div class="footer-logo">Residencial Maria e José</div>
+      <p class="footer-tag">Cuidado humanizado, atenção individualizada e ambiente familiar para idosos que necessitam de acompanhamento contínuo.</p>
+      <p>© 2026 RESIDENCIAL MARIA E JOSE LTDA - ME | Todos os direitos reservados. | CNPJ: 32.814.431/0001-88</p>
+    </div>
+  </div>
+</footer>
+
+<!-- WA FLUTUANTE -->
+<a id="wa" href="https://wa.me/5511940198273?text=Ol%C3%A1!%20Vim%20pelo%20site." target="_blank" rel="noopener" title="WhatsApp">
+  <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+</a>
+
+<script src="script.js"></script>
+</body>
+</html>
