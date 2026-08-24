@@ -23,8 +23,6 @@
   h3{font-size:18px;font-weight:700;margin:30px 0 10px}
   p{margin:10px 0}
   hr{border:none;border-top:1px solid var(--linha);margin:44px 0}
-
-  /* Layout */
   .layout{display:flex;max-width:1180px;margin:0 auto}
   .side{width:270px;flex:0 0 270px;position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--linha);background:#fff;padding:22px 16px 40px}
   .side .brand{display:flex;align-items:center;gap:10px;padding:0 8px 18px;border-bottom:1px solid var(--linha);margin-bottom:14px}
@@ -35,32 +33,22 @@
   .side a{display:block;padding:6px 10px;border-radius:7px;color:var(--tinta2);font-size:13.5px;font-weight:500}
   .side a:hover{background:var(--fundo);text-decoration:none;color:var(--navy)}
   .main{flex:1;min-width:0;padding:36px 46px 90px}
-
-  /* Componentes */
   .hero{background:linear-gradient(135deg,var(--navy),var(--azul));color:#fff;border-radius:16px;padding:34px 32px;margin-bottom:30px}
   .hero h1{color:#fff;font-size:30px;font-weight:800;margin:0 0 8px}
-  .hero p{color:#dbeafe;margin:0;font-size:15px;max-width:620px}
+  .hero p{color:#dbeafe;margin:0;font-size:15px;max-width:640px}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
   .chip{background:rgba(255,255,255,.15);color:#fff;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px}
-
   .met{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px;color:#fff;margin-right:8px;vertical-align:middle}
   .met.post{background:#1f9d6b}
-  .met.get{background:var(--azul)}
   .rota{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--navy);font-weight:600}
-
   pre{background:var(--codigo-bg);color:#dbeafe;border-radius:12px;padding:16px 18px;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;margin:12px 0;border:1px solid #123a63}
-  pre .k{color:#7dd3fc}
-  pre .s{color:#a7f3d0}
-  pre .n{color:#fcd34d}
   pre .c{color:#64879f;font-style:italic}
-
   table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
   th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--linha);vertical-align:top}
   th{background:var(--fundo);font-weight:700;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.3px}
   td code{white-space:nowrap}
   .obg{color:var(--erro);font-weight:700;font-size:11.5px}
   .opc{color:var(--tinta3);font-weight:600;font-size:11.5px}
-
   .box{border-radius:12px;padding:14px 18px;margin:14px 0;font-size:14px;border:1px solid}
   .box.ok{background:#effaf4;border-color:#b6e6cf}
   .box.ok .t{color:var(--ok)}
@@ -69,34 +57,29 @@
   .box.info{background:var(--azul-claro);border-color:#bcd9f5}
   .box.info .t{color:var(--azul)}
   .box .t{font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px}
-
   .passos{counter-reset:p;margin:16px 0;padding:0;list-style:none}
   .passos li{position:relative;padding:0 0 16px 44px;border-left:2px solid var(--linha);margin-left:14px}
   .passos li:last-child{border-left-color:transparent;padding-bottom:0}
   .passos li::before{counter-increment:p;content:counter(p);position:absolute;left:-16px;top:-2px;width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
   .passos li b{color:var(--navy)}
-
   .pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px}
   .pill.sp{background:#fff4e5;color:#b45309}
   .pill.a{background:var(--azul-claro);color:var(--azul)}
   .pill.f{background:#e6f6ef;color:var(--ok)}
   .pill.c{background:#fdeaea;color:var(--erro)}
-
   .topbar{display:none}
   @media(max-width:900px){
     .side{display:none}
     .main{padding:20px 18px 70px}
     .topbar{display:flex;align-items:center;gap:10px;padding:14px 18px;background:var(--navy);color:#fff;position:sticky;top:0;z-index:5}
     .topbar .lx{width:30px;height:30px;border-radius:7px;background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:800}
-    .hero{padding:24px 20px}
-    .hero h1{font-size:23px}
-    pre{font-size:11.5px}
+    .hero{padding:24px 20px}.hero h1{font-size:23px}pre{font-size:11.5px}
   }
   @media print{.side,.topbar{display:none}.main{padding:0}.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 </head>
 <body>
-<div class="topbar"><div class="lx">LX</div><b>API de Integração — Documentação</b></div>
+<div class="topbar"><div class="lx">LX</div><b>API de Integração</b></div>
 <div class="layout">
   <aside class="side">
     <div class="brand"><div class="lx">LX</div><div><b>API de Integração</b><span>Guia do desenvolvedor</span></div></div>
@@ -105,7 +88,7 @@
     <a href="#como-funciona">Como funciona</a>
     <a href="#credenciais">Credenciais e autenticação</a>
     <a href="#base">URL base e formato</a>
-    <a href="#limites">Limites de uso</a>
+    <a href="#regras">Regras da operação</a>
     <div class="grp">Endpoints</div>
     <a href="#gravar">Criar corrida</a>
     <a href="#status">Consultar status</a>
@@ -122,41 +105,38 @@
 
   <section class="hero" id="visao">
     <h1>API de Integração</h1>
-    <p>Conecte o seu sistema à plataforma e crie corridas automaticamente. Este guia mostra, passo a passo, como enviar uma entrega, consultar o andamento, cancelar e receber avisos em tempo real — com exemplos prontos para copiar.</p>
-    <div class="chips"><span class="chip">REST · JSON</span><span class="chip">Sem instalação</span><span class="chip">Exemplos prontos</span></div>
+    <p>Conecte o sistema da loja à plataforma e crie corridas automaticamente. Este guia traz cada endpoint, os campos aceitos, exemplos de resposta de sucesso e de erro, o webhook de status e a referência completa.</p>
+    <div class="chips"><span class="chip">REST · JSON</span><span class="chip">Exemplos prontos</span><span class="chip">Webhook incluso</span></div>
   </section>
 
-  <div class="box info"><div class="t">Para quem é este guia</div>
-    Foi escrito para ser seguido tanto por um programador quanto por alguém que nunca mexeu com integrações. Se você não é técnico, entregue este link ao responsável pelo seu sistema (ERP, e-commerce, etc.) — ele terá tudo o que precisa aqui.</div>
-
   <h2 id="como-funciona">Como funciona</h2>
-  <p>Toda a comunicação acontece por mensagens no formato <b>JSON</b> enviadas pela internet (uma "requisição"). O seu sistema envia os dados da entrega; a plataforma responde na hora com o número da corrida e, quando quiser, avisa o seu sistema conforme o entregador avança.</p>
+  <p>A comunicação é feita por requisições HTTP no formato JSON. O sistema da loja envia os dados da entrega e a plataforma responde na hora com o número da corrida. O acompanhamento pode ser feito por consulta ou por webhook.</p>
   <ol class="passos">
-    <li><b>Você recebe as credenciais.</b> A central gera, no painel, um <b>Código do cliente</b> e os <b>tokens</b> da sua integração e te entrega.</li>
-    <li><b>Seu sistema envia a corrida.</b> Um POST para o endereço de <a href="#gravar">criar corrida</a> com os pontos de coleta e entrega.</li>
-    <li><b>A plataforma responde.</b> Você recebe o número da corrida (a "OS") e o link de rastreio para mostrar ao seu cliente.</li>
-    <li><b>Você acompanha.</b> Consulte o <a href="#status">status</a> quando quiser, ou configure um <a href="#webhook">webhook</a> para ser avisado automaticamente a cada etapa.</li>
+    <li><b>A central gera as credenciais.</b> No painel, em Integrações, cria a chave da loja e entrega o Código do cliente e os tokens.</li>
+    <li><b>O sistema da loja envia a corrida.</b> Um POST para o endpoint de <a href="#gravar">criar corrida</a> com os pontos de coleta e entrega.</li>
+    <li><b>A plataforma responde.</b> Retorna o número da corrida (a OS) e o link de rastreio.</li>
+    <li><b>Acompanhamento.</b> Consulte o <a href="#status">status</a> quando precisar ou configure um <a href="#webhook">webhook</a> para receber os avisos de cada etapa.</li>
   </ol>
 
   <hr />
 
   <h2 id="credenciais">Credenciais e autenticação</h2>
-  <p>Cada integração tem duas informações que identificam e autorizam o seu sistema. Elas são geradas pela central em <b>Integrações → Nova integração</b> e aparecem uma única vez — guarde em local seguro.</p>
+  <p>Cada integração pertence a uma <b>loja</b>. As credenciais são geradas pela central em Integrações, Nova integração, e aparecem uma única vez. Guarde em local seguro.</p>
   <table>
-    <thead><tr><th>Credencial</th><th>Para que serve</th></tr></thead>
+    <thead><tr><th>Credencial</th><th>Descrição</th></tr></thead>
     <tbody>
-      <tr><td><code>codCliente</code></td><td>Identifica a sua empresa/loja na plataforma. É público (funciona como o seu "usuário").</td></tr>
-      <tr><td><code>token</code></td><td>É o segredo que autoriza a operação. Existe um token por operação, no formato <code>&lt;segredo&gt;-gravar</code>, <code>&lt;segredo&gt;-status</code>, <code>&lt;segredo&gt;-cancelar</code> e <code>&lt;segredo&gt;-calcular</code>.</td></tr>
+      <tr><td><code>codCliente</code></td><td>Identifica a <b>loja</b> na plataforma. É o código público da loja (funciona como o usuário). Toda corrida enviada com ele nasce nesta loja e usa a tabela de preço configurada para ela.</td></tr>
+      <tr><td><code>token</code></td><td>Segredo que autoriza a operação. Há um token por operação, no formato <code>&lt;segredo&gt;-gravar</code>, <code>&lt;segredo&gt;-status</code>, <code>&lt;segredo&gt;-cancelar</code> e <code>&lt;segredo&gt;-calcular</code>.</td></tr>
     </tbody>
   </table>
-  <p>As duas informações vão <b>dentro do corpo</b> (o JSON) de cada requisição — não há cabeçalho ou senha separada. Use o token correspondente à operação que está chamando.</p>
-  <div class="box info"><div class="t">Perdeu o token?</div>
-    Por segurança o segredo não é exibido de novo. Na tela de Integrações, use <b>Gerar novos tokens</b> — isso cria um novo segredo e invalida o anterior (seu sistema precisará ser atualizado com os novos tokens).</div>
+  <p>As duas informações vão <b>dentro do corpo</b> (o JSON) de cada requisição. Use o token correspondente à operação chamada.</p>
+  <div class="box info"><div class="t">Perdeu o token</div>
+    O segredo não é exibido novamente. Na tela de Integrações use <b>Gerar novos tokens</b>. Isso cria um novo segredo e invalida o anterior (o sistema da loja precisará ser atualizado com os novos tokens).</div>
 
   <hr />
 
   <h2 id="base">URL base e formato</h2>
-  <p>Todas as chamadas são <b>POST</b> com cabeçalho <code>Content-Type: application/json</code> para os endereços abaixo:</p>
+  <p>Todas as chamadas são <b>POST</b> com cabeçalho <code>Content-Type: application/json</code>:</p>
   <pre><span class="c"># Base</span>
 https://logix-production-61ae.up.railway.app/api/v1/integracao
 
@@ -164,37 +144,49 @@ https://logix-production-61ae.up.railway.app/api/v1/integracao
 POST  /gravar     <span class="c">criar corrida</span>
 POST  /status     <span class="c">consultar andamento</span>
 POST  /cancelar   <span class="c">cancelar corrida</span>
-POST  /calcular   <span class="c">prévia de distância e valor</span></pre>
-  <div class="box info"><div class="t">Importante: a resposta é sempre HTTP 200</div>
-    O resultado vem no corpo da resposta. Sucesso traz a chave <code>Sucesso</code>; falha traz a chave <code>Erro</code> com a mensagem. Sempre verifique qual das duas veio antes de prosseguir.</div>
+POST  /calcular   <span class="c">previa de distancia e valor</span></pre>
+  <div class="box info"><div class="t">A resposta é sempre HTTP 200</div>
+    O resultado vem no corpo. Sucesso traz a chave <code>Sucesso</code>. Falha traz a chave <code>Erro</code> com a mensagem. Verifique qual das duas veio antes de prosseguir.</div>
 
-  <h2 id="limites">Limites de uso</h2>
+  <hr />
+
+  <h2 id="regras">Regras da operação</h2>
+  <p>A plataforma aplica automaticamente as configurações que a central definiu para cada loja. A API respeita essas regras sem exigir nada do seu lado.</p>
+
+  <h3>Preço</h3>
+  <p>O valor de toda corrida criada pela API é calculado pela tabela de preço configurada para a loja do <code>codCliente</code> (incluindo eventuais regras de preço dinâmico). A API não aceita valores manuais.</p>
+
+  <h3>Limite de corridas por profissional</h3>
+  <p>Cada loja pode ter um limite de corridas simultâneas por profissional. A API não fura esse limite: se você enviar mais corridas do que o profissional pode assumir, as excedentes ficam na fila aguardando um profissional disponível ou o despacho da central. Exemplo: se o limite for 5 e você enviar 7, o profissional assume 5 e as outras 2 aguardam.</p>
+
+  <h3>Cancelamento</h3>
+  <p>O cancelamento pela API respeita a permissão de cancelamento configurada para a loja:</p>
   <table>
-    <thead><tr><th>Operação</th><th>Limite</th></tr></thead>
+    <thead><tr><th>Situação da corrida</th><th>Resultado do cancelamento</th></tr></thead>
     <tbody>
-      <tr><td>Criar corrida (<code>/gravar</code>)</td><td>até <b>2 por segundo</b></td></tr>
-      <tr><td>Consultar status (<code>/status</code>)</td><td><b>1 a cada 30 segundos</b></td></tr>
-      <tr><td>Calcular preço (<code>/calcular</code>)</td><td>até <b>2 por segundo</b></td></tr>
+      <tr><td>Na fila (ainda sem profissional)</td><td>Cancela normalmente.</td></tr>
+      <tr><td>Já associada a um profissional</td><td>Só cancela se a loja tiver a permissão de cancelar corridas associadas. Caso contrário, retorna <code>Alocado</code>.</td></tr>
+      <tr><td>Já finalizada</td><td>Não pode ser cancelada. Retorna <code>Alocado</code>.</td></tr>
     </tbody>
   </table>
-  <p>Se ultrapassar, a resposta traz um <code>Erro</code> avisando — basta reduzir o ritmo e tentar de novo.</p>
+  <p>Detalhes e exemplos no endpoint de <a href="#cancelar">cancelar corrida</a>.</p>
 
   <hr />
 
   <h2 id="gravar"><span class="met post">POST</span> Criar corrida</h2>
   <p class="rota">/api/v1/integracao/gravar</p>
-  <p>Cria uma nova corrida na plataforma. O array <code>pontos</code> deve ter <b>no mínimo 2</b> e no máximo 80 itens: o <b>primeiro ponto é a coleta</b> e os demais são as entregas.</p>
+  <p>Cria uma nova corrida. O array <code>pontos</code> deve ter no mínimo 2 e no máximo 80 itens. O <b>primeiro ponto é a coleta</b> e os demais são as entregas.</p>
 
   <h3>Campos do corpo (JSON)</h3>
   <table>
     <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Descrição</th></tr></thead>
     <tbody>
       <tr><td><code>token</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Token da operação: <code>&lt;segredo&gt;-gravar</code>.</td></tr>
-      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Seu código de cliente.</td></tr>
-      <tr><td><code>pontos</code></td><td>lista</td><td><span class="obg">obrigatório</span></td><td>Coleta + entregas. Veja <a href="#campos-ponto">campos do ponto</a>.</td></tr>
-      <tr><td><code>numeroPedido</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Nº do pedido/NF no seu sistema. Serve para você reconciliar e evita duplicar a corrida se a mesma requisição for reenviada (idempotência).</td></tr>
-      <tr><td><code>semProfissional</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Se <code>"S"</code>, a corrida entra na fila mas <b>não</b> é ofertada automaticamente aos entregadores (a central despacha depois).</td></tr>
-      <tr><td><code>ordenar</code></td><td>texto</td><td><span class="opc">opcional</span></td><td><code>"false"</code> mantém a ordem dos pontos como enviada. Caso contrário, a plataforma otimiza a rota. Com <code>"true"</code>, o limite é de 20 pontos.</td></tr>
+      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Código da loja.</td></tr>
+      <tr><td><code>pontos</code></td><td>lista</td><td><span class="obg">obrigatório</span></td><td>Coleta e entregas. Veja <a href="#campos-ponto">campos do ponto</a>.</td></tr>
+      <tr><td><code>numeroPedido</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Número do pedido ou nota no sistema da loja. Serve para reconciliar e evita duplicar a corrida se a mesma requisição for reenviada (idempotência).</td></tr>
+      <tr><td><code>semProfissional</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Se <code>"S"</code>, a corrida entra na fila mas não é ofertada automaticamente aos profissionais (a central despacha depois).</td></tr>
+      <tr><td><code>ordenar</code></td><td>texto</td><td><span class="opc">opcional</span></td><td><code>"false"</code> mantém a ordem dos pontos como enviada. Caso contrário, a plataforma otimiza a rota. Com <code>"true"</code> o limite é de 20 pontos.</td></tr>
     </tbody>
   </table>
 
@@ -204,14 +196,14 @@ Content-Type: application/json
 
 {
   "token": "&lt;segredo&gt;-gravar",
-  "codCliente": "&lt;seu código de cliente&gt;",
+  "codCliente": "&lt;codigo da loja&gt;",
   "numeroPedido": "1234",
   "semProfissional": "N",
   "ordenar": "true",
   "pontos": [
     {
       "rua": "Av. Tancredo Neves", "numero": "620",
-      "bairro": "Caminho das Árvores", "cidade": "Salvador", "uf": "BA",
+      "bairro": "Caminho das Arvores", "cidade": "Salvador", "uf": "BA",
       "cep": "41820-020", "la": "-12.978", "lo": "-38.458"
     },
     {
@@ -224,8 +216,8 @@ Content-Type: application/json
 }</pre>
 
   <h3>Resposta de sucesso</h3>
-  <div class="box ok"><div class="t">✓ 200 · Corrida criada</div>
-    <code>Sucesso</code> traz o número da corrida (a OS) — guarde-o para consultar/cancelar depois.</div>
+  <div class="box ok"><div class="t">Sucesso (HTTP 200), corrida criada</div>
+    <code>Sucesso</code> traz o número da corrida (a OS). Guarde para consultar ou cancelar depois.</div>
   <pre>{
   "Sucesso": "LX-1287",
   "detalhes": {
@@ -242,35 +234,34 @@ Content-Type: application/json
       <tr><td><code>Sucesso</code></td><td>Número da corrida (OS). Use nas operações de status e cancelamento.</td></tr>
       <tr><td><code>detalhes.distancia</code></td><td>Distância total da rota, em km.</td></tr>
       <tr><td><code>detalhes.duracao</code></td><td>Tempo estimado, no formato <code>HH:MM:SS</code>.</td></tr>
-      <tr><td><code>detalhes.valor</code></td><td>Valor da corrida em reais (calculado pela tabela de preço da sua loja).</td></tr>
-      <tr><td><code>detalhes.urlRastreamento</code></td><td>Link público para o seu cliente acompanhar a entrega no mapa.</td></tr>
+      <tr><td><code>detalhes.valor</code></td><td>Valor da corrida em reais (tabela de preço da loja).</td></tr>
+      <tr><td><code>detalhes.urlRastreamento</code></td><td>Link público para o cliente final acompanhar a entrega.</td></tr>
     </tbody>
   </table>
 
   <h3>Respostas de erro</h3>
-  <div class="box err"><div class="t">✕ 200 · Falha na criação</div>
-    O corpo traz <code>Erro</code> com a mensagem. Exemplos:</div>
+  <div class="box err"><div class="t">Falha (HTTP 200 com a chave Erro)</div></div>
   <pre>{ "Erro": "Favor, informar 2 ou mais pontos!" }
 { "Erro": "Endereço do ponto 1 obrigatório!" }
 { "Erro": "Limite de endereços excedido. Favor informar um número igual ou menor que 80 pontos." }
 { "Erro": "Token inválido" }
 { "Erro": "Só é permitido solicitar 2 serviços por segundo." }</pre>
-  <p>Consulte a <a href="#erros">lista completa de erros</a>.</p>
+  <p>Veja a <a href="#erros">lista completa de erros</a>.</p>
 
   <hr />
 
   <h2 id="status"><span class="met post">POST</span> Consultar status</h2>
   <p class="rota">/api/v1/integracao/status</p>
-  <p>Consulta o andamento de uma ou mais corridas. Informe <b>um</b> destes: <code>servico</code> (uma OS), <code>servicos</code> (lista de OS, até 50) ou <code>numeroNota</code>.</p>
+  <p>Consulta o andamento de uma ou mais corridas. Informe um destes: <code>servico</code> (uma OS), <code>servicos</code> (lista de OS, até 50) ou <code>numeroNota</code>.</p>
 
   <h3>Campos do corpo (JSON)</h3>
   <table>
     <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Descrição</th></tr></thead>
     <tbody>
       <tr><td><code>token</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td><code>&lt;segredo&gt;-status</code></td></tr>
-      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Seu código de cliente.</td></tr>
-      <tr><td><code>servico</code></td><td>texto</td><td><span class="opc">um destes</span></td><td>Uma OS (ex.: <code>"LX-1287"</code> ou só <code>"1287"</code>).</td></tr>
-      <tr><td><code>servicos</code></td><td>lista</td><td><span class="opc">um destes</span></td><td>Várias OS de uma vez (máx. 50).</td></tr>
+      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Código da loja.</td></tr>
+      <tr><td><code>servico</code></td><td>texto</td><td><span class="opc">um destes</span></td><td>Uma OS (ex.: <code>"LX-1287"</code> ou <code>"1287"</code>).</td></tr>
+      <tr><td><code>servicos</code></td><td>lista</td><td><span class="opc">um destes</span></td><td>Várias OS de uma vez (máximo 50).</td></tr>
       <tr><td><code>numeroNota</code></td><td>texto</td><td><span class="opc">um destes</span></td><td>Busca pelas corridas que têm essa nota.</td></tr>
     </tbody>
   </table>
@@ -278,12 +269,12 @@ Content-Type: application/json
   <h3>Exemplo de requisição</h3>
   <pre>{
   "token": "&lt;segredo&gt;-status",
-  "codCliente": "&lt;seu código de cliente&gt;",
+  "codCliente": "&lt;codigo da loja&gt;",
   "servico": "LX-1287"
 }</pre>
 
   <h3>Resposta de sucesso (uma OS)</h3>
-  <div class="box ok"><div class="t">✓ 200 · Status retornado</div></div>
+  <div class="box ok"><div class="t">Sucesso (HTTP 200)</div></div>
   <pre>{
   "Sucesso": {
     "status": "A",
@@ -299,9 +290,7 @@ Content-Type: application/json
           "saida": "2026-08-24 14:12:33",
           "ocorrencia": "Sucesso",
           "motivo": "",
-          "protocoloAssinatura": [],
-          "assinatura": [],
-          "protocolo": [],
+          "protocoloAssinatura": [], "assinatura": [], "protocolo": [],
           "linkRastreamento": ""
         },
         "coordernadasPonto": { "la": "-12.995", "lo": "-38.451" },
@@ -315,7 +304,7 @@ Content-Type: application/json
 }</pre>
 
   <h3>Resposta de sucesso (várias OS)</h3>
-  <p>Quando usa <code>servicos</code> ou <code>numeroNota</code>, o retorno vem indexado pela OS:</p>
+  <p>Com <code>servicos</code> ou <code>numeroNota</code>, o retorno vem indexado pela OS:</p>
   <pre>{
   "Sucesso": {
     "LX-1287": { "status": "F", "pontos": [ ... ], "valorServico": 25.5, "valorProfissional": 18.0 },
@@ -327,13 +316,13 @@ Content-Type: application/json
   <table>
     <thead><tr><th>Sigla</th><th>Situação</th></tr></thead>
     <tbody>
-      <tr><td><span class="pill sp">SP</span></td><td>Sem profissional — na fila, ainda sem entregador.</td></tr>
-      <tr><td><span class="pill a">A</span></td><td>Em execução — entregador a caminho.</td></tr>
-      <tr><td><span class="pill f">F</span></td><td>Finalizada — corrida concluída.</td></tr>
+      <tr><td><span class="pill sp">SP</span></td><td>Sem profissional. Na fila, ainda sem entregador.</td></tr>
+      <tr><td><span class="pill a">A</span></td><td>Em execução. Entregador a caminho.</td></tr>
+      <tr><td><span class="pill f">F</span></td><td>Finalizada. Corrida concluída.</td></tr>
       <tr><td><span class="pill c">C</span></td><td>Cancelada.</td></tr>
     </tbody>
   </table>
-  <div class="box err"><div class="t">✕ Erros possíveis</div></div>
+  <div class="box err"><div class="t">Erros possíveis</div></div>
   <pre>{ "Erro": "Código do serviço não informado." }
 { "Erro": "Serviço não encontrado." }
 { "Erro": "É permitido realizar uma consulta a cada 30 segundos." }</pre>
@@ -342,14 +331,14 @@ Content-Type: application/json
 
   <h2 id="cancelar"><span class="met post">POST</span> Cancelar corrida</h2>
   <p class="rota">/api/v1/integracao/cancelar</p>
-  <p>Cancela uma corrida pela OS. Só é possível cancelar <b>antes de a coleta começar</b>. Se o entregador já estiver em coleta/rota ou a corrida já tiver sido entregue, a resposta é <code>Alocado</code>.</p>
+  <p>Cancela uma corrida pela OS. O resultado segue a <a href="#regras">regra de cancelamento</a> configurada para a loja. Uma corrida ainda na fila pode ser cancelada normalmente. Uma corrida já associada a um profissional só é cancelada se a loja tiver essa permissão. Uma corrida já finalizada não pode ser cancelada.</p>
 
   <h3>Campos do corpo (JSON)</h3>
   <table>
     <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Descrição</th></tr></thead>
     <tbody>
       <tr><td><code>token</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td><code>&lt;segredo&gt;-cancelar</code></td></tr>
-      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Seu código de cliente.</td></tr>
+      <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Código da loja.</td></tr>
       <tr><td><code>OS</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Número da corrida a cancelar.</td></tr>
       <tr><td><code>descricaoMotivo</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Motivo do cancelamento (fica registrado).</td></tr>
     </tbody>
@@ -358,34 +347,34 @@ Content-Type: application/json
   <h3>Exemplo de requisição</h3>
   <pre>{
   "token": "&lt;segredo&gt;-cancelar",
-  "codCliente": "&lt;seu código de cliente&gt;",
+  "codCliente": "&lt;codigo da loja&gt;",
   "OS": "LX-1287",
   "descricaoMotivo": "Cliente desistiu antes da coleta"
 }</pre>
 
   <h3>Respostas</h3>
-  <div class="box ok"><div class="t">✓ 200 · Cancelada</div></div>
+  <div class="box ok"><div class="t">Cancelada (HTTP 200)</div></div>
   <pre>{ "Sucesso": "Cancelado" }</pre>
-  <div class="box err"><div class="t">✕ 200 · Não foi possível cancelar</div></div>
-  <pre>{ "Erro": "Alocado" }              <span class="c">// já está em coleta/rota ou finalizada</span>
+  <div class="box err"><div class="t">Não foi possível cancelar</div></div>
+  <pre>{ "Erro": "Alocado" }              <span class="c">// ja associada e a loja nao pode cancelar associadas, ou ja finalizada</span>
 { "Erro": "Serviço não encontrado." }</pre>
 
   <hr />
 
   <h2 id="calcular"><span class="met post">POST</span> Calcular preço</h2>
   <p class="rota">/api/v1/integracao/calcular</p>
-  <p>Retorna uma prévia de distância, tempo e valor <b>sem criar</b> a corrida. Útil para mostrar o frete ao seu cliente antes de confirmar.</p>
+  <p>Retorna uma prévia de distância, tempo e valor sem criar a corrida. Útil para mostrar o frete antes de confirmar. O valor usa a tabela de preço da loja.</p>
 
   <h3>Exemplo de requisição</h3>
   <pre>{
   "token": "&lt;segredo&gt;-calcular",
-  "codCliente": "&lt;seu código de cliente&gt;",
+  "codCliente": "&lt;codigo da loja&gt;",
   "pontos": [
     { "rua": "Av. Tancredo Neves", "cidade": "Salvador", "uf": "BA", "la": "-12.978", "lo": "-38.458" },
     { "rua": "R. das Flores", "cidade": "Salvador", "uf": "BA", "la": "-12.995", "lo": "-38.451" }
   ]
 }</pre>
-  <div class="box ok"><div class="t">✓ 200 · Prévia calculada</div></div>
+  <div class="box ok"><div class="t">Prévia calculada (HTTP 200)</div></div>
   <pre>{
   "Sucesso": { "distancia": 8.7, "duracao": "00:21:00", "valor": "25.50" }
 }</pre>
@@ -393,22 +382,22 @@ Content-Type: application/json
   <hr />
 
   <h2 id="rastreio">Link de rastreio</h2>
-  <p>Toda corrida recebe um link público de rastreio (o campo <code>urlRastreamento</code> na resposta e nas notificações). Ele abre uma página com o mapa, a posição do entregador em tempo real e o andamento de cada ponto — pronta para você repassar ao seu cliente final.</p>
-  <div class="box info"><div class="t">No seu domínio, com a sua marca</div>
-    O link é gerado no domínio da sua própria loja e a página aparece com o seu logo e as suas cores, automaticamente. Não é preciso configurar nada além da sua marca no painel.</div>
+  <p>Toda corrida recebe um link público de rastreio (campo <code>urlRastreamento</code> nas respostas e nas notificações). Ele abre uma página com o mapa, a posição do entregador em tempo real e o andamento de cada ponto, pronta para repassar ao cliente final.</p>
+  <div class="box info"><div class="t">No domínio e com a marca da loja</div>
+    O link é gerado no domínio da própria loja e a página aparece com o logo e as cores dela, automaticamente. Basta ter a marca configurada no painel.</div>
 
   <hr />
 
   <h2 id="webhook">Webhook de notificação</h2>
-  <p>Em vez de ficar consultando o status, você pode receber os avisos automaticamente. Informe uma <b>URL de notificação</b> ao criar a integração (ou depois, no painel) e a plataforma enviará um POST para o seu sistema a cada etapa da corrida — <b>com as coordenadas do entregador</b>, para você acompanhar onde ele está.</p>
+  <p>Em vez de consultar o status, a loja pode receber os avisos automaticamente. Informe uma <b>URL de notificação</b> ao criar a integração (ou depois, no painel) e a plataforma enviará um POST para o sistema da loja a cada etapa da corrida, com as coordenadas do entregador.</p>
 
-  <h3>Quando você é avisado</h3>
+  <h3>Quando a notificação é enviada</h3>
   <table>
     <thead><tr><th><code>Status.ID</code></th><th>Momento</th></tr></thead>
     <tbody>
       <tr><td><code>0</code></td><td>Entregador recebeu a corrida.</td></tr>
       <tr><td><code>0.5</code></td><td>Chegou no ponto de coleta.</td></tr>
-      <tr><td><code>0.75</code></td><td>Confirmou a coleta / saiu em rota.</td></tr>
+      <tr><td><code>0.75</code></td><td>Confirmou a coleta e saiu em rota.</td></tr>
       <tr><td><code>1</code></td><td>Finalizou um ponto (enviado uma vez por ponto).</td></tr>
       <tr><td><code>2</code></td><td>Finalizou a corrida.</td></tr>
       <tr><td><code>3</code></td><td>Corrida cancelada.</td></tr>
@@ -416,7 +405,7 @@ Content-Type: application/json
   </table>
 
   <h3>Formato do aviso</h3>
-  <pre>POST  &lt;sua URL de notificação&gt;
+  <pre>POST  &lt;sua URL de notificacao&gt;
 x-lx-signature: sha256=&lt;assinatura&gt;
 Content-Type: application/json
 
@@ -429,7 +418,7 @@ Content-Type: application/json
   "valorProfissional": 18.0,
   "referenciaExterna": "1234"
 }</pre>
-  <p>No momento <code>1</code> (ponto finalizado) vem também um bloco <code>statusEndereco</code> com os detalhes do endereço concluído:</p>
+  <p>No momento <code>1</code> (ponto finalizado) vem também o bloco <code>statusEndereco</code>:</p>
   <pre>"statusEndereco": {
   "codigo": "FIN", "codigoCompleto": "FINALIZADO", "descricao": "Endereço finalizado",
   "criadoEm": "2026-08-24 14:12:33",
@@ -443,70 +432,69 @@ Content-Type: application/json
   <p>No momento <code>3</code> (cancelamento) vem o bloco <code>cancelamento</code>:</p>
   <pre>"cancelamento": { "descricaoMotivo": "Cliente desistiu antes da coleta", "temMulta": false }</pre>
 
-  <h3>Como confirmar que o aviso é legítimo (assinatura)</h3>
-  <p>Cada aviso vem com o cabeçalho <code>x-lx-signature</code>. Ele é um HMAC-SHA256 do corpo exato da mensagem, usando o <b>segredo do webhook</b> (mostrado na criação da integração). Para validar: calcule o HMAC do corpo recebido e compare com o cabeçalho.</p>
+  <h3>Validando a assinatura</h3>
+  <p>Cada aviso vem com o cabeçalho <code>x-lx-signature</code>, um HMAC-SHA256 do corpo exato da mensagem usando o <b>segredo do webhook</b> (mostrado na criação da integração). Para validar, calcule o HMAC do corpo recebido e compare com o cabeçalho.</p>
   <pre><span class="c"># Node.js</span>
 const crypto = require('crypto');
 const esperado = 'sha256=' + crypto.createHmac('sha256', SEGREDO_WEBHOOK)
   .update(corpoBrutoDaRequisicao).digest('hex');
 if (esperado !== req.headers['x-lx-signature']) { <span class="c">/* rejeitar */</span> }</pre>
-  <div class="box info"><div class="t">Boas práticas do webhook</div>
-    Responda rápido (em até 5 segundos) com HTTP 200. O envio é feito uma vez por etapa; trate o recebimento como informativo e, se precisar do estado atual a qualquer momento, use a <a href="#status">consulta de status</a>.</div>
+  <div class="box info"><div class="t">Boas práticas</div>
+    Responda em até 5 segundos com HTTP 200. O envio é feito uma vez por etapa. Se precisar do estado atual a qualquer momento, use a <a href="#status">consulta de status</a>.</div>
 
   <hr />
 
-  <h2 id="campos-ponto">Referência — campos do ponto</h2>
-  <p>Cada item do array <code>pontos</code> aceita os campos abaixo. O <b>primeiro ponto é a coleta</b>. Cada ponto precisa de um endereço identificável: informe o <b>endereço em texto</b> (rua, cidade…) <b>ou</b> as coordenadas (<code>la</code> e <code>lo</code>). Quando as coordenadas vêm, elas são usadas diretamente.</p>
+  <h2 id="campos-ponto">Referência: campos do ponto</h2>
+  <p>Cada item do array <code>pontos</code> aceita os campos abaixo. O <b>primeiro ponto é a coleta</b>. Cada ponto precisa de um endereço identificável: informe o endereço em texto (rua, cidade e afins) ou as coordenadas (<code>la</code> e <code>lo</code>). Quando as coordenadas vêm, elas são usadas diretamente.</p>
   <table>
     <thead><tr><th>Campo</th><th></th><th>Descrição</th></tr></thead>
     <tbody>
-      <tr><td><code>rua</code></td><td><span class="opc">opcional*</span></td><td>Logradouro.</td></tr>
+      <tr><td><code>rua</code></td><td><span class="opc">condicional</span></td><td>Logradouro.</td></tr>
       <tr><td><code>numero</code></td><td><span class="opc">opcional</span></td><td>Número.</td></tr>
       <tr><td><code>complemento</code></td><td><span class="opc">opcional</span></td><td>Apto, bloco, referência.</td></tr>
       <tr><td><code>bairro</code></td><td><span class="opc">opcional</span></td><td>Bairro.</td></tr>
       <tr><td><code>cidade</code></td><td><span class="opc">opcional</span></td><td>Cidade.</td></tr>
       <tr><td><code>uf</code></td><td><span class="opc">opcional</span></td><td>Estado (2 letras).</td></tr>
       <tr><td><code>cep</code></td><td><span class="opc">opcional</span></td><td>CEP.</td></tr>
-      <tr><td><code>la</code></td><td><span class="opc">opcional*</span></td><td>Latitude.</td></tr>
-      <tr><td><code>lo</code></td><td><span class="opc">opcional*</span></td><td>Longitude.</td></tr>
+      <tr><td><code>la</code></td><td><span class="opc">condicional</span></td><td>Latitude.</td></tr>
+      <tr><td><code>lo</code></td><td><span class="opc">condicional</span></td><td>Longitude.</td></tr>
       <tr><td><code>telefone</code></td><td><span class="opc">opcional</span></td><td>Contato no ponto.</td></tr>
-      <tr><td><code>procurarPor</code></td><td><span class="opc">opcional</span></td><td>Nome de quem procurar / receber.</td></tr>
-      <tr><td><code>numeroNota</code></td><td><span class="opc">opcional</span></td><td>Nº da nota fiscal do ponto.</td></tr>
+      <tr><td><code>procurarPor</code></td><td><span class="opc">opcional</span></td><td>Nome de quem procurar ou receber.</td></tr>
+      <tr><td><code>numeroNota</code></td><td><span class="opc">opcional</span></td><td>Número da nota fiscal do ponto.</td></tr>
       <tr><td><code>obs</code></td><td><span class="opc">opcional</span></td><td>Observação para o entregador.</td></tr>
     </tbody>
   </table>
-  <p style="font-size:12.5px;color:var(--tinta2)">* Informe <b>o endereço em texto</b> ou <b>as coordenadas</b>. Ao menos um dos dois é obrigatório por ponto.</p>
+  <p style="font-size:12.5px;color:var(--tinta2)">Condicional: informe o endereço em texto ou as coordenadas. Ao menos um dos dois é obrigatório por ponto.</p>
 
   <hr />
 
   <h2 id="erros">Lista completa de erros</h2>
   <p>Todos os erros chegam com HTTP 200 e o corpo <code>{ "Erro": "mensagem" }</code>.</p>
   <table>
-    <thead><tr><th>Mensagem</th><th>O que significa / como resolver</th></tr></thead>
+    <thead><tr><th>Mensagem</th><th>Significado e como resolver</th></tr></thead>
     <tbody>
       <tr><td>Código do cliente não informado</td><td>Faltou o campo <code>codCliente</code>.</td></tr>
       <tr><td>Código do cliente não confere</td><td>O <code>codCliente</code> não existe. Verifique a credencial.</td></tr>
       <tr><td>Integração deste cliente foi desativada pelo admin do sistema</td><td>A chave foi desativada no painel. Fale com a central.</td></tr>
       <tr><td>Token não informado</td><td>Faltou o campo <code>token</code>.</td></tr>
-      <tr><td>Token não corresponde a esta operação</td><td>Você usou, por exemplo, o token de status no endpoint de gravar. Use o token certo da operação.</td></tr>
+      <tr><td>Token não corresponde a esta operação</td><td>Foi usado, por exemplo, o token de status no endpoint de gravar. Use o token certo da operação.</td></tr>
       <tr><td>Token inválido</td><td>O segredo do token está errado. Confira a credencial.</td></tr>
       <tr><td>Operação não permitida para esta chave</td><td>A chave não tem essa operação habilitada. Fale com a central.</td></tr>
-      <tr><td>Favor, informar 2 ou mais pontos!</td><td>Envie ao menos coleta + 1 entrega.</td></tr>
+      <tr><td>Favor, informar 2 ou mais pontos!</td><td>Envie ao menos coleta mais 1 entrega.</td></tr>
       <tr><td>Endereço do ponto N obrigatório!</td><td>O ponto N ficou sem endereço e sem coordenadas.</td></tr>
       <tr><td>Limite de endereços excedido. Favor informar um número igual ou menor que 80 pontos.</td><td>Reduza para no máximo 80 pontos.</td></tr>
       <tr><td>Limite de endereços excedido para ordenação, favor informar um número igual ou menor que 20 pontos.</td><td>Com <code>ordenar: "true"</code> o máximo é 20 pontos.</td></tr>
-      <tr><td>Código do serviço não informado.</td><td>Na consulta/cancelamento, informe a OS.</td></tr>
-      <tr><td>Serviço não encontrado.</td><td>A OS não existe ou não é da sua loja.</td></tr>
-      <tr><td>Alocado</td><td>Não dá para cancelar: a corrida já está em coleta/rota ou foi finalizada.</td></tr>
+      <tr><td>Código do serviço não informado.</td><td>Na consulta ou cancelamento, informe a OS.</td></tr>
+      <tr><td>Serviço não encontrado.</td><td>A OS não existe ou não é desta loja.</td></tr>
+      <tr><td>Alocado</td><td>Não dá para cancelar: a corrida já está associada a um profissional (e a loja não pode cancelar associadas) ou já foi finalizada.</td></tr>
       <tr><td>Só é permitido solicitar 2 serviços por segundo.</td><td>Reduza o ritmo de criação.</td></tr>
-      <tr><td>É permitido realizar uma consulta a cada 30 segundos.</td><td>Aguarde 30s entre consultas de status.</td></tr>
+      <tr><td>É permitido realizar uma consulta a cada 30 segundos.</td><td>Aguarde 30 segundos entre consultas de status.</td></tr>
     </tbody>
   </table>
 
   <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--linha);font-size:12.5px;color:var(--tinta3)">
-    Precisa de ajuda para integrar? Fale com a central que gerou as suas credenciais.
+    Precisa de ajuda para integrar? Fale com a central que gerou as credenciais.
   </div>
 
   </main></div>
-</body></html>
 </body></html>

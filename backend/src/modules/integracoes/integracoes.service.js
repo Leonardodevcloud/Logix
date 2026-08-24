@@ -44,6 +44,7 @@ async function criarChave({ empresaId, dados = {}, usuarioId }) {
   const nome = M.s(dados.nome);
   if (!nome) throw AppError.validacao('Informe um nome para a integração');
   const lojaId = dados.loja_id || null;
+  if (!lojaId) throw AppError.validacao('Selecione a loja desta integração (o código do cliente pertence à loja)');
   const base = hexAleatorio(16);          // ex.: a6620113fac165e634a298599512ab5e
   const codCliente = hexAleatorio(16);    // ex.: f2201f5191c4e92cc5af043eebfd0946
   const notifSegredo = hexAleatorio(24);
@@ -364,16 +365,25 @@ async function cancelarServico({ credencial, body, ip }) {
   const os = M.s(body.OS) || M.s(body.os);
   if (!os) throw AppError.validacao('Código do serviço não informado.');
   const { rows } = await query(
-    `SELECT id, status FROM entregas
+    `SELECT id, status, motoboy_id FROM entregas
       WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)
         AND (protocolo = $3 OR replace(protocolo,'LX-','') = $3) LIMIT 1`,
     [credencial.empresaId, credencial.lojaId, os]
   );
   const e = rows[0];
   if (!e) throw AppError.naoEncontrado('Serviço não encontrado.');
-  if (e.status === 'cancelada') return { Sucesso: 'Cancelado' };
-  // Regra: só cancela antes da execução; em coleta/rota/entregue = "Alocado".
-  if (['em_coleta', 'em_rota', 'entregue'].includes(e.status)) return { Erro: 'Alocado' };
+  if (e.status === 'cancelada') return { Sucesso: 'Cancelado' };  // idempotente
+  if (e.status === 'entregue') return { Erro: 'Alocado' };        // já finalizada
+
+  // Mesma regra do painel do cliente: se a corrida JÁ está associada (tem motoboy
+  // ou saiu da fila), o cancelamento depende da permissão configurada para a loja
+  // (pode_cancelar_associada). Corrida ainda na fila pode ser cancelada livremente.
+  const associada = !!e.motoboy_id || e.status !== 'aguardando_atribuicao';
+  if (associada && credencial.lojaId) {
+    const clienteHub = require('../clientehub/clientehub.service');
+    const permitido = await clienteHub.lojaPode(credencial.lojaId, 'pode_cancelar_associada');
+    if (!permitido) return { Erro: 'Alocado' }; // cliente não pode cancelar corrida já associada
+  }
 
   const entregasService = require('../entregas/entregas.service');
   await entregasService.cancelarEntrega({
