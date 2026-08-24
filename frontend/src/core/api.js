@@ -60,3 +60,20 @@ export const post  = (c, corpo, o = {}) => req('POST',   c, { ...o, corpo });
 export const put   = (c, corpo, o = {}) => req('PUT',    c, { ...o, corpo });
 export const patch = (c, corpo, o = {}) => req('PATCH',  c, { ...o, corpo });
 export const del   = (c, o)       => req('DELETE',  c, o);
+
+// Baixa um arquivo autenticado (relatórios: xls/csv). Usa o token atual e
+// respeita o filename vindo do Content-Disposition.
+export async function baixar(caminho, nomeSugerido) {
+  const h = {};
+  if (accessToken) h.Authorization = 'Bearer ' + accessToken;
+  const resp = await fetch(BASE + caminho, { headers: h, credentials: 'include' });
+  if (!resp.ok) throw new Error('Falha ao baixar (' + resp.status + ')');
+  const blob = await resp.blob();
+  let nome = nomeSugerido || 'relatorio';
+  const cd = resp.headers.get('Content-Disposition');
+  if (cd) { const m = /filename="?([^"]+)"?/.exec(cd); if (m) nome = m[1]; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
