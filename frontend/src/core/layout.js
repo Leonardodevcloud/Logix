@@ -12,7 +12,7 @@ function gruposNav() {
   if (a.perfil === 'super_admin') {
     return [
       { titulo: 'Operação', itens: [
-        { rota: '/', rotulo: 'Painel', icone: 'painel' },
+        { rota: '/', rotulo: 'Dashboard', icone: 'painel' },
       ]},
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
@@ -26,7 +26,7 @@ function gruposNav() {
   }
 
   const central = a.perfil === 'central_admin';
-  const operacao = [{ rota: '/', rotulo: 'Painel', icone: 'painel' }];
+  const operacao = [{ rota: '/', rotulo: 'Dashboard', icone: 'painel' }];
   // Central tem a tela de Acompanhamento (visão de todas as lojas).
   if (central && auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'acompanhamento' });

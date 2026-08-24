@@ -60,6 +60,19 @@ module.exports = function lancamentoRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /entregas/dashboard?de=&ate=&loja_id=&centro_id= — métricas do Dashboard
+  // Estado atual + desempenho do período (default hoje), com dentro/fora do prazo.
+  router.get('/dashboard', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {
+    try {
+      const lojaId = req.lojaId || req.query.loja_id || null;
+      const centroId = req.query.centro_id || null;
+      res.json(await service.dashboardMetricas({
+        empresaId: req.empresaId, lojaId, centroId,
+        de: req.query.de || null, ate: req.query.ate || null,
+      }));
+    } catch (e) { next(e); }
+  });
+
   // Config de lançamento da loja (Automático/Manual + padrão). Fica no módulo
   // entregas porque a loja não tem o módulo de gestão de lojas.
   router.get('/config-lancamento', exigirTenant, exigirPermissao('entregas.ver'), async (req, res, next) => {

@@ -279,6 +279,93 @@ async function resumoConcluidas({ empresaId, de, ate, motoboyId, status, lojaId 
   return rows[0] || { entregues: 0, canceladas: 0, km_total: 0 };
 }
 
+// Métricas do Dashboard: estado ATUAL (agora) + desempenho do PERÍODO,
+// com filtros opcionais de loja e centro de custo. Período default = hoje (Bahia).
+// Dentro/fora do prazo usa a mesma regra de SLA do acompanhamento (calcularStatusSla).
+async function dashboardMetricas({ empresaId, lojaId = null, centroId = null, de = null, ate = null }) {
+  const params = [empresaId, lojaId, centroId, de, ate];
+  const { rows } = await query(
+    `WITH base AS (
+       SELECT status, criado_em, concluida_em, cancelada_em, distancia_km,
+              (concluida_em AT TIME ZONE 'America/Bahia')::date AS dcon,
+              (cancelada_em AT TIME ZONE 'America/Bahia')::date AS dcan,
+              (criado_em    AT TIME ZONE 'America/Bahia')::date AS dcri
+         FROM entregas
+        WHERE empresa_id = $1
+          AND ($2::uuid IS NULL OR loja_id = $2)
+          AND ($3::uuid IS NULL OR centro_custo_id = $3)
+     ),
+     p AS (
+       SELECT COALESCE($4::date, (now() AT TIME ZONE 'America/Bahia')::date) AS de,
+              COALESCE($5::date, (now() AT TIME ZONE 'America/Bahia')::date) AS ate
+     )
+     SELECT
+       count(*) FILTER (WHERE status IN ('aguardando_coleta','em_coleta','em_rota'))::int AS em_andamento,
+       count(*) FILTER (WHERE status = 'aguardando_atribuicao')::int                        AS na_fila,
+       count(*) FILTER (WHERE status = 'aguardando_coleta')::int                            AS aguardando_coleta,
+       count(*) FILTER (WHERE status = 'em_coleta')::int                                     AS em_coleta,
+       count(*) FILTER (WHERE status = 'em_rota')::int                                       AS em_rota,
+       count(*) FILTER (WHERE status='entregue'  AND dcon BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int AS concluidas,
+       count(*) FILTER (WHERE status='cancelada' AND dcan BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int AS canceladas,
+       count(*) FILTER (WHERE dcri BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p))::int  AS criadas,
+       COALESCE(sum(distancia_km) FILTER (WHERE status='entregue'
+                 AND dcon BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p)
+                 AND distancia_km IS NOT NULL AND distancia_km <> 'NaN'::numeric), 0)        AS km_total,
+       COALESCE(avg(EXTRACT(EPOCH FROM (concluida_em - criado_em))/60.0) FILTER (WHERE status='entregue'
+                 AND dcon BETWEEN (SELECT de FROM p) AND (SELECT ate FROM p)), 0)            AS tempo_medio_min
+       FROM base`,
+    params
+  );
+  const a = rows[0] || {};
+
+  // dentro/fora do prazo: carrega as concluídas do período e aplica o SLA por corrida
+  const { rows: conc } = await query(
+    `SELECT loja_id, criado_em, concluida_em, distancia_km
+       FROM entregas
+      WHERE empresa_id = $1
+        AND ($2::uuid IS NULL OR loja_id = $2)
+        AND ($3::uuid IS NULL OR centro_custo_id = $3)
+        AND status = 'entregue'
+        AND (concluida_em AT TIME ZONE 'America/Bahia')::date
+            BETWEEN COALESCE($4::date, (now() AT TIME ZONE 'America/Bahia')::date)
+                AND COALESCE($5::date, (now() AT TIME ZONE 'America/Bahia')::date)`,
+    params
+  );
+  const slaCfgs = await query(`SELECT * FROM sla_config WHERE empresa_id = $1 AND ativo = TRUE`, [empresaId]);
+  const slaGeral = slaCfgs.rows.find((c) => c.loja_id == null) || null;
+  const slaPorLoja = new Map(slaCfgs.rows.filter((c) => c.loja_id != null).map((c) => [c.loja_id, c]));
+  let noPrazo = 0, foraPrazo = 0, semSla = 0;
+  for (const r of conc) {
+    const cfg = slaPorLoja.get(r.loja_id) || slaGeral;
+    const sla = calcularStatusSla(r, cfg, r.concluida_em ? new Date(r.concluida_em).getTime() : Date.now(), true);
+    if (!sla) semSla++;
+    else if (sla.nivel === 'fora_prazo') foraPrazo++;
+    else noPrazo++;
+  }
+  const avaliadas = noPrazo + foraPrazo;
+
+  return {
+    agora: {
+      em_andamento: a.em_andamento || 0,
+      na_fila: a.na_fila || 0,
+      aguardando_coleta: a.aguardando_coleta || 0,
+      em_coleta: a.em_coleta || 0,
+      em_rota: a.em_rota || 0,
+    },
+    periodo: {
+      concluidas: a.concluidas || 0,
+      canceladas: a.canceladas || 0,
+      criadas: a.criadas || 0,
+      km_total: Math.round((Number(a.km_total) || 0) * 10) / 10,
+      tempo_medio_min: Math.round(Number(a.tempo_medio_min) || 0),
+      no_prazo: noPrazo,
+      fora_prazo: foraPrazo,
+      sem_sla: semSla,
+      sla_perc: avaliadas ? Math.round((noPrazo * 100) / avaliadas) : null,
+    },
+  };
+}
+
 // Detalhe de uma entrega concluída: pontos + protocolos (fotos)
 async function detalharConcluida({ empresaId, id, lojaId = null }) {
   const { rows: ent } = await query(
@@ -1336,7 +1423,7 @@ async function liberarPonto({ empresaId, entregaId, pontoId, usuarioId, ip }) {
 }
 
 module.exports = { cancelarEntrega, liberarPonto,
-  criarEntrega, obter, listar, resumoEntregas, configLancamentoLoja, listarConcluidas, resumoConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
+  criarEntrega, obter, listar, resumoEntregas, dashboardMetricas, configLancamentoLoja, listarConcluidas, resumoConcluidas, detalharConcluida, acompanhar, registrarPosicao, registrarProtocoloPonto,
   listarAcompanhamento, listarCidadesLojas, listarCategoriasFrete, trajetoEntrega, rotaLote, editarEnderecos, previewEdicao, editarValores, finalizarManual, reabrirEntrega, logsEntrega, detalhesPontos,
 };
 

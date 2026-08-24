@@ -195,62 +195,158 @@ async function dashAdmin(content) {
 }
 
 async function dashCliente(content) {
-  const { secHeader, estadoVazio, statusBadge, icones } = await import('../core/ui.js');
+  const { secHeader, estadoVazio, statusBadge } = await import('../core/ui.js');
+  const perfil = auth.acessoAtual().perfil;
+  const ehCentral = perfil === 'super_admin' || perfil === 'central_admin';
 
-  const grade = el('div', { class: 'lx-grid-kpi' });
+  const estado = { preset: 'hoje', de: null, ate: null, loja_id: '', centro_id: '' };
+
+  // ---- barra de filtros ----
+  const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias'], ['custom', 'Personalizado']];
+  const btns = presets.map(([id, rot]) => el('button', {
+    class: 'lx-btn lx-btn-secundario', style: 'font-size:12.5px;padding:7px 13px',
+    onClick: () => { estado.preset = id; estado.de = null; estado.ate = null; sinc(); recarregar(); },
+  }, rot));
+  btns.forEach((b, i) => (b.dataset.preset = presets[i][0]));
+  function sinc() {
+    btns.forEach((b) => {
+      const on = b.dataset.preset === estado.preset;
+      b.classList.toggle('lx-btn-primario', on);
+      b.classList.toggle('lx-btn-secundario', !on);
+    });
+    caixaCustom.style.display = estado.preset === 'custom' ? 'flex' : 'none';
+  }
+
+  const inDe = el('input', { type: 'date', class: 'lx-input', style: 'font-size:12.5px' });
+  const inAte = el('input', { type: 'date', class: 'lx-input', style: 'font-size:12.5px' });
+  const caixaCustom = el('div', { style: 'display:none;gap:8px;align-items:center' },
+    inDe, el('span', { style: 'color:var(--lx-tinta-3);font-size:12px' }, 'até'), inAte,
+    el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px',
+      onClick: () => { estado.de = inDe.value || null; estado.ate = inAte.value || null; recarregar(); } }, 'Aplicar'));
+
+  const selLoja = el('select', { class: 'lx-input', style: 'font-size:12.5px',
+    onChange: async () => { estado.loja_id = selLoja.value; estado.centro_id = ''; await carregarCentros(); recarregar(); } },
+    el('option', { value: '' }, 'Todas as lojas'));
+  const selCentro = el('select', { class: 'lx-input', style: 'font-size:12.5px',
+    onChange: () => { estado.centro_id = selCentro.value; recarregar(); } },
+    el('option', { value: '' }, 'Todos os centros'));
+  selCentro.disabled = true;
+
+  async function carregarCentros() {
+    selCentro.innerHTML = '';
+    selCentro.append(el('option', { value: '' }, 'Todos os centros'));
+    if (!estado.loja_id) { selCentro.disabled = true; return; }
+    try {
+      const centros = await get('/clientehub/' + estado.loja_id + '/contexto/centros');
+      (centros || []).forEach((c) => selCentro.append(el('option', { value: c.id }, c.nome || c.codigo || c.id)));
+      selCentro.disabled = false;
+    } catch { selCentro.disabled = true; }
+  }
+
+  const barra = el('div', { class: 'lx-card lx-card-pad', style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px' },
+    el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, ...btns), caixaCustom);
+  if (ehCentral) barra.append(el('div', { style: 'flex:1;min-width:12px' }), selLoja, selCentro);
+  content.append(barra);
+
+  // ---- grades ----
+  const gradeAgora = el('div', { class: 'lx-grid-kpi' });
+  const gradePeriodo = el('div', { class: 'lx-grid-kpi' });
+  const slaBox = el('div', { class: 'lx-card lx-card-pad', style: 'margin:14px 0' });
   const listaAtivas = el('div', { style: 'color:var(--lx-tinta-2);font-size:13px;padding:8px 0' }, 'Carregando…');
-  const lateralAtivas = el('div', { class: 'lx-card lx-card-pad', style: 'flex:1;min-width:0' },
+  const lateralAtivas = el('div', { class: 'lx-card lx-card-pad' },
     el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' },
       el('b', { style: 'font-size:14px' }, 'Entregas ativas'),
       el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, '…')),
     listaAtivas);
 
-  content.append(grade, secHeader('Em andamento'), lateralAtivas);
+  content.append(secHeader('Agora'), gradeAgora, secHeader('No período'), gradePeriodo, slaBox, secHeader('Em andamento'), lateralAtivas);
 
-  try {
-    const [resumo, entregas, motoboys] = await Promise.all([
-      auth.temModulo('entregas') ? get('/entregas/resumo').catch(() => ({})) : Promise.resolve({}),
-      auth.temModulo('entregas') ? get('/entregas').catch(() => []) : Promise.resolve([]),
-      auth.temModulo('motoboys') ? get('/motoboys').catch(() => []) : Promise.resolve([]),
-    ]);
-    const emAndamento = entregas.filter(e => ['aguardando_coleta','em_coleta','em_rota'].includes(e.status));
-    const online = motoboys.filter(m => m.online).length;
+  const kpi = (val, lbl, cor) => el('div', { class: 'lx-card lx-kpi' },
+    el('div', { class: 'k-val', style: 'font-size:26px' + (cor ? ';color:' + cor : '') }, String(val)),
+    el('div', { class: 'k-lbl' }, lbl));
 
-    grade.innerHTML = '';
-    // Contagens vêm do backend (/entregas/resumo) — precisas e escaláveis. A lista
-    // de entregas serve só para exibir as ativas abaixo.
-    [
-      { val: resumo.em_andamento ?? emAndamento.length, lbl: 'Em andamento' },
-      { val: resumo.concluidas_hoje ?? 0, lbl: 'Concluídas hoje' },
-      { val: resumo.na_fila ?? 0, lbl: 'Na fila' },
-      { val: `${online}/${motoboys.length}`, lbl: 'Motoboys online' },
-    ].forEach(({ val, lbl }) => {
-      grade.append(el('div', { class: 'lx-card lx-kpi' },
-        el('div', { class: 'k-val', style: 'font-size:26px' }, String(val)),
-        el('div', { class: 'k-lbl' }, lbl)));
-    });
-
-    lateralAtivas.querySelector('span').textContent = `${emAndamento.length} ativas`;
-    listaAtivas.innerHTML = '';
-    if (!emAndamento.length) {
-      listaAtivas.append(estadoVazio('entregas', 'Nenhuma entrega em andamento', ''));
-    } else {
-      emAndamento.slice(0, 8).forEach(e => {
-        listaAtivas.append(el('div', { style: 'display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--lx-linha)' },
-          el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '—'),
-          el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, e.motoboy_nome || '—'),
-          statusBadge(e.status)));
-      });
-    }
-  } catch {
-    grade.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, 'Erro ao carregar.'));
+  async function carregarAtivas() {
+    try {
+      const q = estado.loja_id ? '?loja_id=' + estado.loja_id : '';
+      const entregas = auth.temModulo('entregas') ? await get('/entregas' + q).catch(() => []) : [];
+      const ativas = entregas.filter((e) => ['aguardando_coleta', 'em_coleta', 'em_rota'].includes(e.status));
+      lateralAtivas.querySelector('span').textContent = ativas.length + ' ativas';
+      listaAtivas.innerHTML = '';
+      if (!ativas.length) { listaAtivas.append(estadoVazio('entregas', 'Nenhuma entrega em andamento', '')); return; }
+      ativas.slice(0, 10).forEach((e) => listaAtivas.append(
+        el('div', { style: 'display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--lx-linha)' },
+          el('b', { style: 'font-size:13px;color:var(--lx-tinta);flex:1' }, e.protocolo || '-'),
+          el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, e.motoboy_nome || '-'),
+          statusBadge(e.status))));
+    } catch (err) {}
   }
+
+  async function recarregar() {
+    gradeAgora.innerHTML = ''; gradePeriodo.innerHTML = ''; slaBox.innerHTML = '';
+    const qs = new URLSearchParams();
+    if (estado.preset === '7d' || estado.preset === '30d') {
+      const dias = estado.preset === '7d' ? 6 : 29;
+      const hoje = new Date(); const de = new Date(); de.setDate(hoje.getDate() - dias);
+      qs.set('de', de.toISOString().slice(0, 10)); qs.set('ate', hoje.toISOString().slice(0, 10));
+    } else {
+      if (estado.de) qs.set('de', estado.de);
+      if (estado.ate) qs.set('ate', estado.ate);
+    }
+    if (estado.loja_id) qs.set('loja_id', estado.loja_id);
+    if (estado.centro_id) qs.set('centro_id', estado.centro_id);
+
+    let d = {};
+    try { d = await get('/entregas/dashboard' + (qs.toString() ? '?' + qs.toString() : '')); }
+    catch { gradeAgora.append(el('div', { style: 'color:var(--lx-erro);font-size:13px' }, 'Erro ao carregar.')); return; }
+
+    let online = '-', total = '-';
+    if (auth.temModulo('motoboys')) {
+      try { const mb = await get('/motoboys'); total = mb.length; online = mb.filter((m) => m.online).length; } catch {}
+    }
+
+    const ag = d.agora || {}, pe = d.periodo || {};
+    gradeAgora.append(kpi(ag.em_andamento || 0, 'Em andamento'), kpi(ag.na_fila || 0, 'Na fila'));
+    if (auth.temModulo('motoboys')) gradeAgora.append(kpi(online + '/' + total, 'Motoboys online'));
+
+    gradePeriodo.append(
+      kpi(pe.concluidas || 0, 'Concluídas'),
+      kpi(pe.no_prazo || 0, 'No prazo', 'var(--lx-ok)'),
+      kpi(pe.fora_prazo || 0, 'Fora do prazo', (pe.fora_prazo ? 'var(--lx-erro)' : '')),
+      kpi(pe.canceladas || 0, 'Canceladas'),
+      kpi((pe.km_total || 0).toLocaleString('pt-BR') + ' km', 'Distância'),
+      kpi((pe.tempo_medio_min || 0) + ' min', 'Tempo médio'));
+
+    const perc = pe.sla_perc;
+    if (perc == null) {
+      slaBox.append(el('div', { style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Sem entregas concluídas no período para calcular o SLA.'));
+    } else {
+      const corPerc = perc >= 90 ? 'var(--lx-ok)' : (perc >= 70 ? 'var(--lx-atencao,#C98A1A)' : 'var(--lx-erro)');
+      slaBox.append(
+        el('div', { style: 'display:flex;justify-content:space-between;margin-bottom:8px' },
+          el('b', { style: 'font-size:14px' }, 'Cumprimento de SLA'),
+          el('b', { style: 'font-size:14px;color:' + corPerc }, perc + '%')),
+        el('div', { style: 'height:12px;border-radius:8px;overflow:hidden;background:var(--lx-linha);display:flex' },
+          el('div', { style: 'width:' + perc + '%;background:var(--lx-ok)' }),
+          el('div', { style: 'flex:1;background:var(--lx-erro)' })),
+        el('div', { style: 'display:flex;justify-content:space-between;margin-top:6px;font-size:11.5px;color:var(--lx-tinta-2)' },
+          el('span', {}, (pe.no_prazo || 0) + ' no prazo'),
+          el('span', {}, (pe.fora_prazo || 0) + ' fora do prazo')));
+    }
+
+    carregarAtivas();
+  }
+
+  if (ehCentral) {
+    try { const lojas = await get('/lojas'); (lojas || []).forEach((l) => selLoja.append(el('option', { value: l.id }, l.nome_fantasia || l.nome || l.id))); } catch {}
+  }
+  sinc();
+  await recarregar();
 }
 
 export async function montar(container) {
   const isAdmin = auth.acessoAtual().perfil === 'super_admin';
   const content = el('div', {});
-  container.append(casca('Painel', content,
+  container.append(casca('Dashboard', content,
     isAdmin ? 'Visão geral da plataforma' : 'Acompanhe sua operação'));
 
   if (isAdmin) await dashAdmin(content);
