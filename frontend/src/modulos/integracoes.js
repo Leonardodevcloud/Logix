@@ -151,34 +151,23 @@ function cardChave(c, lojas, recarregar) {
     acoes);
 }
 
-// ── Bloco de documentação (endpoint + exemplo) ───────────────────────────────
+// ── Bloco de documentação (link para a doc completa) ─────────────────────────
 function blocoDocs() {
   const baseApi = (window.LOGIX_API || (location.origin + '/api/v1')).replace(/\/$/, '');
-  const baseUrl = baseApi + '/integracao';
-  const exemplo =
-`POST ${baseUrl}/gravar
-Content-Type: application/json
+  const urlDocs = location.origin + '/integracao-docs.html';
+  const ICONE_DOC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+  const ICONE_LINK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 
-{
-  "token": "<segredo>-gravar",
-  "codCliente": "<codigo do cliente>",
-  "numeroPedido": "1234",
-  "pontos": [
-    { "rua": "Coleta", "cidade": "Salvador", "uf": "BA", "la": "-12.97", "lo": "-38.50" },
-    { "rua": "Entrega", "cidade": "Salvador", "uf": "BA", "la": "-12.99", "lo": "-38.45",
-      "procurarPor": "Cliente", "telefone": "71 90000-0000", "numeroNota": "998" }
-  ]
-}`;
-  return el('details', { class: 'lx-card', style: 'padding:14px 18px;margin-bottom:16px' },
-    el('summary', { style: 'cursor:pointer;font-weight:700;font-size:13.5px;color:var(--lx-tinta)' }, 'Como o cliente integra (endpoints e exemplo)'),
-    el('div', { style: 'margin-top:12px;font-size:12.5px;color:var(--lx-tinta-2);line-height:1.6' },
-      el('div', {}, 'Envie um JSON via POST. Autenticação por ', el('b', {}, 'codCliente'), ' + ', el('b', {}, 'token'), ' no corpo. Endpoints:'),
-      el('ul', { style: 'margin:8px 0 0;padding-left:18px' },
-        el('li', {}, el('code', {}, baseUrl + '/gravar'), ' — cria a corrida (mín. 2 pontos: o 1º é a coleta)'),
-        el('li', {}, el('code', {}, baseUrl + '/status'), ' — consulta o status'),
-        el('li', {}, el('code', {}, baseUrl + '/cancelar'), ' — cancela pela OS'),
-        el('li', {}, el('code', {}, baseUrl + '/calcular'), ' — prévia de distância/valor'))),
-    el('pre', { style: 'margin-top:12px;background:var(--lx-navy,#042C53);color:#dbeafe;padding:12px 14px;border-radius:10px;font-size:11.5px;overflow:auto;line-height:1.5' }, exemplo));
+  return el('div', { class: 'lx-card', style: 'padding:18px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap' },
+    el('div', { style: 'width:44px;height:44px;border-radius:12px;background:var(--lx-navy,#042C53);color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 44px', html: ICONE_DOC }),
+    el('div', { style: 'flex:1;min-width:200px' },
+      el('div', { style: 'font-weight:700;font-size:14.5px;color:var(--lx-tinta)' }, 'Documentação da API'),
+      el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin-top:2px' },
+        'Guia completo com endpoints, exemplos de sucesso e erro, webhook e lista de erros — pronto para repassar ao time do cliente.'),
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);margin-top:6px' },
+        'Base: ', el('code', { style: 'font-size:11px' }, baseApi + '/integracao'))),
+    el('a', { class: 'lx-btn lx-btn-primario', href: urlDocs, target: '_blank', rel: 'noopener',
+      style: 'display:inline-flex;align-items:center;gap:7px;text-decoration:none', html: 'Abrir documentação ' + ICONE_LINK }));
 }
 
 // ── Montagem ─────────────────────────────────────────────────────────────────
