@@ -109,6 +109,15 @@ function initIntegracoesPublicRoutes() {
     }
   });
 
+  // CENTROS (lista os centros de custo disponíveis para a loja) — leitura, usa o token de status.
+  router.post('/centros', limiteStatus, autenticar('status'), async (req, res) => {
+    try {
+      res.status(200).json(await service.listarCentros({ credencial: req.credencial }));
+    } catch (e) {
+      res.status(200).json({ Erro: e.message || 'Erro ao listar centros' });
+    }
+  });
+
   // RASTREIO PÚBLICO (consumido pela página do cliente) — o token é o segredo.
   router.get('/rastreio/:token', async (req, res) => {
     try { res.json(await service.rastreioPublico(req.params.token)); }

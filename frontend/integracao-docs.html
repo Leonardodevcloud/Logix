@@ -94,6 +94,7 @@
     <a href="#status">Consultar status</a>
     <a href="#cancelar">Cancelar corrida</a>
     <a href="#calcular">Calcular preço</a>
+    <a href="#centros">Centros de custo</a>
     <div class="grp">Acompanhamento</div>
     <a href="#rastreio">Link de rastreio</a>
     <a href="#webhook">Webhook de notificação</a>
@@ -184,6 +185,7 @@ POST  /calcular   <span class="c">previa de distancia e valor</span></pre>
       <tr><td><code>token</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Token da operação: <code>&lt;segredo&gt;-gravar</code>.</td></tr>
       <tr><td><code>codCliente</code></td><td>texto</td><td><span class="obg">obrigatório</span></td><td>Código da loja.</td></tr>
       <tr><td><code>pontos</code></td><td>lista</td><td><span class="obg">obrigatório</span></td><td>Coleta e entregas. Veja <a href="#campos-ponto">campos do ponto</a>.</td></tr>
+      <tr><td><code>centroCusto</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Centro de custo da loja para o qual a corrida será gerada. Informe o <b>código</b> ou o <b>nome</b> do centro. Veja como obter a lista em <a href="#centros">centros disponíveis</a>.</td></tr>
       <tr><td><code>numeroPedido</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Número do pedido ou nota no sistema da loja. Serve para reconciliar e evita duplicar a corrida se a mesma requisição for reenviada (idempotência).</td></tr>
       <tr><td><code>semProfissional</code></td><td>texto</td><td><span class="opc">opcional</span></td><td>Se <code>"S"</code>, a corrida entra na fila mas não é ofertada automaticamente aos profissionais (a central despacha depois).</td></tr>
       <tr><td><code>ordenar</code></td><td>texto</td><td><span class="opc">opcional</span></td><td><code>"false"</code> mantém a ordem dos pontos como enviada. Caso contrário, a plataforma otimiza a rota. Com <code>"true"</code> o limite é de 20 pontos.</td></tr>
@@ -200,6 +202,7 @@ Content-Type: application/json
   "numeroPedido": "1234",
   "semProfissional": "N",
   "ordenar": "true",
+  "centroCusto": "MATRIZ",
   "pontos": [
     {
       "rua": "Av. Tancredo Neves", "numero": "620",
@@ -381,6 +384,26 @@ Content-Type: application/json
 
   <hr />
 
+  <h2 id="centros"><span class="met post">POST</span> Centros de custo disponíveis</h2>
+  <p class="rota">/api/v1/integracao/centros</p>
+  <p>Lista os centros de custo disponíveis para a loja. Use para saber quais valores aceitar no campo <code>centroCusto</code> ao <a href="#gravar">criar a corrida</a>. Esta é uma consulta e usa o token de <b>status</b>.</p>
+
+  <h3>Exemplo de requisição</h3>
+  <pre>{
+  "token": "&lt;segredo&gt;-status",
+  "codCliente": "&lt;codigo da loja&gt;"
+}</pre>
+  <div class="box ok"><div class="t">Sucesso (HTTP 200)</div></div>
+  <pre>{
+  "Sucesso": [
+    { "codigo": "MATRIZ", "nome": "Matriz Centro" },
+    { "codigo": "FIL01", "nome": "Filial Pituba" }
+  ]
+}</pre>
+  <p>Para gerar a corrida em um desses centros, envie o <code>codigo</code> (ou o <code>nome</code>) no campo <code>centroCusto</code> do <a href="#gravar">gravar</a>. Se o valor não corresponder a um centro da loja, a criação retorna <code>Centro de custo não encontrado para esta loja.</code></p>
+
+  <hr />
+
   <h2 id="rastreio">Link de rastreio</h2>
   <p>Toda corrida recebe um link público de rastreio (campo <code>urlRastreamento</code> nas respostas e nas notificações). Ele abre uma página com o mapa, a posição do entregador em tempo real e o andamento de cada ponto, pronta para repassar ao cliente final.</p>
   <div class="box info"><div class="t">No domínio e com a marca da loja</div>
@@ -486,6 +509,7 @@ if (esperado !== req.headers['x-lx-signature']) { <span class="c">/* rejeitar */
       <tr><td>Limite de endereços excedido para ordenação, favor informar um número igual ou menor que 20 pontos.</td><td>Com <code>ordenar: "true"</code> o máximo é 20 pontos.</td></tr>
       <tr><td>Código do serviço não informado.</td><td>Na consulta ou cancelamento, informe a OS.</td></tr>
       <tr><td>Serviço não encontrado.</td><td>A OS não existe ou não é desta loja.</td></tr>
+      <tr><td>Centro de custo não encontrado para esta loja.</td><td>O <code>centroCusto</code> informado não corresponde a nenhum centro ativo da loja. Consulte os centros disponíveis.</td></tr>
       <tr><td>Alocado</td><td>Não dá para cancelar: a corrida já está associada a um profissional (e a loja não pode cancelar associadas) ou já foi finalizada.</td></tr>
       <tr><td>Só é permitido solicitar 2 serviços por segundo.</td><td>Reduza o ritmo de criação.</td></tr>
       <tr><td>É permitido realizar uma consulta a cada 30 segundos.</td><td>Aguarde 30 segundos entre consultas de status.</td></tr>

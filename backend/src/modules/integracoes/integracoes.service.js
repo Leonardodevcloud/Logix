@@ -190,6 +190,33 @@ function montarUrlRastreio(base, token) {
   return `${b}/rastreio.html?t=${token}`;
 }
 
+// ── Centros de custo da loja ─────────────────────────────────────────────────
+// Resolve o centro informado (por código OU nome) para o id, escopado à loja.
+// Retorna null quando nada foi informado; lança erro se o valor não bater.
+async function resolverCentroCusto(lojaId, valor) {
+  const v = M.s(valor);
+  if (!v || !lojaId) return null;
+  const { rows } = await query(
+    `SELECT id FROM cliente_centros_custo
+      WHERE loja_id = $1 AND ativo IS NOT FALSE AND (codigo ILIKE $2 OR nome ILIKE $2)
+      ORDER BY (codigo ILIKE $2) DESC LIMIT 1`,
+    [lojaId, v]
+  );
+  if (!rows[0]) throw AppError.validacao('Centro de custo não encontrado para esta loja.');
+  return rows[0].id;
+}
+
+// Lista os centros de custo ativos disponíveis para a loja da credencial.
+async function listarCentros({ credencial }) {
+  if (!credencial.lojaId) return { Sucesso: [] };
+  const { rows } = await query(
+    `SELECT codigo, nome FROM cliente_centros_custo
+      WHERE loja_id = $1 AND ativo IS NOT FALSE ORDER BY nome`,
+    [credencial.lojaId]
+  );
+  return { Sucesso: rows.map((r) => ({ codigo: r.codigo || '', nome: r.nome })) };
+}
+
 // ── GRAVAR SERVIÇO (criar corrida) ───────────────────────────────────────────
 async function gravarServico({ credencial, body, ip }) {
   const pontos = Array.isArray(body.pontos) ? body.pontos : [];
@@ -228,6 +255,7 @@ async function gravarServico({ credencial, body, ip }) {
   });
 
   const rastreioToken = hexAleatorio(12);
+  const centroCustoId = await resolverCentroCusto(credencial.lojaId, body.centroCusto || body.centro_custo);
   const entregasService = require('../entregas/entregas.service');
   const entrega = await entregasService.criarEntrega({
     empresaId: credencial.empresaId,
@@ -235,6 +263,7 @@ async function gravarServico({ credencial, body, ip }) {
     criadoPor: null,
     coleta, destinos,
     distribuicao: 'automatica',
+    centroCustoId,
     naoDispararAutomatico: M.ehSim(body.semProfissional),
     naoOtimizar: !ordenarOn,
     referenciaExterna,
@@ -497,6 +526,6 @@ module.exports = {
   OPS,
   listarChaves, criarChave, atualizarChave, alternarAtiva, revogarChave, regenerarToken,
   resolverCredencial, logarRequisicao,
-  gravarServico, statusServico, cancelarServico, calcularServico, rastreioPublico,
+  gravarServico, statusServico, cancelarServico, calcularServico, listarCentros, rastreioPublico,
   baseRastreioDaEmpresa, montarUrlRastreio,
 };
