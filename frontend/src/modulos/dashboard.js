@@ -207,18 +207,38 @@ async function dashCliente(content) {
     let dom = [];
     if (tipo === 'hora') { const mp = {}; pts.forEach(p => mp[p.k] = p.v); for (let h = 6; h <= 22; h++) dom.push({ lbl: (h < 10 ? '0' + h : h) + 'h', v: mp[h] || 0 }); }
     else dom = pts.map(p => ({ lbl: p.k, v: p.v }));
-    if (!dom.length) return '<div style="color:var(--lx-tinta-3);font-size:13px;padding:40px 0;text-align:center">Sem dados no período.</div>';
+    const box = el('div', { style: 'position:relative' });
+    if (!dom.length) { box.append(el('div', { style: 'color:var(--lx-tinta-3);font-size:13px;padding:40px 0;text-align:center' }, 'Sem dados no período.')); return box; }
     const W = 640, H = 170, maxV = Math.max(1, ...dom.map(d => d.v)), n = dom.length;
-    const x = i => n === 1 ? W / 2 : (i / (n - 1)) * W;
-    const y = v => H - (v / maxV) * (H - 24) - 4;
-    const linha = dom.map((d, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(d.v).toFixed(1)).join(' ');
-    const area = 'M' + x(0).toFixed(1) + ',' + H + ' ' + dom.map((d, i) => 'L' + x(i).toFixed(1) + ',' + y(d.v).toFixed(1)).join(' ') + ' L' + x(n - 1).toFixed(1) + ',' + H + ' Z';
-    const eixo = dom.filter((_, i) => n <= 8 || i % Math.ceil(n / 8) === 0).map(d => '<span>' + d.lbl + '</span>').join('');
-    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="170" preserveAspectRatio="none">' +
+    const X = i => n === 1 ? W / 2 : (i / (n - 1)) * W;
+    const Y = v => H - (v / maxV) * (H - 24) - 4;
+    const linha = dom.map((d, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(d.v).toFixed(1)).join(' ');
+    const area = 'M' + X(0).toFixed(1) + ',' + H + ' ' + dom.map((d, i) => 'L' + X(i).toFixed(1) + ',' + Y(d.v).toFixed(1)).join(' ') + ' L' + X(n - 1).toFixed(1) + ',' + H + ' Z';
+    box.innerHTML =
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="170" preserveAspectRatio="none" style="display:block;overflow:visible">' +
       '<defs><linearGradient id="lxar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#185FA5" stop-opacity="0.26"/><stop offset="1" stop-color="#185FA5" stop-opacity="0"/></linearGradient></defs>' +
       '<line x1="0" y1="43" x2="640" y2="43" stroke="#EEF3F9"/><line x1="0" y1="90" x2="640" y2="90" stroke="#EEF3F9"/><line x1="0" y1="137" x2="640" y2="137" stroke="#EEF3F9"/>' +
-      '<path d="' + area + '" fill="url(#lxar)"/><path d="' + linha + '" fill="none" stroke="#185FA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-      '<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--lx-tinta-3);margin-top:4px">' + eixo + '</div>';
+      '<path d="' + area + '" fill="url(#lxar)"/><path d="' + linha + '" fill="none" stroke="#185FA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<line class="vg" x1="0" y1="0" x2="0" y2="' + H + '" stroke="#185FA5" stroke-width="1" stroke-dasharray="3 3" style="opacity:0"/>' +
+      '<circle class="dot" r="4.5" fill="#185FA5" stroke="#fff" stroke-width="2" style="opacity:0"/></svg>' +
+      '<div class="eixo" style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--lx-tinta-3);margin-top:4px"></div>' +
+      '<div class="tt" style="position:absolute;pointer-events:none;background:#042C53;color:#fff;font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;transform:translate(-50%,-135%);white-space:nowrap;opacity:0;transition:opacity .08s;z-index:5"></div>';
+    const eixo = box.querySelector('.eixo');
+    dom.filter((_, i) => n <= 8 || i % Math.ceil(n / 8) === 0).forEach(d => eixo.append(el('span', {}, d.lbl)));
+    const svg = box.querySelector('svg'), vg = box.querySelector('.vg'), dot = box.querySelector('.dot'), tt = box.querySelector('.tt');
+    svg.addEventListener('mousemove', (ev) => {
+      const r = svg.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      const i = Math.round(ratio * (n - 1)); const d = dom[i];
+      vg.setAttribute('x1', X(i)); vg.setAttribute('x2', X(i)); vg.style.opacity = '.5';
+      dot.setAttribute('cx', X(i)); dot.setAttribute('cy', Y(d.v)); dot.style.opacity = '1';
+      tt.textContent = d.lbl + ' · ' + d.v + (d.v === 1 ? ' entrega' : ' entregas');
+      tt.style.left = ((X(i) / W) * r.width) + 'px';
+      tt.style.top = ((Y(d.v) / H) * r.height) + 'px';
+      tt.style.opacity = '1';
+    });
+    svg.addEventListener('mouseleave', () => { vg.style.opacity = '0'; dot.style.opacity = '0'; tt.style.opacity = '0'; });
+    return box;
   }
   function donut(segs, big, small) {
     const total = segs.reduce((s, x) => s + x.v, 0);
@@ -311,7 +331,7 @@ async function dashCliente(content) {
       kpi('≡', '#EEEDFE', '#6B4FC9', ag.na_fila || 0, ag.na_fila_notas || 0, 'Na fila'),
       kpi('✕', '#FBE8E6', 'var(--lx-erro,#D0584F)', pe.canceladas || 0, pe.canceladas_notas || 0, 'Canceladas'));
 
-    cardArea.append(cardTitulo('Entregas concluídas', d.serie && d.serie.tipo === 'dia' ? 'Por dia no período' : 'Por hora, hoje'), el('div', { html: areaChart(d.serie) }));
+    cardArea.append(cardTitulo('Entregas concluídas', d.serie && d.serie.tipo === 'dia' ? 'Por dia no período' : 'Por hora, hoje'), areaChart(d.serie));
 
     const perc = pe.sla_perc;
     cardSla.append(cardTitulo('Cumprimento de SLA', 'No prazo × fora do prazo'));
