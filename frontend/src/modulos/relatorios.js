@@ -82,7 +82,7 @@ export async function montar(container) {
   const btnBuscar = el('button', { class: 'lx-btn lx-btn-primario', onClick: buscar }, 'Buscar dados');
   const btnXls = el('button', { class: 'lx-btn lx-btn-secundario', style: 'background:#E4F5EE;color:#0F6E56;border-color:#B7E3D0', onClick: () => exportar('xls') }, 'Excel (.xls)');
   const btnCsv = el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => exportar('csv') }, 'CSV');
-  const btnPdf = el('button', { class: 'lx-btn lx-btn-secundario', style: 'background:#FBE8E6;color:#B23B32;border-color:#F1C9C4', onClick: () => window.print() }, 'PDF (imprimir)');
+  const btnPdf = el('button', { class: 'lx-btn lx-btn-secundario', style: 'background:#FBE8E6;color:#B23B32;border-color:#F1C9C4', onClick: imprimirPdf }, 'PDF (imprimir)');
   const acoes = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--lx-linha);padding-top:14px;margin-top:2px' },
     btnBuscar, btnXls, btnCsv, btnPdf,
     el('span', { style: 'flex:1' }), el('span', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '1 linha por serviço · pontos empilhados'));
@@ -215,6 +215,34 @@ export async function montar(container) {
     const p = qs(); p.set('formato', formato); p.set('todos', '1'); p.delete('limite');
     try { await baixar('/relatorios/export?' + p.toString()); }
     catch (e) { alert('Não foi possível exportar. Tente novamente.'); }
+  }
+
+  // PDF: imprime só o relatório (resumo + tabela) numa janela limpa, não a página toda.
+  function imprimirPdf() {
+    if (!resultado.querySelector('table')) { alert('Gere o relatório primeiro (Buscar dados).'); return; }
+    const periodo = (estado.de || '—') + ' a ' + (estado.ate || '—');
+    const emitido = new Date().toLocaleString('pt-BR', { timeZone: TZ });
+    const w = window.open('', '_blank');
+    if (!w) { alert('Permita pop-ups para gerar o PDF.'); return; }
+    w.document.write(
+      '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>relatorio-logix</title>' +
+      '<style>' +
+      ':root{--lx-navy:#042C53;--lx-azul:#185FA5;--lx-ok:#1F9D6B;--lx-erro:#D0584F;--lx-tinta:#0F2740;--lx-tinta-2:#486485;--lx-tinta-3:#8AA2BE;--lx-linha:#E1E9F3;--lx-superficie-2:#F5F8FC}' +
+      'body{font-family:Arial,Helvetica,sans-serif;color:#0F2740;margin:14px}' +
+      'h1{font-size:17px;margin:0 0 2px;color:#042C53}.meta{font-size:11px;color:#486485;margin-bottom:12px}' +
+      '.lx-card{border:1px solid #E1E9F3;border-radius:8px;margin-bottom:10px;overflow:visible}' +
+      'table{border-collapse:collapse;width:100%!important;min-width:0!important;table-layout:auto;font-size:9.5px}' +
+      'th{background:#042C53!important;color:#fff!important;text-align:left;padding:6px 7px;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      'td{padding:6px 7px;border-bottom:1px solid #E1E9F3;vertical-align:top}' +
+      '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '@page{size:landscape;margin:9mm}' +
+      '</style></head><body>' +
+      '<h1>Relatório de operação</h1>' +
+      '<div class="meta">Período: ' + periodo + ' &middot; Emitido em ' + emitido + '</div>' +
+      resultado.innerHTML +
+      '</body></html>');
+    w.document.close(); w.focus();
+    setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
   }
 
   // ---------- carga inicial dos dropdowns ----------
