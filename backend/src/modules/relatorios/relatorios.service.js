@@ -142,16 +142,16 @@ const rotuloSla = (s) => s === 'no_prazo' ? 'No prazo' : s === 'fora_prazo' ? 'F
 
 function nomeProf(l) { return (l.mb_codigo != null ? l.mb_codigo + ' - ' : '') + (l.mb_nome || ''); }
 function achatar(linhas, verMotoboy, comEnderecos, exibirValores, comProfissional) {
-  const verMb = verMotoboy && comProfissional !== false;
+  const mostrarNome = comProfissional !== false;                          // nome do profissional: admin e loja
   const mostrarCli = exibirValores === 'ambos' || exibirValores === 'cliente';
-  const mostrarProf = verMb && (exibirValores === 'ambos' || exibirValores === 'motoboy');
+  const mostrarProf = verMotoboy && comProfissional !== false && (exibirValores === 'ambos' || exibirValores === 'motoboy');  // valor: só admin
   const headers = ['Serviço', 'Cliente', 'Status', 'SLA', 'Criação', 'Tela motoboy'];
   if (comEnderecos) headers.push('Coleta (endereço)');
   headers.push('Chegada coleta');
   if (comEnderecos) headers.push('Entregas (endereço | NF | recebedor | entrega)');
   else headers.push('Entregas (NF | recebedor | entrega)');
   headers.push('Distância (km)');
-  if (verMb) headers.push('Profissional');
+  if (mostrarNome) headers.push('Profissional');
   headers.push('Modal', 'Dinâmica');
   if (mostrarCli) headers.push('Valor cliente');
   if (mostrarProf) headers.push('Valor motoboy');
@@ -171,7 +171,7 @@ function achatar(linhas, verMotoboy, comEnderecos, exibirValores, comProfissiona
     r.push(fmtDT(l.chegada_coleta_em));
     r.push(ents);
     r.push(l.distancia_km != null ? Number(l.distancia_km) : '');
-    if (verMb) r.push(nomeProf(l));
+    if (mostrarNome) r.push(nomeProf(l));
     r.push(l.categoria_nome || '', l.dinamica_nome || '');
     if (mostrarCli) r.push(l.valor_cliente != null ? Number(l.valor_cliente) : '');
     if (mostrarProf) r.push(l.valor_motoboy != null ? Number(l.valor_motoboy) : '');

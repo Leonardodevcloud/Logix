@@ -173,9 +173,9 @@ export async function montar(container) {
     if (!linhas.length) { resultado.append(el('div', { class: 'lx-card lx-card-pad', style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Nenhum serviço encontrado com esses filtros.')); return; }
 
     const comProf = estado.profissional === 'com';
-    const mostrarProfCol = verMb && comProf;
+    const mostrarProfCol = comProf;                        // nome do profissional: admin e loja
     const mostrarCli = estado.exibir === 'ambos' || estado.exibir === 'cliente';
-    const mostrarProfVal = mostrarProfCol && (estado.exibir === 'ambos' || estado.exibir === 'motoboy');
+    const mostrarProfVal = comProf && verMb && (estado.exibir === 'ambos' || estado.exibir === 'motoboy');  // valor: só admin
     const cabValor = (mostrarCli && mostrarProfVal) ? 'Valor cli / prof' : mostrarProfVal ? 'Valor prof' : mostrarCli ? 'Valor cliente' : 'Valor';
     const cols = ['Serviço', 'Cliente', 'Endereço (pontos)', 'Distância'];
     if (mostrarProfCol) cols.push('Profissional');
