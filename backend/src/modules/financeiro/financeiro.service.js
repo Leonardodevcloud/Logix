@@ -355,6 +355,152 @@ async function listarMotoboysSimples({ empresaId }) {
   return { motoboys: rows };
 }
 
+// ═════════ RESUMO (KPIs) ═════════
+async function resumoFinanceiro({ empresaId, de = null, ate = null }) {
+  const fc = await faturamentoCliente({ empresaId, de, ate });
+  const fm = await faturamentoMotoboy({ empresaId, de, ate });
+  const pg = await query(`SELECT COALESCE(SUM(saldo_liquido_cent),0)::bigint AS pago FROM financeiro_fechamentos WHERE empresa_id=$1 AND status='pago'`, [empresaId]);
+  const tm = await query(`SELECT count(*)::int AS total FROM motoboys WHERE empresa_id=$1 AND status='ativo'`, [empresaId]);
+  const comSaldo = (fm.motoboys || []).filter(m => m.saldo_cent > 0).length;
+  return {
+    faturado_cliente_cent: fc.total_geral_cent || 0,
+    a_repassar_cent: fm.total_geral_cent || 0,
+    pago_cent: Number(pg.rows[0] ? pg.rows[0].pago : 0),
+    motoboys_com_saldo: comSaldo,
+    motoboys_total: tm.rows[0] ? tm.rows[0].total : 0,
+  };
+}
+
+// ═════════ AÇÕES EM LOTE ═════════
+async function fecharPeriodoLote({ empresaId, motoboyIds, de, ate, usuarioId }) {
+  if (!Array.isArray(motoboyIds) || !motoboyIds.length) throw AppError.validacao('Selecione ao menos um motoboy.');
+  if (!de || !ate) throw AppError.validacao('Informe o período (de/até).');
+  let fechados = 0, pulados = 0;
+  for (const mid of motoboyIds) {
+    try { await fecharPeriodo({ empresaId, motoboyId: mid, de, ate, usuarioId }); fechados++; }
+    catch (e) { pulados++; }
+  }
+  return { fechados, pulados };
+}
+async function marcarPagoLote({ empresaId, ids, formaPagamento }) {
+  if (!Array.isArray(ids) || !ids.length) throw AppError.validacao('Selecione ao menos um fechamento.');
+  const { rows } = await query(
+    `UPDATE financeiro_fechamentos SET status='pago', forma_pagamento=$3, pago_em=now()
+      WHERE empresa_id=$1 AND id = ANY($2::uuid[]) AND status='aberto' RETURNING id`,
+    [empresaId, ids, formaPagamento || null]);
+  return { pagos: rows.length };
+}
+async function criarLancamentoLote({ empresaId, motoboyIds, categoriaId, tipo, valorCent, descricao, competencia, usuarioId }) {
+  if (!Array.isArray(motoboyIds) || !motoboyIds.length) throw AppError.validacao('Selecione ao menos um motoboy.');
+  let criados = 0;
+  for (const mid of motoboyIds) {
+    try { await criarLancamento({ empresaId, motoboyId: mid, categoriaId, tipo, valorCent, descricao, competencia, usuarioId }); criados++; } catch (e) {}
+  }
+  return { criados };
+}
+
+// ═════════ FECHAMENTO AUTOMÁTICO (config + agenda) ═════════
+function proximoFechamento(cfg) {
+  if (!cfg || !cfg.ativo) return null;
+  const hhmm = String(cfg.hora || '08:00').slice(0, 5);
+  const [hh, mm] = hhmm.split(':').map(Number);
+  const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bahia' }));
+  const alvo = new Date(agora);
+  const delta = (Number(cfg.dia_semana) - alvo.getDay() + 7) % 7;
+  alvo.setDate(alvo.getDate() + delta);
+  alvo.setHours(hh, mm, 0, 0);
+  if (alvo <= agora) alvo.setDate(alvo.getDate() + 7);
+  return alvo.toISOString();
+}
+function periodoDoFechamento(tipo) {
+  const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bahia' }));
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  if (tipo === 'ultimos_7') { const de = new Date(hoje); de.setDate(de.getDate() - 6); return { de: fmt(de), ate: fmt(hoje) }; }
+  if (tipo === 'semana_atual') { const de = new Date(hoje); de.setDate(de.getDate() - ((de.getDay() + 6) % 7)); return { de: fmt(de), ate: fmt(hoje) }; }
+  const dom = new Date(hoje); dom.setDate(dom.getDate() - ((dom.getDay() + 6) % 7) - 1); // domingo passado
+  const seg = new Date(dom); seg.setDate(dom.getDate() - 6);
+  return { de: fmt(seg), ate: fmt(dom) };
+}
+async function obterFechamentoConfig({ empresaId }) {
+  const { rows } = await query(`SELECT * FROM financeiro_fechamento_config WHERE empresa_id=$1`, [empresaId]);
+  const cfg = rows[0] || { empresa_id: empresaId, ativo: false, dia_semana: 1, hora: '08:00', periodo_tipo: 'semana_anterior', motoboys_tipo: 'com_saldo', deixar_aberto: true, gerar_lista: true, notificar: false, ultimo_run_em: null };
+  cfg.hora = String(cfg.hora || '08:00').slice(0, 5);
+  const { de, ate } = periodoDoFechamento(cfg.periodo_tipo);
+  return { ...cfg, proximo_em: proximoFechamento(cfg), proximo_periodo: { de, ate } };
+}
+async function salvarFechamentoConfig({ empresaId, ativo, diaSemana, hora, periodoTipo, motoboysTipo, deixarAberto, gerarLista, notificar }) {
+  const h = /^\d{2}:\d{2}/.test(hora || '') ? String(hora).slice(0, 5) : '08:00';
+  const ds = Number.isFinite(+diaSemana) ? Math.min(6, Math.max(0, Math.round(+diaSemana))) : 1;
+  await query(
+    `INSERT INTO financeiro_fechamento_config (empresa_id, ativo, dia_semana, hora, periodo_tipo, motoboys_tipo, deixar_aberto, gerar_lista, notificar, atualizado_em)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+     ON CONFLICT (empresa_id) DO UPDATE SET ativo=$2, dia_semana=$3, hora=$4, periodo_tipo=$5, motoboys_tipo=$6, deixar_aberto=$7, gerar_lista=$8, notificar=$9, atualizado_em=now()`,
+    [empresaId, !!ativo, ds, h, periodoTipo || 'semana_anterior', motoboysTipo || 'com_saldo', deixarAberto !== false, gerarLista !== false, !!notificar]);
+  return obterFechamentoConfig({ empresaId });
+}
+// Chamada pelo cron: fecha automaticamente as empresas cujo horário chegou.
+async function rodarFechamentosAutomaticos() {
+  const { rows: cfgs } = await query(`SELECT * FROM financeiro_fechamento_config WHERE ativo = TRUE`);
+  const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bahia' }));
+  for (const cfg of cfgs) {
+    try {
+      const [hh, mm] = String(cfg.hora || '08:00').slice(0, 5).split(':').map(Number);
+      const ehDia = agora.getDay() === Number(cfg.dia_semana);
+      const passou = agora.getHours() > hh || (agora.getHours() === hh && agora.getMinutes() >= mm);
+      const jaHoje = cfg.ultimo_run_em && new Date(new Date(cfg.ultimo_run_em).toLocaleString('en-US', { timeZone: 'America/Bahia' })).toDateString() === agora.toDateString();
+      if (!(ehDia && passou && !jaHoje)) continue;
+      const { de, ate } = periodoDoFechamento(cfg.periodo_tipo);
+      const fm = await faturamentoMotoboy({ empresaId: cfg.empresa_id, de, ate });
+      let alvos = fm.motoboys || [];
+      if (cfg.motoboys_tipo === 'com_saldo') alvos = alvos.filter(m => m.saldo_cent > 0);
+      let fechados = 0;
+      for (const m of alvos) { try { await fecharPeriodo({ empresaId: cfg.empresa_id, motoboyId: m.motoboy_id, de, ate, usuarioId: null }); fechados++; } catch (e) {} }
+      await query(`UPDATE financeiro_fechamento_config SET ultimo_run_em = now() WHERE empresa_id=$1`, [cfg.empresa_id]);
+      console.log(`[fechamento-auto] empresa=${cfg.empresa_id} ${de}..${ate} fechados=${fechados}`);
+    } catch (e) { console.error('[fechamento-auto] erro', cfg.empresa_id, e.message); }
+  }
+}
+
+// ═════════ EXPORTAÇÃO (xls/csv) ═════════
+function _fmoney(c) { return (Number(c || 0) / 100).toFixed(2).replace('.', ','); }
+function _fdt(v) { if (!v) return ''; try { return new Date(v).toLocaleString('pt-BR', { timeZone: 'America/Bahia' }); } catch (e) { return ''; } }
+function _fcsv(headers, rows) {
+  const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  return '\ufeff' + [headers.map(esc).join(';')].concat(rows.map(r => r.map(esc).join(';'))).join('\r\n');
+}
+function _fxls(headers, rows, aba) {
+  const xe = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const cab = headers.map(h => `<Cell ss:StyleID="h"><Data ss:Type="String">${xe(h)}</Data></Cell>`).join('');
+  const corpo = rows.map(r => '<Row>' + r.map(v => `<Cell><Data ss:Type="String">${xe(v)}</Data></Cell>`).join('') + '</Row>').join('');
+  return `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="h"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#042C53" ss:Pattern="Solid"/></Style></Styles><Worksheet ss:Name="${xe(aba || 'Dados')}"><Table><Row>${cab}</Row>${corpo}</Table></Worksheet></Workbook>`;
+}
+async function exportarClienteCorridas({ empresaId, lojaId, de, ate, formato }) {
+  const { corridas } = await faturamentoClienteCorridas({ empresaId, lojaId, de, ate });
+  const lj = await query(`SELECT nome_fantasia FROM lojas WHERE id=$1 AND empresa_id=$2`, [lojaId, empresaId]);
+  const nome = String(lj.rows[0] ? lj.rows[0].nome_fantasia : 'cliente').replace(/[^a-zA-Z0-9]+/g, '-');
+  const headers = ['Protocolo', 'Concluída', 'Coleta', 'Destino', 'Distância (km)', 'Valor', 'Profissional'];
+  const rows = corridas.map(c => [c.protocolo, _fdt(c.concluida_em), c.coleta_endereco || '', c.destino_endereco || '', c.distancia_km != null ? Number(c.distancia_km).toFixed(1) : '', _fmoney(c.valor_cliente_cent), (c.motoboy_codigo != null ? c.motoboy_codigo + ' - ' : '') + (c.motoboy_nome || '')]);
+  const data = new Date().toISOString().slice(0, 10);
+  if (formato === 'csv') return { conteudo: _fcsv(headers, rows), mime: 'text/csv; charset=utf-8', nome: `corridas-${nome}-${data}.csv` };
+  return { conteudo: _fxls(headers, rows, 'Corridas'), mime: 'application/vnd.ms-excel; charset=utf-8', nome: `corridas-${nome}-${data}.xls` };
+}
+async function exportarListaPagamento({ empresaId, ids = null, status = 'aberto', formato }) {
+  const params = [empresaId]; const cond = ['f.empresa_id = $1'];
+  if (ids && ids.length) { params.push(ids); cond.push(`f.id = ANY($${params.length}::uuid[])`); }
+  else if (status) { params.push(status); cond.push(`f.status = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT f.periodo_de, f.periodo_ate, f.qtd_corridas, f.saldo_liquido_cent, f.status,
+            m.nome_completo AS motoboy_nome, m.codigo AS motoboy_codigo
+       FROM financeiro_fechamentos f JOIN motoboys m ON m.id=f.motoboy_id
+      WHERE ${cond.join(' AND ')} ORDER BY m.nome_completo`, params);
+  const headers = ['Código', 'Motoboy', 'Período', 'Corridas', 'Valor a pagar', 'Status'];
+  const linhas = rows.map(r => [r.motoboy_codigo != null ? String(r.motoboy_codigo) : '', r.motoboy_nome || '', (r.periodo_de ? String(r.periodo_de).slice(0, 10) : '') + ' a ' + (r.periodo_ate ? String(r.periodo_ate).slice(0, 10) : ''), r.qtd_corridas, _fmoney(r.saldo_liquido_cent), r.status === 'pago' ? 'Pago' : 'Em aberto']);
+  const data = new Date().toISOString().slice(0, 10);
+  if (formato === 'csv') return { conteudo: _fcsv(headers, linhas), mime: 'text/csv; charset=utf-8', nome: `lista-pagamento-${data}.csv` };
+  return { conteudo: _fxls(headers, linhas, 'Pagamento'), mime: 'application/vnd.ms-excel; charset=utf-8', nome: `lista-pagamento-${data}.xls` };
+}
+
+
 module.exports = {
   faturamentoCliente, faturamentoClienteCentros, faturamentoClienteCorridas,
   faturamentoMotoboy, faturamentoMotoboyCorridas,
@@ -363,4 +509,7 @@ module.exports = {
   listarLancamentos, criarLancamento, excluirLancamento,
   extratoMotoboy,
   fecharPeriodo, listarFechamentos, marcarPago, estornarFechamento,
+  resumoFinanceiro, fecharPeriodoLote, marcarPagoLote, criarLancamentoLote,
+  obterFechamentoConfig, salvarFechamentoConfig, rodarFechamentosAutomaticos,
+  exportarClienteCorridas, exportarListaPagamento,
 };

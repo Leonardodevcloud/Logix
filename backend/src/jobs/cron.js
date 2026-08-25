@@ -48,6 +48,18 @@ function iniciarCron(origem = 'worker') {
     finally { _reconciliando = false; }
   });
 
+  // Fechamento automático do financeiro: a cada 10 min verifica empresas cujo
+  // horário semanal chegou e fecha o período (o service filtra o que é devido).
+  const financeiro = require('../modules/financeiro');
+  let _fechando = false;
+  cron.schedule('*/10 * * * *', async () => {
+    if (_fechando) return;
+    _fechando = true;
+    try { await financeiro.service.rodarFechamentosAutomaticos(); }
+    catch (e) { console.error(`[cron:${origem}] fechamento automático falhou:`, e.message); }
+    finally { _fechando = false; }
+  });
+
   console.log(`[cron:${origem}] agendado (retenção rastreamento=${RETENCAO_DIAS}d, webhooks integração=20s)`);
 }
 

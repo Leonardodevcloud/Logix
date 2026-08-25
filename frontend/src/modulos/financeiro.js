@@ -1,6 +1,6 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
-import { get, post, put, patch, del } from '../core/api.js';
+import { get, post, put, patch, del, baixar } from '../core/api.js';
 
 const LS_PERIODO = 'logix_fin_periodo';
 
@@ -49,7 +49,7 @@ export async function montar(container) {
     atalhos);
 
   // ── Navegação de abas ───────────────────────────────────────────
-  const ABAS = [{ id: 'cliente', rotulo: 'Faturamento Cliente' }, { id: 'motoboy', rotulo: 'Motoboys (saldo)' }, { id: 'fechamentos', rotulo: 'Fechamentos' }, { id: 'categorias', rotulo: 'Categorias' }];
+  const ABAS = [{ id: 'cliente', rotulo: 'Faturamento Cliente' }, { id: 'motoboy', rotulo: 'Motoboys (saldo)' }, { id: 'fechamentos', rotulo: 'Fechamentos' }, { id: 'auto', rotulo: 'Fechamento automático' }, { id: 'categorias', rotulo: 'Categorias' }];
   const nav = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);margin-bottom:18px' });
   const painel = el('div', {});
 
@@ -67,19 +67,38 @@ export async function montar(container) {
     periodo.de = inpDe.value; periodo.ate = inpAte.value;
     localStorage.setItem(LS_PERIODO, JSON.stringify(periodo));
     render();
+    carregarKpis();
   }
   function render() {
     painel.innerHTML = '';
     if (_aba === 'cliente') painel.append(abaCliente(periodo));
     else if (_aba === 'motoboy') painel.append(abaMotoboy(periodo));
     else if (_aba === 'fechamentos') painel.append(abaFechamentos(periodo));
+    else if (_aba === 'auto') painel.append(abaFechamentoAuto());
     else painel.append(abaCategorias());
   }
 
-  const conteudo = el('div', {}, barraPeriodo, nav, painel);
+  const kpiBar = el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px' });
+  async function carregarKpis() {
+    try {
+      const r = await get(`/financeiro/resumo?de=${periodo.de}&ate=${periodo.ate}`);
+      const cards = [
+        { v: reais(r.faturado_cliente_cent), l: 'Faturado (clientes) no período' },
+        { v: reais(r.a_repassar_cent), l: 'A repassar (motoboys)' },
+        { v: reais(r.pago_cent), l: 'Já pago (fechamentos)' },
+        { v: (r.motoboys_com_saldo || 0) + ' / ' + (r.motoboys_total || 0), l: 'Motoboys com saldo aberto' },
+      ];
+      kpiBar.innerHTML = '';
+      cards.forEach(c => kpiBar.append(el('div', { class: 'lx-card', style: 'padding:13px 15px' },
+        el('div', { style: 'font-size:21px;font-weight:900;color:var(--lx-navy,#042C53)' }, c.v),
+        el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-2);font-weight:600;margin-top:2px' }, c.l))));
+    } catch (e) {}
+  }
+  const conteudo = el('div', {}, barraPeriodo, kpiBar, nav, painel);
   container.append(casca('Financeiro', conteudo, 'Faturamento de clientes e motoboys — corridas concluídas no período.'));
   renderNav();
   render();
+  carregarKpis();
 }
 
 // Cartão de total (topo de cada aba).
@@ -97,18 +116,24 @@ function vazio(txt) { return el('div', { style: 'text-align:center;padding:48px 
 function abaCliente(periodo) {
   const wrap = el('div', {});
   const topo = el('div', {});
+  const busca = el('input', { class: 'lx-input', placeholder: '🔍 Buscar cliente (loja)', style: 'width:300px' });
+  const barra = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px' }, busca);
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-  wrap.append(topo, lista);
+  wrap.append(topo, barra, lista);
 
   const expandido = new Set(); // lojaIds expandidos
+  let _clientes = [];
+  const filtrar = () => { const q = (busca.value || '').toLowerCase().trim(); return q ? _clientes.filter(c => (c.loja_nome || '').toLowerCase().includes(q)) : _clientes; };
+  busca.oninput = () => render(filtrar());
 
   async function carregar() {
     lista.innerHTML = '<div style="padding:24px;color:var(--lx-tinta-3);font-size:13px">Carregando…</div>';
     try {
       const r = await get(`/financeiro/cliente?de=${periodo.de}&ate=${periodo.ate}`);
+      _clientes = r.clientes;
       topo.innerHTML = '';
       topo.append(cartaoTotal('Total a faturar (clientes)', r.total_geral_cent, `${r.clientes.length} cliente(s) com corridas no período`));
-      render(r.clientes);
+      render(filtrar());
     } catch (e) { lista.innerHTML = ''; lista.append(vazio(e.message || 'Erro ao carregar')); }
   }
 
@@ -116,15 +141,17 @@ function abaCliente(periodo) {
     lista.innerHTML = '';
     if (!clientes.length) { lista.append(vazio('Nenhuma corrida concluída no período.')); return; }
     // Cabeçalho
-    lista.append(el('div', { style: 'display:grid;grid-template-columns:1fr 120px 160px 40px;gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' },
-      el('div', {}, 'Cliente'), el('div', { style: 'text-align:right' }, 'Corridas'), el('div', { style: 'text-align:right' }, 'Total'), el('div', {})));
+    lista.append(el('div', { style: 'display:grid;grid-template-columns:1fr 110px 150px 100px 40px;gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase' },
+      el('div', {}, 'Cliente'), el('div', { style: 'text-align:right' }, 'Corridas'), el('div', { style: 'text-align:right' }, 'Total'), el('div', { style: 'text-align:center' }, 'Exportar'), el('div', {})));
     clientes.forEach(c => {
       const aberto = expandido.has(c.loja_id);
       const seta = el('span', { style: `font-size:13px;color:var(--lx-tinta-3);transition:transform .15s;transform:rotate(${aberto ? 90 : 0}deg)` }, '▶');
-      const linha = el('div', { style: 'display:grid;grid-template-columns:1fr 120px 160px 40px;gap:12px;padding:13px 16px;align-items:center;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);cursor:pointer;background:var(--lx-superficie)', onClick: () => toggle(c, bloco, seta) },
+      const btnXls = el('button', { class: 'lx-btn', style: 'font-size:11px;padding:5px 9px;background:#E4F5EE;color:#0F6E56;border:1px solid #B7E3D0', title: 'Exportar corridas deste cliente (Excel)', onClick: (ev) => { ev.stopPropagation(); baixar(`/financeiro/cliente/${c.loja_id}/export?de=${periodo.de}&ate=${periodo.ate}&formato=xls`).catch(() => toast('Erro ao exportar', 'erro')); } }, 'Excel');
+      const linha = el('div', { style: 'display:grid;grid-template-columns:1fr 110px 150px 100px 40px;gap:12px;padding:13px 16px;align-items:center;border:1px solid var(--lx-linha);border-radius:var(--lx-raio);cursor:pointer;background:var(--lx-superficie)', onClick: () => toggle(c, bloco, seta) },
         el('div', { style: 'font-weight:700;font-size:14px' }, c.loja_nome),
         el('div', { style: 'text-align:right;font-size:13px;color:var(--lx-tinta-2)' }, c.qtd_corridas),
         el('div', { style: 'text-align:right;font-weight:800;font-size:15px;color:var(--lx-azul-primario)' }, reais(c.total_cliente_cent)),
+        el('div', { style: 'text-align:center' }, btnXls),
         el('div', { style: 'text-align:center' }, seta));
       const detalhe = el('div', { style: 'padding:6px 10px 10px 24px;display:none' });
       const bloco = el('div', {}, linha, detalhe);
@@ -190,20 +217,36 @@ function abaMotoboy(periodo) {
   const wrap = el('div', {});
   const topo = el('div', {});
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-  const barraAcoes = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px' },
-    el('div', { style: 'font-size:12.5px;color:var(--lx-tinta-2)' }, 'Lance crédito (bônus, diária…) ou abatimento (adiantamento, multa…) para qualquer motoboy.'),
-    el('div', { style: 'flex:1' }),
+  const busca = el('input', { class: 'lx-input', placeholder: '🔍 Buscar motoboy (nome ou código)', style: 'width:290px' });
+  const btnLote = el('button', { class: 'lx-btn', style: 'font-size:12.5px;background:var(--lx-navy,#042C53);color:#fff;border:none', onClick: () => fecharLote() }, 'Fechar semana (com saldo)');
+  const barraAcoes = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap' },
+    busca, el('div', { style: 'flex:1' }), btnLote,
     el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px', onClick: () => formLancamento(null, 'credito', () => carregar()) }, '+ Novo lançamento'));
   wrap.append(topo, barraAcoes, lista);
   const expandido = new Set();
+  let _motoboys = [];
+  const filtrar = () => { const q = (busca.value || '').toLowerCase().trim(); return q ? _motoboys.filter(m => (m.motoboy_nome || '').toLowerCase().includes(q) || String(m.motoboy_codigo || '') === q) : _motoboys; };
+  busca.oninput = () => render(filtrar());
+
+  async function fecharLote() {
+    const alvos = _motoboys.filter(m => m.saldo_cent > 0);
+    if (!alvos.length) { toast('Nenhum motoboy com saldo no período.'); return; }
+    if (!confirm(`Fechar a semana de ${alvos.length} motoboy(s) com saldo, no período ${periodo.de} a ${periodo.ate}?`)) return;
+    try {
+      const r = await post('/financeiro/motoboys/fechar-lote', { motoboy_ids: alvos.map(m => m.motoboy_id), de: periodo.de, ate: periodo.ate });
+      toast(`${r.fechados} fechado(s)` + (r.pulados ? `, ${r.pulados} pulado(s)` : ''));
+      carregar();
+    } catch (e) { toast(e.message || 'Erro', 'erro'); }
+  }
 
   async function carregar() {
     lista.innerHTML = '<div style="padding:24px;color:var(--lx-tinta-3);font-size:13px">Carregando…</div>';
     try {
       const r = await get(`/financeiro/motoboy?de=${periodo.de}&ate=${periodo.ate}`);
+      _motoboys = r.motoboys;
       topo.innerHTML = '';
       topo.append(cartaoTotal('Saldo a repassar (em aberto)', r.total_geral_cent, `${r.motoboys.length} motoboy(s) no período`));
-      render(r.motoboys);
+      render(filtrar());
     } catch (e) { lista.innerHTML = ''; lista.append(vazio(e.message || 'Erro ao carregar')); }
   }
 
@@ -436,14 +479,107 @@ function formFechar(m, totais, periodo, aoSalvar) {
   };
 }
 
+// ── Aba: Fechamento automático ────────────────────────────────────
+function abaFechamentoAuto() {
+  const wrap = el('div', {});
+  wrap.innerHTML = '<div style="padding:24px;color:var(--lx-tinta-3);font-size:13px">Carregando…</div>';
+  const DIAS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const fmtBR = (iso) => { if (!iso) return '—'; try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } };
+  const fmtDia = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? m[3] + '/' + m[2] : '—'; };
+
+  (async () => {
+    let cfg;
+    try { cfg = await get('/financeiro/config-fechamento'); }
+    catch (e) { wrap.innerHTML = ''; wrap.append(vazio(e.message || 'Erro ao carregar')); return; }
+
+    const chkAtivo = el('input', { type: 'checkbox' }); chkAtivo.checked = !!cfg.ativo;
+    const selDia = el('select', { class: 'lx-input', style: 'flex:1' }); DIAS.forEach((d, i) => selDia.append(el('option', { value: String(i) }, d))); selDia.value = String(cfg.dia_semana);
+    const inHora = el('input', { class: 'lx-input', type: 'time', value: String(cfg.hora || '08:00').slice(0, 5), style: 'width:120px' });
+    const selPeriodo = el('select', { class: 'lx-input' },
+      el('option', { value: 'semana_anterior' }, 'Semana anterior (seg a dom)'),
+      el('option', { value: 'ultimos_7' }, 'Últimos 7 dias'),
+      el('option', { value: 'semana_atual' }, 'Semana atual até agora')); selPeriodo.value = cfg.periodo_tipo;
+    const selMotoboys = el('select', { class: 'lx-input' },
+      el('option', { value: 'com_saldo' }, 'Todos com saldo > R$ 0,00'),
+      el('option', { value: 'ativos' }, 'Todos os ativos')); selMotoboys.value = cfg.motoboys_tipo;
+    const chkAberto = el('input', { type: 'checkbox' }); chkAberto.checked = cfg.deixar_aberto !== false;
+    const chkLista = el('input', { type: 'checkbox' }); chkLista.checked = cfg.gerar_lista !== false;
+    const chkNotif = el('input', { type: 'checkbox' }); chkNotif.checked = !!cfg.notificar;
+
+    const info = el('div', { style: 'background:#E9F3FC;border:1px solid #BFDDF6;border-radius:10px;padding:11px 14px;font-size:12.5px;color:var(--lx-navy,#042C53);margin-top:6px' });
+    function pintaInfo(c) {
+      info.innerHTML = '';
+      if (!chkAtivo.checked) { info.append(el('span', {}, 'Fechamento automático desativado. Salve para ativar.')); return; }
+      info.append(el('span', {}, 'Próximo fechamento automático: '), el('b', {}, fmtBR(c.proximo_em)),
+        el('span', {}, c.proximo_periodo ? ' · vai fechar de ' + fmtDia(c.proximo_periodo.de) + ' a ' + fmtDia(c.proximo_periodo.ate) : ''));
+    }
+    pintaInfo(cfg);
+    chkAtivo.onchange = () => pintaInfo(cfg);
+
+    const campo = (lab, ...ct) => el('div', { class: 'lx-field', style: 'margin-bottom:14px' }, el('label', {}, lab), ...ct);
+    const hint = (t) => el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:4px' }, t);
+    const linhaChk = (chk, txt) => el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;margin-bottom:6px' }, chk, txt);
+
+    const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:13px' }, 'Salvar configuração');
+    btnSalvar.onclick = async () => {
+      try {
+        btnSalvar.disabled = true;
+        const novo = await put('/financeiro/config-fechamento', {
+          ativo: chkAtivo.checked, dia_semana: Number(selDia.value), hora: inHora.value,
+          periodo_tipo: selPeriodo.value, motoboys_tipo: selMotoboys.value,
+          deixar_aberto: chkAberto.checked, gerar_lista: chkLista.checked, notificar: chkNotif.checked,
+        });
+        cfg = novo; pintaInfo(novo); toast('Configuração salva');
+      } catch (e) { toast(e.message || 'Erro', 'erro'); }
+      finally { btnSalvar.disabled = false; }
+    };
+
+    wrap.innerHTML = '';
+    wrap.append(el('div', { class: 'lx-card', style: 'padding:18px 20px' },
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap' },
+        chkAtivo, el('b', { style: 'font-size:14px' }, 'Ativar fechamento automático'),
+        el('span', { style: 'color:var(--lx-tinta-2);font-size:12px' }, 'O sistema fecha a semana dos motoboys sozinho e gera a lista de pagamento.')),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:18px' },
+        el('div', {},
+          campo('Fechar toda semana em', el('div', { style: 'display:flex;gap:10px' }, selDia, inHora), hint('Dia e hora em que o fechamento roda automaticamente.')),
+          campo('Período que será fechado', selPeriodo, hint('Quais corridas entram no fechamento.'))),
+        el('div', {},
+          campo('Quais motoboys', selMotoboys),
+          campo('Ao fechar',
+            linhaChk(chkLista, 'Gerar lista de pagamento (Excel/CSV)'),
+            linhaChk(chkAberto, 'Deixar o fechamento "em aberto" para conferência'),
+            linhaChk(chkNotif, 'Notificar no painel quando concluir')))),
+      info,
+      el('div', { style: 'margin-top:16px' }, btnSalvar)));
+  })();
+  return wrap;
+}
+
 // ── Aba: Fechamentos (histórico de repasses) ──────────────────────
 function abaFechamentos() {
   const wrap = el('div', {});
+  const selStatus = el('select', { class: 'lx-input', style: 'width:150px' }, el('option', { value: '' }, 'Todos'), el('option', { value: 'aberto' }, 'Em aberto'), el('option', { value: 'pago' }, 'Pago'));
+  const btnPagos = el('button', { class: 'lx-btn', style: 'font-size:12.5px;background:var(--lx-navy,#042C53);color:#fff;border:none', onClick: () => marcarPagos() }, 'Marcar em aberto como pagos');
+  const btnExp = el('button', { class: 'lx-btn', style: 'font-size:12.5px;background:#E4F5EE;color:#0F6E56;border:1px solid #B7E3D0', onClick: () => exportarLista() }, 'Exportar lista de pagamento');
+  const bar = el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap' }, btnPagos, btnExp, el('div', { style: 'flex:1' }), selStatus);
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-  wrap.append(lista);
+  wrap.append(bar, lista);
+  let _fs = [];
+  selStatus.onchange = () => carregar();
+  async function marcarPagos() {
+    const ids = _fs.filter(f => f.status === 'aberto').map(f => f.id);
+    if (!ids.length) { toast('Nenhum fechamento em aberto na lista.'); return; }
+    if (!confirm(`Marcar ${ids.length} fechamento(s) em aberto como pagos (PIX)?`)) return;
+    try { const r = await post('/financeiro/fechamentos/marcar-pagos', { ids, forma_pagamento: 'PIX' }); toast(`${r.pagos} marcado(s) como pago`); carregar(); }
+    catch (e) { toast(e.message || 'Erro', 'erro'); }
+  }
+  function exportarLista() {
+    const st = selStatus.value || 'aberto';
+    baixar(`/financeiro/fechamentos/export?formato=xls&status=${st}`).catch(() => toast('Erro ao exportar', 'erro'));
+  }
   async function carregar() {
     lista.innerHTML = '<div style="padding:16px;color:var(--lx-tinta-3);font-size:13px">Carregando…</div>';
-    try { render((await get('/financeiro/fechamentos')).fechamentos); }
+    try { const st = selStatus.value; const r = await get('/financeiro/fechamentos' + (st ? '?status=' + st : '')); _fs = r.fechamentos; render(_fs); }
     catch (e) { lista.innerHTML = ''; lista.append(vazio(e.message || 'Erro')); }
   }
   function render(fs) {

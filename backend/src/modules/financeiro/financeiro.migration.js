@@ -69,6 +69,22 @@ async function initFinanceiroTables() {
         ('Ajuste','ambos','#8ba5bc')
       ) AS x(nome, tipo, cor)
      WHERE NOT EXISTS (SELECT 1 FROM financeiro_categorias c WHERE c.empresa_id = e.id)`);
+
+  // Config do fechamento automático (semanal) por empresa.
+  await query(`
+    CREATE TABLE IF NOT EXISTS financeiro_fechamento_config (
+      empresa_id    UUID PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+      ativo         BOOLEAN NOT NULL DEFAULT FALSE,
+      dia_semana    INTEGER NOT NULL DEFAULT 1,          -- 0=domingo .. 6=sábado
+      hora          TIME NOT NULL DEFAULT '08:00',
+      periodo_tipo  TEXT NOT NULL DEFAULT 'semana_anterior', -- semana_anterior | ultimos_7 | semana_atual
+      motoboys_tipo TEXT NOT NULL DEFAULT 'com_saldo',   -- com_saldo | ativos
+      deixar_aberto BOOLEAN NOT NULL DEFAULT TRUE,
+      gerar_lista   BOOLEAN NOT NULL DEFAULT TRUE,
+      notificar     BOOLEAN NOT NULL DEFAULT FALSE,
+      ultimo_run_em TIMESTAMPTZ,
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
 }
 
 module.exports = { initFinanceiroTables };

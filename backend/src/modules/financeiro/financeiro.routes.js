@@ -87,6 +87,51 @@ function initFinanceiroRoutes() {
     try { res.json(await service.estornarFechamento({ empresaId: req.empresaId, id: req.params.id })); } catch (e) { next(e); }
   });
 
+  // ── Resumo (KPIs) ──────────────────────────────────────────────
+  router.get('/resumo', async (req, res, next) => {
+    try { res.json(await service.resumoFinanceiro({ empresaId: req.empresaId, ...periodo(req) })); } catch (e) { next(e); }
+  });
+
+  // ── Ações em lote ──────────────────────────────────────────────
+  router.post('/motoboys/fechar-lote', async (req, res, next) => {
+    try { res.json(await service.fecharPeriodoLote({ ...base(req), motoboyIds: req.body.motoboy_ids || [], de: req.body.de, ate: req.body.ate })); } catch (e) { next(e); }
+  });
+  router.post('/motoboys/lancamentos-lote', async (req, res, next) => {
+    try { res.json(await service.criarLancamentoLote({ ...base(req), motoboyIds: req.body.motoboy_ids || [], categoriaId: req.body.categoria_id || null, tipo: req.body.tipo, valorCent: req.body.valor_cent, descricao: req.body.descricao || null, competencia: req.body.competencia || null })); } catch (e) { next(e); }
+  });
+  router.post('/fechamentos/marcar-pagos', async (req, res, next) => {
+    try { res.json(await service.marcarPagoLote({ empresaId: req.empresaId, ids: req.body.ids || [], formaPagamento: req.body.forma_pagamento })); } catch (e) { next(e); }
+  });
+
+  // ── Fechamento automático (config) ─────────────────────────────
+  router.get('/config-fechamento', async (req, res, next) => {
+    try { res.json(await service.obterFechamentoConfig({ empresaId: req.empresaId })); } catch (e) { next(e); }
+  });
+  router.put('/config-fechamento', async (req, res, next) => {
+    try { res.json(await service.salvarFechamentoConfig({
+      empresaId: req.empresaId, ativo: req.body.ativo, diaSemana: req.body.dia_semana, hora: req.body.hora,
+      periodoTipo: req.body.periodo_tipo, motoboysTipo: req.body.motoboys_tipo,
+      deixarAberto: req.body.deixar_aberto, gerarLista: req.body.gerar_lista, notificar: req.body.notificar,
+    })); } catch (e) { next(e); }
+  });
+
+  // ── Exportações (xls | csv) ────────────────────────────────────
+  router.get('/cliente/:lojaId/export', async (req, res, next) => {
+    try {
+      const formato = req.query.formato === 'csv' ? 'csv' : 'xls';
+      const { conteudo, mime, nome } = await service.exportarClienteCorridas({ empresaId: req.empresaId, lojaId: req.params.lojaId, ...periodo(req), formato });
+      res.setHeader('Content-Type', mime); res.setHeader('Content-Disposition', `attachment; filename="${nome}"`); res.send(conteudo);
+    } catch (e) { next(e); }
+  });
+  router.get('/fechamentos/export', async (req, res, next) => {
+    try {
+      const formato = req.query.formato === 'csv' ? 'csv' : 'xls';
+      const ids = req.query.ids ? String(req.query.ids).split(',').filter(Boolean) : null;
+      const { conteudo, mime, nome } = await service.exportarListaPagamento({ empresaId: req.empresaId, ids, status: req.query.status || 'aberto', formato });
+      res.setHeader('Content-Type', mime); res.setHeader('Content-Disposition', `attachment; filename="${nome}"`); res.send(conteudo);
+    } catch (e) { next(e); }
+  });
+
   return router;
 }
 
