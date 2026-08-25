@@ -309,7 +309,11 @@ function renderCorridas(container, corridas, tipo) {
 function dataDia(iso) {
   if (!iso) return '—';
   const s = String(iso);
-  const d = new Date(s.length <= 10 ? s + 'T12:00:00' : s);
+  // Campos DATE chegam como 'YYYY-MM-DD' ou meia-noite UTC ('...T00:00:00.000Z').
+  // Pega só a parte da data pra não deslocar o dia pelo fuso do navegador.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return m[3] + '/' + m[2];
+  const d = new Date(s);
   return d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit' });
 }
 function linhaExtrato({ titulo, sub, tipo, valor, cor, onDel }) {

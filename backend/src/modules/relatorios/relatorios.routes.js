@@ -14,11 +14,13 @@ function initRelatoriosRoutes() {
   // - loja (req.lojaId setado): trava na própria loja, sem motoboy e sem valor do motoboy.
   // - central/admin (req.lojaId nulo): pode filtrar loja, motoboy e ver valores do motoboy.
   function filtrosDe(req) {
-    const ehAdmin = !req.lojaId;
+    // ehAdmin vem do PERFIL (não do lojaId): ao filtrar uma loja específica, o
+    // resolverTenant seta req.lojaId, mas o central continua sendo admin.
+    const ehAdmin = !!(req.usuario && (req.usuario.perfil === 'super_admin' || req.usuario.perfil === 'central_admin'));
     return {
       empresaId: req.empresaId,
       ehAdmin,
-      lojaId: req.lojaId || (ehAdmin ? (req.query.loja_id || null) : null),
+      lojaId: req.lojaId || null,
       centroId: req.query.centro_id || null,
       motoboyId: ehAdmin ? (req.query.motoboy_id || null) : null,
       motoboyBusca: ehAdmin ? (req.query.motoboy_busca || null) : null,
@@ -41,7 +43,7 @@ function initRelatoriosRoutes() {
 
   // Opções para os dropdowns (categorias de frete; lojas só p/ admin).
   router.get('/opcoes', exigirPermissao('entregas.ver'), async (req, res, next) => {
-    try { res.json(await service.opcoes({ empresaId: req.empresaId, ehAdmin: !req.lojaId })); }
+    try { const ehAdmin = !!(req.usuario && (req.usuario.perfil === 'super_admin' || req.usuario.perfil === 'central_admin')); res.json(await service.opcoes({ empresaId: req.empresaId, ehAdmin })); }
     catch (e) { next(e); }
   });
 
