@@ -132,16 +132,17 @@ const rotuloStatus = (s) => s === 'entregue' ? 'Concluído' : s === 'cancelada' 
 const rotuloSla = (s) => s === 'no_prazo' ? 'No prazo' : s === 'fora_prazo' ? 'Fora do prazo' : '';
 
 function nomeProf(l) { return (l.mb_codigo != null ? l.mb_codigo + ' - ' : '') + (l.mb_nome || ''); }
-function achatar(linhas, verMotoboy, comEnderecos, exibirValores) {
-  const mostrarCli = exibirValores !== 'nenhum';
-  const mostrarProf = verMotoboy && exibirValores === 'ambos';
+function achatar(linhas, verMotoboy, comEnderecos, exibirValores, comProfissional) {
+  const verMb = verMotoboy && comProfissional !== false;
+  const mostrarCli = exibirValores === 'ambos' || exibirValores === 'cliente';
+  const mostrarProf = verMb && (exibirValores === 'ambos' || exibirValores === 'motoboy');
   const headers = ['Serviço', 'Cliente', 'Status', 'SLA', 'Criação', 'Tela motoboy'];
   if (comEnderecos) headers.push('Coleta (endereço)');
   headers.push('Chegada coleta');
   if (comEnderecos) headers.push('Entregas (endereço | NF | recebedor | entrega)');
   else headers.push('Entregas (NF | recebedor | entrega)');
   headers.push('Distância (km)');
-  if (verMotoboy) headers.push('Profissional');
+  if (verMb) headers.push('Profissional');
   headers.push('Modal');
   if (mostrarCli) headers.push('Valor cliente');
   if (mostrarProf) headers.push('Valor motoboy');
@@ -161,7 +162,7 @@ function achatar(linhas, verMotoboy, comEnderecos, exibirValores) {
     r.push(fmtDT(l.chegada_coleta_em));
     r.push(ents);
     r.push(l.distancia_km != null ? Number(l.distancia_km) : '');
-    if (verMotoboy) r.push(nomeProf(l));
+    if (verMb) r.push(nomeProf(l));
     r.push(l.categoria_nome || '');
     if (mostrarCli) r.push(l.valor_cliente != null ? Number(l.valor_cliente) : '');
     if (mostrarProf) r.push(l.valor_motoboy != null ? Number(l.valor_motoboy) : '');
@@ -193,8 +194,8 @@ function buildXls(headers, rows) {
 </Workbook>`;
 }
 
-function exportar(linhas, { verMotoboy, comEnderecos, formato, exibirValores }) {
-  const { headers, rows } = achatar(linhas, verMotoboy, comEnderecos !== false, exibirValores || 'ambos');
+function exportar(linhas, { verMotoboy, comEnderecos, formato, exibirValores, comProfissional }) {
+  const { headers, rows } = achatar(linhas, verMotoboy, comEnderecos !== false, exibirValores || 'ambos', comProfissional !== false);
   const data = new Date().toISOString().slice(0, 10);
   if (formato === 'csv') return { conteudo: buildCsv(headers, rows), mime: 'text/csv; charset=utf-8', nome: `relatorio-logix-${data}.csv` };
   return { conteudo: buildXls(headers, rows), mime: 'application/vnd.ms-excel; charset=utf-8', nome: `relatorio-logix-${data}.xls` };

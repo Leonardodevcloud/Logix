@@ -23,6 +23,7 @@ function initRelatoriosRoutes() {
       motoboyId: ehAdmin ? (req.query.motoboy_id || null) : null,
       motoboyBusca: ehAdmin ? (req.query.motoboy_busca || null) : null,
       exibirValores: req.query.exibir_valores || 'ambos',
+      comProfissional: req.query.com_profissional !== '0' && req.query.com_profissional !== 'sem',
       status: req.query.status || null,
       categoriaId: req.query.categoria_id || null,
       baseData: req.query.base || 'criacao',
@@ -58,7 +59,7 @@ function initRelatoriosRoutes() {
       const f = filtrosDe(req); f.todos = true;
       const linhas = await service.gerarRelatorio(f);
       const formato = req.query.formato === 'csv' ? 'csv' : 'xls';
-      const { conteudo, mime, nome } = service.exportar(linhas, { verMotoboy: f.ehAdmin, comEnderecos: f.comEnderecos, formato, exibirValores: f.exibirValores });
+      const { conteudo, mime, nome } = service.exportar(linhas, { verMotoboy: f.ehAdmin, comEnderecos: f.comEnderecos, formato, exibirValores: f.exibirValores, comProfissional: f.comProfissional });
       res.setHeader('Content-Type', mime);
       res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
       res.send(conteudo);
