@@ -20,6 +20,13 @@ function dtCompleto(v) {
   } catch { return ''; }
 }
 function money(v) { return v == null ? '—' : 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
+function valorComDin(total, add, muted) {
+  if (total == null) return el('span', { style: 'color:var(--lx-tinta-3)' }, '—');
+  const base = add ? total - add : total;
+  const baseEl = muted ? el('span', {}, money(base)) : el('b', {}, money(base));
+  if (!add) return baseEl;
+  return el('span', {}, baseEl, el('span', { style: 'color:#6B4FC9;font-weight:700' }, ' + ' + money(add)));
+}
 function coords(la, ln) { return (la != null && ln != null) ? Number(la).toFixed(6) + ', ' + Number(ln).toFixed(6) : ''; }
 
 export async function montar(container) {
@@ -31,7 +38,7 @@ export async function montar(container) {
   const estado = {
     de: '', ate: '', base: 'criacao', enderecos: 'com',
     loja_id: '', centro_id: '', motoboy_busca: '', status: '',
-    categoria_id: '', sla: '', exibir: ehAdmin ? 'ambos' : 'cliente', profissional: 'com', ordenar: 'data', limite: '100', todos: false,
+    categoria_id: '', sla: '', dinamica: '', exibir: ehAdmin ? 'ambos' : 'cliente', profissional: 'com', ordenar: 'data', limite: '100', todos: false,
   };
 
   // ---------- filtros ----------
@@ -58,6 +65,7 @@ export async function montar(container) {
   const selSla = selDe([['', 'Todos'], ['no_prazo', 'No prazo'], ['fora_prazo', 'Fora do prazo']], '', (e) => estado.sla = e.target.value);
   const selExibir = selDe(ehAdmin ? [['ambos', 'Cliente e motoboy'], ['cliente', 'Só cliente'], ['motoboy', 'Só motoboy'], ['nenhum', 'Nenhum']] : [['cliente', 'Cliente'], ['nenhum', 'Nenhum']], ehAdmin ? 'ambos' : 'cliente', (e) => estado.exibir = e.target.value);
   const selProf = selDe([['com', 'Com profissional'], ['sem', 'Sem profissional']], 'com', (e) => { estado.profissional = e.target.value; campoMotoboy.style.display = e.target.value === 'com' ? '' : 'none'; });
+  const selDinamica = el('select', { style: inpEstilo, onChange: (e) => estado.dinamica = e.target.value }, el('option', { value: '' }, 'Todas'), el('option', { value: 'com' }, 'Com dinâmica'), el('option', { value: 'sem' }, 'Sem dinâmica'));
   const selOrd = selDe([['data', 'Data (mais recente)'], ['protocolo', 'Serviço'], ['loja', 'Loja']], 'data', (e) => estado.ordenar = e.target.value);
   const selLim = selDe([['100', '100'], ['250', '250'], ['500', '500'], ['todos', 'Tudo']], '100', (e) => estado.limite = e.target.value);
 
@@ -68,8 +76,8 @@ export async function montar(container) {
   else escopoCampos.push(campo('Status', selStatus));
   const b2 = el('div', { style: grade(ehAdmin ? 4 : 2) }, ...escopoCampos);
   const b2b = ehAdmin ? el('div', { style: grade(4) }, campoMotoboy) : '';
-  const b3 = el('div', { style: grade(4) }, campo('Modal de entrega', selCat), campo('SLA', selSla), campo('Exibir valores', selExibir), campo('Ordenar por', selOrd));
-  const b3b = el('div', { style: grade(4) }, campo('Registros por página', selLim));
+  const b3 = el('div', { style: grade(4) }, campo('Modal de entrega', selCat), campo('Dinâmica', selDinamica), campo('SLA', selSla), campo('Exibir valores', selExibir));
+  const b3b = el('div', { style: grade(4) }, campo('Ordenar por', selOrd), campo('Registros por página', selLim));
 
   const btnBuscar = el('button', { class: 'lx-btn lx-btn-primario', onClick: buscar }, 'Buscar dados');
   const btnXls = el('button', { class: 'lx-btn lx-btn-secundario', style: 'background:#E4F5EE;color:#0F6E56;border-color:#B7E3D0', onClick: () => exportar('xls') }, 'Excel (.xls)');
@@ -110,6 +118,7 @@ export async function montar(container) {
     if (estado.status) p.set('status', estado.status);
     if (estado.categoria_id) p.set('categoria_id', estado.categoria_id);
     if (estado.exibir) p.set('exibir_valores', estado.exibir);
+    if (estado.dinamica) p.set('dinamica', estado.dinamica);
     if (estado.profissional === 'sem') p.set('com_profissional', '0');
     if (estado.sla) p.set('sla', estado.sla);
     if (estado.ordenar) p.set('ordenar', estado.ordenar);
@@ -186,8 +195,12 @@ export async function montar(container) {
       if (mostrarProfCol) tds.push(el('td', { style: tdBase }, (l.mb_codigo != null ? l.mb_codigo + ' - ' : '') + (l.mb_nome || '—')));
       tds.push(
         el('td', { style: tdBase }, dtCompleto(l.criado_em)),
-        el('td', { style: tdBase }, l.categoria_nome || '—'),
-        el('td', { style: tdBase }, mostrarCli ? el('b', {}, money(l.valor_cliente)) : '', mostrarProfVal ? el('div', { style: 'color:var(--lx-tinta-2)' }, money(l.valor_motoboy)) : '', (!mostrarCli && !mostrarProfVal) ? el('span', { style: 'color:var(--lx-tinta-3)' }, '—') : ''),
+        el('td', { style: tdBase },
+          el('div', {}, l.categoria_nome || '—'),
+          l.dinamica_nome
+            ? el('span', { style: 'display:inline-block;font-size:10px;font-weight:800;color:#6B4FC9;background:#EEEDFE;padding:2px 8px;border-radius:20px;margin-top:4px' }, l.dinamica_nome)
+            : el('span', { style: 'font-size:10.5px;color:var(--lx-tinta-3)' }, 'sem dinâmica')),
+        el('td', { style: tdBase }, mostrarCli ? valorComDin(l.valor_cliente, l.dinamica_add_cliente) : '', mostrarProfVal ? el('div', { style: 'color:var(--lx-tinta-2);margin-top:2px' }, valorComDin(l.valor_motoboy, l.dinamica_add_motoboy, true)) : '', (!mostrarCli && !mostrarProfVal) ? el('span', { style: 'color:var(--lx-tinta-3)' }, '—') : ''),
         el('td', { style: tdBase }, slaPill),
         el('td', { style: tdBase }, stPill),
         el('td', { style: tdBase }, dtCompleto(l.concluida_em) || '—'));
@@ -208,6 +221,7 @@ export async function montar(container) {
   try {
     const op = await get('/relatorios/opcoes');
     (op.categorias || []).forEach((c) => selCat.append(el('option', { value: c.id }, c.nome)));
+    (op.dinamicas || []).forEach((dd) => selDinamica.append(el('option', { value: dd.id }, dd.nome)));
     if (ehAdmin && op.lojas) op.lojas.forEach((l) => selLoja.append(el('option', { value: l.id }, l.nome)));
   } catch {}
 }

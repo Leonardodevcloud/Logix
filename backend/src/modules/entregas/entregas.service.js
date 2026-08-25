@@ -45,6 +45,7 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
 
   // Precificação por km (tabela do cliente ou global; respeita toggle de cobrança).
   let valorClienteCent = null, valorMotoboyCent = null;
+  let precoDinamicoId = null, dinamicaAddCliente = 0, dinamicaAddMotoboy = 0;
   try {
     const configService = require('../config/config.service');
     const preco = await configService.precificar({ empresaId, lojaId, km: distanciaKm });
@@ -60,8 +61,11 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
         motoboyId, quando: new Date(),
       });
       if (dyn) {
-        if (valorClienteCent != null) valorClienteCent += (dyn.add_cliente_cent || 0);
-        if (valorMotoboyCent != null) valorMotoboyCent += (dyn.add_motoboy_cent || 0);
+        precoDinamicoId = dyn.regra_id || null;
+        dinamicaAddCliente = dyn.add_cliente_cent || 0;
+        dinamicaAddMotoboy = dyn.add_motoboy_cent || 0;
+        if (valorClienteCent != null) valorClienteCent += dinamicaAddCliente;
+        if (valorMotoboyCent != null) valorMotoboyCent += dinamicaAddMotoboy;
       }
     } catch (e) { /* nunca bloqueia o lançamento por causa da dinâmica */ }
   } catch (e) {
@@ -75,12 +79,14 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
       `INSERT INTO entregas (empresa_id, loja_id, protocolo, motoboy_id, status, distribuicao,
          coleta_nome, coleta_endereco, coleta_lat, coleta_lng, distancia_km, tempo_estimado_min, criado_por,
          modalidade_id, centro_custo_id, valor_cliente_cent, valor_motoboy_cent,
-         referencia_externa, origem, integracao_chave_id, rastreio_token)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
+         referencia_externa, origem, integracao_chave_id, rastreio_token,
+         preco_dinamico_id, dinamica_add_cliente_cent, dinamica_add_motoboy_cent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING id`,
       [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
        coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null,
        valorClienteCent, valorMotoboyCent,
-       referenciaExterna || null, origem || null, integracaoChaveId || null, rastreioToken || null]
+       referenciaExterna || null, origem || null, integracaoChaveId || null, rastreioToken || null,
+       precoDinamicoId, dinamicaAddCliente, dinamicaAddMotoboy]
     );
     const entregaId = rows[0].id;
     let posicao = 1;

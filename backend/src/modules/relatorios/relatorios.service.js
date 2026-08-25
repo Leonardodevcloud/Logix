@@ -48,6 +48,9 @@ function montarWhere(f) {
   if (f.status === 'entregue') cond.push("e.status='entregue'");
   else if (f.status === 'cancelada') cond.push("e.status='cancelada'");
   if (f.categoriaId) cond.push('e.modalidade_id IN (SELECT cm2.id FROM cliente_modalidades cm2 WHERE cm2.categoria_id = ' + push(f.categoriaId) + ')');
+  if (f.dinamica === 'com') cond.push('e.preco_dinamico_id IS NOT NULL');
+  else if (f.dinamica === 'sem') cond.push('e.preco_dinamico_id IS NULL');
+  else if (f.dinamica) cond.push('e.preco_dinamico_id = ' + push(f.dinamica));
   const col = colData(f.baseData);
   if (f.de) cond.push(`(e.${col} AT TIME ZONE '${TZ}')::date >= ` + push(f.de));
   if (f.ate) cond.push(`(e.${col} AT TIME ZONE '${TZ}')::date <= ` + push(f.ate));
@@ -62,6 +65,7 @@ async function gerarRelatorio(f) {
     `SELECT e.id, e.protocolo, e.status, e.criado_em, e.iniciada_em, e.concluida_em, e.cancelada_em,
             e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.chegada_coleta_em,
             e.distancia_km, e.valor_cliente_cent, e.valor_motoboy_cent, e.loja_id, e.origem, e.referencia_externa,
+            e.preco_dinamico_id, e.dinamica_add_cliente_cent, e.dinamica_add_motoboy_cent, pd.nome AS dinamica_nome,
             m.codigo AS mb_codigo, m.nome_completo AS mb_nome, l.nome_fantasia AS loja_nome, fc.nome AS categoria_nome,
             (SELECT json_agg(json_build_object(
                'ordem',ep.ordem,'endereco',ep.endereco,'lat',ep.lat,'lng',ep.lng,'nome_fantasia',ep.nome_fantasia,
@@ -73,6 +77,7 @@ async function gerarRelatorio(f) {
        LEFT JOIN lojas l ON l.id=e.loja_id
        LEFT JOIN cliente_modalidades cm ON cm.id=e.modalidade_id
        LEFT JOIN frete_categorias fc ON fc.id=cm.categoria_id
+       LEFT JOIN precos_dinamicos pd ON pd.id=e.preco_dinamico_id
       WHERE ${where} ORDER BY ${ordem} ${lim}`,
     params
   );
@@ -83,6 +88,9 @@ async function gerarRelatorio(f) {
     sla: r.status === 'entregue' ? calcularSla(r, porLoja.get(r.loja_id) || geral) : null,
     valor_cliente: r.valor_cliente_cent != null ? r.valor_cliente_cent / 100 : null,
     valor_motoboy: r.valor_motoboy_cent != null ? r.valor_motoboy_cent / 100 : null,
+    dinamica_nome: r.dinamica_nome || null,
+    dinamica_add_cliente: r.dinamica_add_cliente_cent ? r.dinamica_add_cliente_cent / 100 : 0,
+    dinamica_add_motoboy: r.dinamica_add_motoboy_cent ? r.dinamica_add_motoboy_cent / 100 : 0,
   }));
   if (f.sla === 'no_prazo') linhas = linhas.filter((l) => l.sla === 'no_prazo');
   else if (f.sla === 'fora_prazo') linhas = linhas.filter((l) => l.sla === 'fora_prazo');
@@ -119,7 +127,8 @@ async function resumoRelatorio(f) {
 
 async function opcoes({ empresaId, ehAdmin }) {
   const cats = await query(`SELECT id, nome FROM frete_categorias WHERE empresa_id=$1 AND ativo=TRUE ORDER BY nome`, [empresaId]);
-  const out = { categorias: cats.rows };
+  const din = await query(`SELECT id, nome FROM precos_dinamicos WHERE empresa_id=$1 ORDER BY nome`, [empresaId]);
+  const out = { categorias: cats.rows, dinamicas: din.rows };
   if (ehAdmin) {
     const lj = await query(`SELECT id, nome_fantasia AS nome FROM lojas WHERE empresa_id=$1 ORDER BY nome_fantasia`, [empresaId]);
     out.lojas = lj.rows;
@@ -143,7 +152,7 @@ function achatar(linhas, verMotoboy, comEnderecos, exibirValores, comProfissiona
   else headers.push('Entregas (NF | recebedor | entrega)');
   headers.push('Distância (km)');
   if (verMb) headers.push('Profissional');
-  headers.push('Modal');
+  headers.push('Modal', 'Dinâmica');
   if (mostrarCli) headers.push('Valor cliente');
   if (mostrarProf) headers.push('Valor motoboy');
   headers.push('Finalização');
@@ -163,7 +172,7 @@ function achatar(linhas, verMotoboy, comEnderecos, exibirValores, comProfissiona
     r.push(ents);
     r.push(l.distancia_km != null ? Number(l.distancia_km) : '');
     if (verMb) r.push(nomeProf(l));
-    r.push(l.categoria_nome || '');
+    r.push(l.categoria_nome || '', l.dinamica_nome || '');
     if (mostrarCli) r.push(l.valor_cliente != null ? Number(l.valor_cliente) : '');
     if (mostrarProf) r.push(l.valor_motoboy != null ? Number(l.valor_motoboy) : '');
     r.push(fmtDT(l.concluida_em));

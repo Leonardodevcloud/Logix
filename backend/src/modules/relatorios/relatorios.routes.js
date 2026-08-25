@@ -26,6 +26,7 @@ function initRelatoriosRoutes() {
       comProfissional: req.query.com_profissional !== '0' && req.query.com_profissional !== 'sem',
       status: req.query.status || null,
       categoriaId: req.query.categoria_id || null,
+      dinamica: req.query.dinamica || null,
       baseData: req.query.base || 'criacao',
       de: req.query.de || null,
       ate: req.query.ate || null,
