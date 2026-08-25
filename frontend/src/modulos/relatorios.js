@@ -30,8 +30,8 @@ export async function montar(container) {
 
   const estado = {
     de: '', ate: '', base: 'criacao', enderecos: 'com',
-    loja_id: '', centro_id: '', motoboy_id: '', status: '',
-    categoria_id: '', sla: '', ordenar: 'data', limite: '100', todos: false,
+    loja_id: '', centro_id: '', motoboy_busca: '', status: '',
+    categoria_id: '', sla: '', exibir: ehAdmin ? 'ambos' : 'cliente', ordenar: 'data', limite: '100', todos: false,
   };
 
   // ---------- filtros ----------
@@ -52,19 +52,21 @@ export async function montar(container) {
   const selLoja = el('select', { style: inpEstilo, onChange: async (e) => { estado.loja_id = e.target.value; estado.centro_id = ''; await carregarCentros(); } }, el('option', { value: '' }, 'Todas as lojas'));
   const selCentro = el('select', { style: inpEstilo, onChange: (e) => estado.centro_id = e.target.value }, el('option', { value: '' }, 'Todos os centros'));
   selCentro.disabled = true;
-  const selMotoboy = el('select', { style: inpEstilo, onChange: (e) => estado.motoboy_id = e.target.value }, el('option', { value: '' }, 'Todos'));
+  const inMotoboy = el('input', { type: 'text', placeholder: 'Nome ou código', style: inpEstilo, onInput: (e) => estado.motoboy_busca = e.target.value.trim() });
   const selStatus = selDe([['', 'Todos'], ['entregue', 'Concluído'], ['cancelada', 'Cancelado']], '', (e) => estado.status = e.target.value);
   const selCat = el('select', { style: inpEstilo, onChange: (e) => estado.categoria_id = e.target.value }, el('option', { value: '' }, 'Todas'));
   const selSla = selDe([['', 'Todos'], ['no_prazo', 'No prazo'], ['fora_prazo', 'Fora do prazo']], '', (e) => estado.sla = e.target.value);
+  const selExibir = selDe(ehAdmin ? [['ambos', 'Cliente e motoboy'], ['cliente', 'Só cliente'], ['nenhum', 'Nenhum']] : [['cliente', 'Cliente'], ['nenhum', 'Nenhum']], ehAdmin ? 'ambos' : 'cliente', (e) => estado.exibir = e.target.value);
   const selOrd = selDe([['data', 'Data (mais recente)'], ['protocolo', 'Serviço'], ['loja', 'Loja']], 'data', (e) => estado.ordenar = e.target.value);
   const selLim = selDe([['100', '100'], ['250', '250'], ['500', '500'], ['todos', 'Tudo']], '100', (e) => estado.limite = e.target.value);
 
   const b1 = el('div', { style: grade(4) }, campo('Data inicial', inDe), campo('Data final', inAte), campo('Buscar pela data de', selBase), campo('Endereços', selEnd));
   const escopoCampos = [];
-  if (ehAdmin) escopoCampos.push(campo('Loja / cliente', selLoja, true), campo('Centro de custo', selCentro), campo('Motoboy', selMotoboy, true), campo('Status', selStatus));
+  if (ehAdmin) escopoCampos.push(campo('Loja / cliente', selLoja, true), campo('Centro de custo', selCentro), campo('Motoboy (nome ou código)', inMotoboy, true), campo('Status', selStatus));
   else escopoCampos.push(campo('Status', selStatus));
   const b2 = el('div', { style: grade(ehAdmin ? 4 : 2) }, ...escopoCampos);
-  const b3 = el('div', { style: grade(4) }, campo('Categoria de frete', selCat), campo('SLA', selSla), campo('Ordenar por', selOrd), campo('Registros por página', selLim));
+  const b3 = el('div', { style: grade(4) }, campo('Modal de entrega', selCat), campo('SLA', selSla), campo('Exibir valores', selExibir), campo('Ordenar por', selOrd));
+  const b3b = el('div', { style: grade(4) }, campo('Registros por página', selLim));
 
   const btnBuscar = el('button', { class: 'lx-btn lx-btn-primario', onClick: buscar }, 'Buscar dados');
   const btnXls = el('button', { class: 'lx-btn lx-btn-secundario', style: 'background:#E4F5EE;color:#0F6E56;border-color:#B7E3D0', onClick: () => exportar('xls') }, 'Excel (.xls)');
@@ -76,7 +78,7 @@ export async function montar(container) {
 
   const filtrosCard = el('div', { class: 'lx-card lx-card-pad', style: 'margin-bottom:14px' },
     el('div', { style: 'font-size:14px;font-weight:800;color:var(--lx-navy,#042C53);margin-bottom:14px' }, 'Filtros'),
-    bloco('Período'), b1, bloco('Escopo'), b2, bloco('Tipo de serviço, SLA e ordenação'), b3, acoes);
+    bloco('Período'), b1, bloco('Escopo'), b2, bloco('Modal, SLA, valores e ordenação'), b3, b3b, acoes);
   content.append(filtrosCard);
 
   // ---------- resultado ----------
@@ -101,9 +103,10 @@ export async function montar(container) {
     if (estado.enderecos) p.set('enderecos', estado.enderecos);
     if (estado.loja_id) p.set('loja_id', estado.loja_id);
     if (estado.centro_id) p.set('centro_id', estado.centro_id);
-    if (estado.motoboy_id) p.set('motoboy_id', estado.motoboy_id);
+    if (estado.motoboy_busca) p.set('motoboy_busca', estado.motoboy_busca);
     if (estado.status) p.set('status', estado.status);
     if (estado.categoria_id) p.set('categoria_id', estado.categoria_id);
+    if (estado.exibir) p.set('exibir_valores', estado.exibir);
     if (estado.sla) p.set('sla', estado.sla);
     if (estado.ordenar) p.set('ordenar', estado.ordenar);
     if (estado.limite === 'todos') p.set('todos', '1'); else p.set('limite', estado.limite);
@@ -151,12 +154,15 @@ export async function montar(container) {
         el('span', {}, 'Fora: ', el('b', { style: 'color:var(--lx-erro,#D0584F);font-size:15px' }, String(r.fora_prazo || 0))),
         el('span', {}, 'Km: ', el('b', { style: 'color:var(--lx-navy,#042C53);font-size:15px' }, (r.km || 0).toLocaleString('pt-BR'))),
         el('span', {}, 'Cliente: ', el('b', { style: 'color:var(--lx-navy,#042C53);font-size:15px' }, money(r.valor_cliente))),
-        verMb ? el('span', {}, 'Motoboy: ', el('b', { style: 'color:var(--lx-navy,#042C53);font-size:15px' }, money(r.valor_motoboy))) : ''));
+        (verMb && estado.exibir === 'ambos') ? el('span', {}, 'Motoboy: ', el('b', { style: 'color:var(--lx-navy,#042C53);font-size:15px' }, money(r.valor_motoboy))) : ''));
     resultado.append(resumo);
 
     if (!linhas.length) { resultado.append(el('div', { class: 'lx-card lx-card-pad', style: 'color:var(--lx-tinta-2);font-size:13px' }, 'Nenhum serviço encontrado com esses filtros.')); return; }
 
-    const cols = ['Serviço', 'Cliente', 'Endereço (pontos)', 'Distância', 'Profissional', 'Criação', 'Categoria', 'Valor cli' + (verMb ? ' / prof' : ''), 'SLA', 'Status', 'Finalização'];
+    const mostrarCli = estado.exibir !== 'nenhum';
+    const mostrarProf = verMb && estado.exibir === 'ambos';
+    const cabValor = mostrarProf ? 'Valor cli / prof' : mostrarCli ? 'Valor cliente' : 'Valor';
+    const cols = ['Serviço', 'Cliente', 'Endereço (pontos)', 'Distância', 'Profissional', 'Criação', 'Modal', cabValor, 'SLA', 'Status', 'Finalização'];
     const thead = el('tr', {}, ...cols.map((c) => el('th', { style: 'background:var(--lx-navy,#042C53);color:#cfe0f2;text-align:left;font-size:10.5px;font-weight:800;padding:10px 12px;white-space:nowrap;vertical-align:top' }, c)));
     const tbody = el('tbody', {});
     linhas.forEach((l) => {
@@ -168,10 +174,10 @@ export async function montar(container) {
         el('td', { style: tdBase + ';max-width:150px' }, l.loja_nome || '—'),
         el('td', { style: tdBase + ';min-width:300px' }, celulaPontos(l, comEnd)),
         el('td', { style: tdBase }, l.distancia_km != null ? Number(l.distancia_km).toFixed(1) + ' km' : '—'),
-        el('td', { style: tdBase }, verMb ? ((l.mb_codigo != null ? l.mb_codigo + ' · ' : '') + (l.mb_nome || '—')) : (l.mb_nome || '—')),
+        el('td', { style: tdBase }, (l.mb_codigo != null ? l.mb_codigo + ' - ' : '') + (l.mb_nome || '—')),
         el('td', { style: tdBase }, dtCompleto(l.criado_em)),
         el('td', { style: tdBase }, l.categoria_nome || '—'),
-        el('td', { style: tdBase }, el('b', {}, money(l.valor_cliente)), verMb ? el('div', { style: 'color:var(--lx-tinta-2)' }, money(l.valor_motoboy)) : ''),
+        el('td', { style: tdBase }, mostrarCli ? el('b', {}, money(l.valor_cliente)) : el('span', { style: 'color:var(--lx-tinta-3)' }, '—'), mostrarProf ? el('div', { style: 'color:var(--lx-tinta-2)' }, money(l.valor_motoboy)) : ''),
         el('td', { style: tdBase }, slaPill),
         el('td', { style: tdBase }, stPill),
         el('td', { style: tdBase }, dtCompleto(l.concluida_em) || '—')));
@@ -193,5 +199,4 @@ export async function montar(container) {
     (op.categorias || []).forEach((c) => selCat.append(el('option', { value: c.id }, c.nome)));
     if (ehAdmin && op.lojas) op.lojas.forEach((l) => selLoja.append(el('option', { value: l.id }, l.nome)));
   } catch {}
-  if (ehAdmin) { try { const mb = await get('/motoboys'); (mb || []).forEach((m) => selMotoboy.append(el('option', { value: m.id }, (m.codigo != null ? m.codigo + ' · ' : '') + (m.nome_completo || m.nome || m.id)))); } catch {} }
 }

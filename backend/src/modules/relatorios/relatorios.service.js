@@ -44,6 +44,7 @@ function montarWhere(f) {
   if (f.lojaId) cond.push('e.loja_id = ' + push(f.lojaId));
   if (f.centroId) cond.push('e.centro_custo_id = ' + push(f.centroId));
   if (f.motoboyId) cond.push('e.motoboy_id = ' + push(f.motoboyId));
+  if (f.motoboyBusca) cond.push('e.motoboy_id IN (SELECT id FROM motoboys WHERE empresa_id = e.empresa_id AND (nome_completo ILIKE ' + push('%' + f.motoboyBusca + '%') + ' OR codigo::text = ' + push(f.motoboyBusca) + '))');
   if (f.status === 'entregue') cond.push("e.status='entregue'");
   else if (f.status === 'cancelada') cond.push("e.status='cancelada'");
   if (f.categoriaId) cond.push('e.modalidade_id IN (SELECT cm2.id FROM cliente_modalidades cm2 WHERE cm2.categoria_id = ' + push(f.categoriaId) + ')');
@@ -130,16 +131,20 @@ async function opcoes({ empresaId, ehAdmin }) {
 const rotuloStatus = (s) => s === 'entregue' ? 'Concluído' : s === 'cancelada' ? 'Cancelado' : (s || '');
 const rotuloSla = (s) => s === 'no_prazo' ? 'No prazo' : s === 'fora_prazo' ? 'Fora do prazo' : '';
 
-function achatar(linhas, verMotoboy, comEnderecos) {
+function nomeProf(l) { return (l.mb_codigo != null ? l.mb_codigo + ' - ' : '') + (l.mb_nome || ''); }
+function achatar(linhas, verMotoboy, comEnderecos, exibirValores) {
+  const mostrarCli = exibirValores !== 'nenhum';
+  const mostrarProf = verMotoboy && exibirValores === 'ambos';
   const headers = ['Serviço', 'Cliente', 'Status', 'SLA', 'Criação', 'Tela motoboy'];
   if (comEnderecos) headers.push('Coleta (endereço)');
   headers.push('Chegada coleta');
   if (comEnderecos) headers.push('Entregas (endereço | NF | recebedor | entrega)');
   else headers.push('Entregas (NF | recebedor | entrega)');
   headers.push('Distância (km)');
-  if (verMotoboy) headers.push('Motoboy (cód)', 'Motoboy');
-  headers.push('Categoria', 'Valor cliente');
-  if (verMotoboy) headers.push('Valor motoboy');
+  if (verMotoboy) headers.push('Profissional');
+  headers.push('Modal');
+  if (mostrarCli) headers.push('Valor cliente');
+  if (mostrarProf) headers.push('Valor motoboy');
   headers.push('Finalização');
 
   const rows = linhas.map((l) => {
@@ -156,9 +161,10 @@ function achatar(linhas, verMotoboy, comEnderecos) {
     r.push(fmtDT(l.chegada_coleta_em));
     r.push(ents);
     r.push(l.distancia_km != null ? Number(l.distancia_km) : '');
-    if (verMotoboy) r.push(l.mb_codigo != null ? String(l.mb_codigo) : '', l.mb_nome || '');
-    r.push(l.categoria_nome || '', l.valor_cliente != null ? Number(l.valor_cliente) : '');
-    if (verMotoboy) r.push(l.valor_motoboy != null ? Number(l.valor_motoboy) : '');
+    if (verMotoboy) r.push(nomeProf(l));
+    r.push(l.categoria_nome || '');
+    if (mostrarCli) r.push(l.valor_cliente != null ? Number(l.valor_cliente) : '');
+    if (mostrarProf) r.push(l.valor_motoboy != null ? Number(l.valor_motoboy) : '');
     r.push(fmtDT(l.concluida_em));
     return r;
   });
@@ -187,8 +193,8 @@ function buildXls(headers, rows) {
 </Workbook>`;
 }
 
-function exportar(linhas, { verMotoboy, comEnderecos, formato }) {
-  const { headers, rows } = achatar(linhas, verMotoboy, comEnderecos !== false);
+function exportar(linhas, { verMotoboy, comEnderecos, formato, exibirValores }) {
+  const { headers, rows } = achatar(linhas, verMotoboy, comEnderecos !== false, exibirValores || 'ambos');
   const data = new Date().toISOString().slice(0, 10);
   if (formato === 'csv') return { conteudo: buildCsv(headers, rows), mime: 'text/csv; charset=utf-8', nome: `relatorio-logix-${data}.csv` };
   return { conteudo: buildXls(headers, rows), mime: 'application/vnd.ms-excel; charset=utf-8', nome: `relatorio-logix-${data}.xls` };
