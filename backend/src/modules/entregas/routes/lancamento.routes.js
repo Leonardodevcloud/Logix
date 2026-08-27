@@ -23,6 +23,8 @@ module.exports = function lancamentoRoutes() {
         const podeEscolher = await clienteHub.lojaPode(req.lojaId, 'pode_escolher_profissional');
         if (!podeEscolher) { motoboyId = undefined; distribuicao = 'automatica'; }
       }
+      // Motoboy escolhido explicitamente => atribuição DIRETA (só pra ele), nunca broadcast.
+      if (motoboyId) distribuicao = 'manual';
 
       // Centro de custo da corrida: usa o enviado; senão, deriva do centro do
       // usuário logado (se ele pertence a um centro) — assim toda corrida lançada

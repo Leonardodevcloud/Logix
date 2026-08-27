@@ -182,6 +182,8 @@ async function atribuir({ empresaId, entregaId, motoboyId, usuarioId, ip }) {
     `UPDATE entregas SET motoboy_id = $1, status = $2 WHERE id = $3 RETURNING id, protocolo, status, motoboy_id`,
     [motoboyId, STATUS_ENTREGA.AGUARDANDO_COLETA, entregaId]
   );
+  // Fecha qualquer oferta em aberto desta entrega — some da tela dos outros motoboys.
+  await query(`UPDATE entregas_ofertas SET status = 'cancelada' WHERE entrega_id = $1 AND status = 'ofertada'`, [entregaId]);
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir', detalhe: { entregaId, motoboyId }, ip });
   emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: entregaId, motoboyId, protocolo: rows[0].protocolo });
   emitirParaMotoboy(motoboyId, 'entrega.atribuida', { entregaId, protocolo: rows[0].protocolo });
@@ -208,6 +210,7 @@ async function atribuirLote({ empresaId, entregaIds, motoboyId, usuarioId, ip })
     [motoboyId, STATUS_ENTREGA.AGUARDANDO_COLETA, empresaId, entregaIds, STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO]
   );
   if (!rows.length) throw AppError.validacao('Nenhuma das entregas selecionadas está disponível para atribuição');
+  await query(`UPDATE entregas_ofertas SET status = 'cancelada' WHERE entrega_id = ANY($1::uuid[]) AND status = 'ofertada'`, [rows.map(r => r.id)]);
 
   await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'atribuir-lote', detalhe: { motoboyId, ids: rows.map(r => r.id) }, ip });
   rows.forEach(r => emitirParaEmpresa(empresaId, 'entrega.atribuida', { id: r.id, motoboyId, protocolo: r.protocolo }));
@@ -403,6 +406,7 @@ async function ofertasDoMotoboy({ empresaId, motoboyId }) {
        JOIN entregas e ON e.id = o.entrega_id
        LEFT JOIN lojas l ON l.id = e.loja_id
       WHERE o.empresa_id = $1 AND o.status = 'ofertada' AND c.recusada_em IS NULL
+        AND e.status = 'aguardando_atribuicao'
       ORDER BY o.criado_em DESC`,
     [empresaId, motoboyId]
   );

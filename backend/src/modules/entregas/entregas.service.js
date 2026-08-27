@@ -1520,6 +1520,8 @@ async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
      WHERE id = $1 AND empresa_id = $2`,
     [id, empresaId, usuarioId, motivo || null]
   );
+  // Fecha oferta em aberto: a corrida cancelada some da tela dos motoboys.
+  await query(`UPDATE entregas_ofertas SET status = 'cancelada' WHERE entrega_id = $1 AND status = 'ofertada'`, [id]);
   emitirParaEmpresa(empresaId, 'entrega.cancelada', { id, protocolo: ent[0].protocolo });
   // auditoria sem await — não bloqueia a resposta
   registrarAuditoria({ empresaId, usuarioId, categoria: 'entregas', acao: 'cancelar', detalhe: { id, motivo }, ip }).catch(() => {});
