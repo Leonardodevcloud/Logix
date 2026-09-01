@@ -47,9 +47,10 @@ function setaIcon(cor, ang) {
   return window.L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7],
     html: `<div style="transform:rotate(${ang}deg);color:${cor};font-size:14px;line-height:14px;text-shadow:0 0 3px #fff,0 0 3px #fff">\u25b2</div>` });
 }
-function rotuloIcon(cor, texto) {
-  return window.L.divIcon({ className: '', iconSize: [1, 1], iconAnchor: [0, 0],
-    html: `<div style="transform:translate(-50%,-115%);white-space:nowrap;background:${cor};color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:14px;box-shadow:0 3px 8px rgba(0,0,0,.35);position:relative">${texto}<span style="position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:5px solid ${cor}"></span></div>` });
+function pinoPonta(cor, letra) {
+  // Pino discreto tipo gota, com uma letra dentro (I = início, F = fim).
+  return window.L.divIcon({ className: '', iconSize: [26, 34], iconAnchor: [13, 32],
+    html: `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;background:${cor};transform:rotate(-45deg);box-shadow:0 3px 8px rgba(0,0,0,.35);border:2px solid #fff;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);color:#fff;font-weight:800;font-size:12px">${letra}</span></div>` });
 }
 
 export function montar(container) {
@@ -215,19 +216,21 @@ export function montar(container) {
         window.L.marker([pts[i].lat, pts[i].lng], { icon: setaIcon(cor, ang), interactive: false, zIndexOffset: 200 }).addTo(mapa);
       }
 
-      // Pontos intermediários: bolinhas leves, clicáveis pra ver a hora
-      pts.forEach((p, i) => {
-        if (i === 0 || i === pts.length - 1) return;
-        window.L.circleMarker([p.lat, p.lng], { radius: 3.5, color: '#fff', weight: 1, fillColor: cor, fillOpacity: 0.95 })
-          .addTo(mapa)
-          .bindPopup(`<b>Hora:</b> ${horaCompleta(p.hora)}<br><span style="color:#8ba5bc">Posição${ids.length > 1 ? ' · ' + r.protocolo : ''}</span>`);
+      // Clique NA LINHA mostra a hora do ponto mais próximo (sem poluir com bolinhas).
+      const linhaClic = window.L.polyline(latlngs, { color: cor, weight: 14, opacity: 0 }).addTo(mapa);
+      linhaClic.on('click', (ev) => {
+        let melhor = 0, dmin = Infinity;
+        pts.forEach((p, i) => { const d = Math.abs(p.lat - ev.latlng.lat) + Math.abs(p.lng - ev.latlng.lng); if (d < dmin) { dmin = d; melhor = i; } });
+        const p = pts[melhor];
+        window.L.popup().setLatLng([p.lat, p.lng])
+          .setContent(`<b>Hora:</b> ${horaCompleta(p.hora)}<br><span style="color:#8ba5bc">Posição${ids.length > 1 ? ' · ' + r.protocolo : ''}</span>`).openOn(mapa);
       });
 
-      // Início (verde) e Fim (azul) com rótulo
+      // Início e Fim: pinos limpos (I / F)
       const ini = pts[0], fim = pts[pts.length - 1];
-      window.L.marker([ini.lat, ini.lng], { icon: rotuloIcon('#1F9D6B', 'Início'), zIndexOffset: 600 }).addTo(mapa)
+      window.L.marker([ini.lat, ini.lng], { icon: pinoPonta('#1F9D6B', 'I'), zIndexOffset: 600 }).addTo(mapa)
         .bindPopup(`<b>Início</b> · ${horaCompleta(ini.hora)}${ids.length > 1 ? '<br>' + r.protocolo : ''}`);
-      window.L.marker([fim.lat, fim.lng], { icon: rotuloIcon('#042C53', 'Fim'), zIndexOffset: 600 }).addTo(mapa)
+      window.L.marker([fim.lat, fim.lng], { icon: pinoPonta('#042C53', 'F'), zIndexOffset: 600 }).addTo(mapa)
         .bindPopup(`<b>Fim</b> · ${horaCompleta(fim.hora)}${ids.length > 1 ? '<br>' + r.protocolo : ''}`);
     });
 
