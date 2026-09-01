@@ -24,6 +24,14 @@ export default async function handler(req) {
   const host = String(req.headers.get('x-forwarded-host') || req.headers.get('host') || '').split(':')[0].toLowerCase();
   const favicon = url.searchParams.get('tipo') === 'favicon';
 
+  // Resposta com cache FORTE: o Vercel/CDN e o robô do WhatsApp guardam a imagem
+  // pronta (1 dia no navegador, 30 dias na borda). Assim o download é instantâneo
+  // e o WhatsApp escolhe o card GRANDE (em vez do fallback pequeno).
+  const comCache = (img) => {
+    img.headers.set('Cache-Control', 'public, immutable, no-transform, max-age=86400, s-maxage=2592000');
+    return img;
+  };
+
   let marca = { nome_exibicao: 'Logix', cor_primaria: '#185FA5', cor_secundaria: '#042C53', logo_url: null };
   try {
     const r = await fetch(`${BACKEND}/branding?host=${encodeURIComponent(host)}`, { headers: { accept: 'application/json' } });
@@ -48,16 +56,16 @@ export default async function handler(req) {
       }, iniciais(nome));
 
   if (favicon) {
-    return new ImageResponse(
+    return comCache(new ImageResponse(
       h('div', { style: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fundo } }, selo(180)),
       { width: 256, height: 256 }
-    );
+    ));
   }
 
   // Card 1200x630 — CENTRALIZADO (o WhatsApp recorta as bordas; centralizar garante
   // que logo + nome apareçam inteiros em qualquer recorte). Todos os divs com display:flex.
   const nomeCurto = String(nome).length > 30;
-  return new ImageResponse(
+  return comCache(new ImageResponse(
     h('div', {
       style: {
         width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
@@ -74,5 +82,5 @@ export default async function handler(req) {
       h('div', { style: { display: 'flex', fontSize: 22, fontWeight: 800, color: 'rgba(255,255,255,0.65)', marginTop: 30, textTransform: 'uppercase', letterSpacing: '1px' } }, host)
     ),
     { width: 1200, height: 630 }
-  );
+  ));
 }
