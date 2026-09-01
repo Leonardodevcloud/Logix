@@ -2,216 +2,109 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
-  <title>Rastreio da entrega</title>
+  <title>Acompanhe sua entrega</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script>window.LOGIX_API = 'https://logix-production-61ae.up.railway.app/api/v1';</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script>window.LOGIX_API = window.LOGIX_API || 'https://logix-production-61ae.up.railway.app/api/v1';</script>
   <style>
-    :root{
-      --navy:#042C53; --azul:#185FA5; --ok:#1f9d6b; --erro:#dc2626;
-      --tinta:#0f172a; --tinta2:#64748b; --linha:#e2e8f0; --fundo:#f1f5f9; --acento:#185FA5;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%}
-    body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--fundo);color:var(--tinta);-webkit-font-smoothing:antialiased}
-    .wrap{max-width:520px;margin:0 auto;min-height:100%;background:#fff;display:flex;flex-direction:column}
-    header{padding:16px 18px;color:#fff;background:var(--acento);display:flex;align-items:center;gap:12px}
-    header img{height:34px;width:auto;border-radius:6px;background:#fff;padding:3px}
-    header .marca{font-weight:800;font-size:16px;letter-spacing:.2px}
-    header .os{margin-left:auto;font-size:12px;opacity:.85;font-weight:600}
-    .barra{padding:14px 18px;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .pill{font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px}
-    .pill.sp{background:#fff4e5;color:#b45309}
-    .pill.a{background:#e0edfb;color:var(--azul)}
-    .pill.f{background:#e6f6ef;color:var(--ok)}
-    .pill.c{background:#fdeaea;color:var(--erro)}
-    .info{font-size:12.5px;color:var(--tinta2)}
-    #mapa{height:300px;width:100%;background:#dbe4ee}
-    .moto{padding:14px 18px;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:12px}
-    .moto img{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--fundo)}
-    .moto .n{font-weight:700;font-size:14px}
-    .moto .s{font-size:12px;color:var(--tinta2)}
-    .timeline{padding:16px 18px 30px}
-    .timeline h3{font-size:13px;text-transform:uppercase;letter-spacing:.4px;color:var(--tinta2);margin:0 0 12px}
-    .ponto{position:relative;padding:0 0 16px 26px;border-left:2px solid var(--linha);margin-left:6px}
-    .ponto:last-child{border-left-color:transparent}
-    .ponto .dot{position:absolute;left:-8px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--linha)}
-    .ponto.done .dot{background:var(--ok);border-color:var(--ok)}
-    .ponto.fail .dot{background:var(--erro);border-color:var(--erro)}
-    .ponto .tit{font-weight:600;font-size:13.5px}
-    .ponto .end{font-size:12.5px;color:var(--tinta2);margin-top:2px}
-    .ponto .hora{font-size:11.5px;color:var(--tinta2);margin-top:3px}
-    .estado{padding:60px 24px;text-align:center;color:var(--tinta2)}
-    .estado b{display:block;color:var(--tinta);font-size:16px;margin-bottom:6px}
-    .rodape{margin-top:auto;padding:14px;text-align:center;font-size:11px;color:var(--tinta2)}
-    .leaflet-container{font-family:inherit}
+    :root{--navy:#042C53;--azul:#185FA5;--azul2:#378ADD;--ok:#1F9D6B;--erro:#D0584F;--aten:#C98A1A;--tinta:#0F2740;--tinta2:#486485;--tinta3:#8AA2BE;--linha:#E6EDF5;--fundo:#EEF3F9;--marca:#185FA5}
+    *{box-sizing:border-box;margin:0}html,body{height:100%}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--fundo);color:var(--tinta);-webkit-font-smoothing:antialiased}
+    .top{background:#fff;border-bottom:1px solid var(--linha);padding:13px 20px;display:flex;align-items:center;gap:11px;position:sticky;top:0;z-index:20}
+    .top .mono{width:38px;height:38px;border-radius:11px;background:var(--marca);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:15px;overflow:hidden;flex:0 0 38px}
+    .top .mono img{width:100%;height:100%;object-fit:contain}
+    .top b{font-size:15px}.top .s{font-size:12px;color:var(--tinta2)}
+    .top .prot{margin-left:auto;font-size:12px;color:var(--tinta2);text-align:right}.top .prot b{color:var(--tinta)}
+    .wrap{display:grid;grid-template-columns:1fr 400px;height:calc(100vh - 65px);min-height:520px}
+    .map{position:relative;background:#dfe8f2}#mapa{position:absolute;inset:0}
+    .etatag{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:#fff;border-radius:30px;padding:10px 20px;box-shadow:0 8px 22px rgba(4,44,83,.18);font-weight:800;color:var(--navy);font-size:15px;z-index:600;display:none;align-items:center;gap:8px;white-space:nowrap}
+    .etatag i{width:9px;height:9px;border-radius:50%;background:var(--azul2)}
+    .side{background:#fff;border-left:1px solid var(--linha);padding:24px;overflow:auto}
+    .big{font-size:26px;font-weight:900;color:var(--navy);line-height:1.1}.subl{font-size:13.5px;color:var(--tinta2);margin-top:4px}
+    .chip{display:inline-flex;align-items:center;gap:7px;margin-top:13px;font-weight:800;font-size:12.5px;padding:6px 13px;border-radius:20px}
+    .chip.a{background:#E4EEF9;color:var(--azul)}.chip.f{background:#E4F5EE;color:#0f6e56}.chip.sp{background:#FBF1DD;color:var(--aten)}.chip.c{background:#FBE8E6;color:var(--erro)}
+    .chip .d{width:8px;height:8px;border-radius:50%;background:currentColor}
+    .tl{margin:24px 0 6px}.step{display:flex;gap:13px;position:relative;padding-bottom:20px}.step:last-child{padding-bottom:0}
+    .step .dot{width:28px;height:28px;border-radius:50%;flex:0 0 28px;display:flex;align-items:center;justify-content:center;font-size:13px;z-index:2}
+    .step .dot.done{background:var(--ok);color:#fff}.step .dot.now{background:var(--azul);color:#fff;box-shadow:0 0 0 4px rgba(24,95,165,.16)}.step .dot.next{background:#dbe6f2;color:var(--tinta3)}
+    .step .ln{position:absolute;left:13px;top:28px;bottom:0;width:2px;background:var(--linha)}.step .ln.on{background:var(--ok)}
+    .step .tx b{font-size:14px;color:var(--tinta);display:block}.step .tx small{font-size:12px;color:var(--tinta2)}.step.fut .tx b{color:var(--tinta3)}
+    .card{border:1px solid var(--linha);border-radius:14px;padding:15px;margin-top:8px}
+    .card .rot{font-size:10.5px;font-weight:800;color:var(--tinta3);text-transform:uppercase;letter-spacing:.4px}.card .v{font-size:14px;color:var(--tinta);font-weight:600;margin-top:3px}
+    .mb{display:flex;align-items:center;gap:11px;margin-top:13px;padding-top:13px;border-top:1px solid var(--fundo)}
+    .mb .av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0C447C,#185FA5);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:0 0 40px;overflow:hidden}
+    .mb .av img{width:100%;height:100%;object-fit:cover}.mb b{font-size:14px;color:var(--tinta)}.mb small{font-size:12px;color:var(--tinta2)}
+    .foot{margin-top:20px;font-size:11px;color:var(--tinta3);text-align:center}
+    .carregando,.erro{display:flex;flex-direction:column;align-items:center;justify-content:center;height:calc(100vh - 65px);gap:14px;color:var(--tinta2);text-align:center;padding:30px}
+    .spin{width:32px;height:32px;border:3px solid #cddcec;border-top-color:var(--marca);border-radius:50%;animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+    @media (max-width:820px){.wrap{grid-template-columns:1fr;height:auto;min-height:0}.map{height:280px}.side{border-left:none;border-top:1px solid var(--linha)}.etatag{font-size:14px;padding:9px 16px}}
   </style>
 </head>
 <body>
-  <div class="wrap" id="app">
-    <div class="estado" id="carregando"><b>Carregando…</b>Buscando os dados da entrega.</div>
-  </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script>
-  (function () {
-    var API = window.LOGIX_API || '/api/v1';
-    var params = new URLSearchParams(location.search);
-    var token = params.get('t') || params.get('token') || '';
-    var app = document.getElementById('app');
-    var mapa = null, marcadores = {}, timerPoll = null;
-
-    var SIGLA = { SP:{c:'sp',txt:'Aguardando profissional'}, A:{c:'a',txt:'Em rota'}, F:{c:'f',txt:'Entregue'}, C:{c:'c',txt:'Cancelada'} };
-
-    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];}); }
-    function ativo(sigla){ return sigla==='SP'||sigla==='A'; }
-
-    function estado(titulo, msg){
-      app.innerHTML = '<div class="estado"><b>'+esc(titulo)+'</b>'+esc(msg||'')+'</div>';
-    }
-
-    function fmtHora(d){
-      if(!d) return '';
-      try{ return new Date(d).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
-      catch(e){ return ''; }
-    }
-
-    async function carregar(primeira){
-      try{
-        var resp = await fetch(API + '/integracao/rastreio/' + encodeURIComponent(token));
-        if(!resp.ok) throw new Error('nao encontrado');
-        var d = await resp.json();
-        render(d, primeira);
-        if(!ativo(d.status_sigla) && timerPoll){ clearInterval(timerPoll); timerPoll = null; }
-      }catch(e){
-        if(primeira) estado('Rastreio não encontrado', 'Confira o link recebido ou fale com a loja.');
-      }
-    }
-
-    function render(d, primeira){
-      var sig = SIGLA[d.status_sigla] || {c:'sp',txt:d.status||''};
-      if(primeira){
-        var acento = (d.marca && d.marca.cor) ? d.marca.cor : '#185FA5';
-        document.documentElement.style.setProperty('--acento', acento);
-        app.innerHTML =
-          '<header>' +
-            (d.marca && d.marca.logo ? '<img src="'+esc(d.marca.logo)+'" alt="" onerror="this.style.display=\'none\'"/>' : '') +
-            '<span class="marca">'+esc((d.marca && d.marca.nome) || d.loja || 'Rastreio')+'</span>' +
-            '<span class="os">'+esc(d.protocolo||'')+'</span>' +
-          '</header>' +
-          '<div class="barra"><span class="pill '+sig.c+'" id="pill">'+esc(sig.txt)+'</span>' +
-            '<span class="info" id="info"></span></div>' +
-          '<div id="mapa"></div>' +
-          '<div id="moto"></div>' +
-          '<div class="timeline"><h3>Trajeto</h3><div id="pontos"></div></div>' +
-          '<div class="rodape">Rastreio em tempo real</div>';
-        iniciarMapa(d);
-      } else {
-        var pill = document.getElementById('pill');
-        if(pill){ pill.className = 'pill '+sig.c; pill.textContent = sig.txt; }
-      }
-
-      var info = document.getElementById('info');
-      if(info){
-        var partes = [];
-        if(d.distancia_km) partes.push(Number(d.distancia_km).toFixed(1).replace('.',',')+' km');
-        if(d.status_sigla==='F' && d.concluida_em) partes.push('Entregue '+fmtHora(d.concluida_em));
-        info.textContent = partes.join(' · ');
-      }
-
-      // Motoboy
-      var moto = document.getElementById('moto');
-      if(moto){
-        if(d.motoboy && d.motoboy.nome){
-          moto.className='moto';
-          moto.innerHTML =
-            (d.motoboy.foto ? '<img src="'+esc(d.motoboy.foto)+'" onerror="this.style.visibility=\'hidden\'"/>' : '<div style="width:44px;height:44px;border-radius:50%;background:var(--fundo);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--tinta2)">'+esc((d.motoboy.nome[0]||'').toUpperCase())+'</div>') +
-            '<div><div class="n">'+esc(d.motoboy.nome)+'</div><div class="s">Profissional responsável</div></div>';
-        } else { moto.className=''; moto.innerHTML=''; }
-      }
-
-      // Timeline
-      var pts = document.getElementById('pontos');
-      if(pts){
-        var html = '';
-        // coleta como primeiro item
-        html += itemPonto({ nome:'Coleta', endereco:d.coleta && d.coleta.endereco, status: (d.status_sigla==='SP'?'pendente':'coletado') });
-        (d.pontos||[]).forEach(function(p){ html += itemPonto(p); });
-        pts.innerHTML = html;
-      }
-
-      atualizarMapa(d);
-    }
-
-    function itemPonto(p){
-      var cls = ''; var hora = '';
-      if(p.status==='entregue' || p.status==='coletado'){ cls='done'; }
-      else if(p.status==='insucesso'){ cls='fail'; }
-      if(p.finalizado_em) hora = 'Concluído às '+fmtHora(p.finalizado_em);
-      else if(p.chegou_em) hora = 'Chegou às '+fmtHora(p.chegou_em);
-      return '<div class="ponto '+cls+'"><span class="dot"></span>' +
-        '<div class="tit">'+esc(p.nome || p.endereco || 'Ponto')+'</div>' +
-        (p.endereco ? '<div class="end">'+esc(p.endereco)+'</div>' : '') +
-        (hora ? '<div class="hora">'+esc(hora)+'</div>' : '') +
-        '</div>';
-    }
-
-    function iniciarMapa(d){
-      var alvo = (d.coleta && d.coleta.lat) ? [d.coleta.lat, d.coleta.lng] : [-12.9714, -38.5014];
-      mapa = L.map('mapa', { zoomControl:true, attributionControl:false }).setView(alvo, 13);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        subdomains:'abcd', maxZoom:20, detectRetina:true
-      }).addTo(mapa);
-      setTimeout(function(){ if(mapa) mapa.invalidateSize(); }, 200);
-    }
-
-    function icone(cor, txt){
-      return L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
-        html:'<div style="width:26px;height:26px;border-radius:50%;background:'+cor+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700">'+txt+'</div>' });
-    }
-
-    function atualizarMapa(d){
-      if(!mapa) return;
-      var pontos = [];
-      // coleta
-      if(d.coleta && d.coleta.lat){
-        setMarcador('coleta', d.coleta.lat, d.coleta.lng, icone('#042C53','C'), 'Coleta');
-        pontos.push([d.coleta.lat, d.coleta.lng]);
-      }
-      // destinos
-      (d.pontos||[]).forEach(function(p,i){
-        if(p.lat && p.lng){
-          var cor = p.status==='entregue' ? '#1f9d6b' : (p.status==='insucesso' ? '#dc2626' : '#185FA5');
-          setMarcador('p'+i, p.lat, p.lng, icone(cor, String(p.ordem||i+1)), p.nome || p.endereco || 'Ponto');
-          pontos.push([p.lat, p.lng]);
-        }
-      });
-      // motoboy
-      if(d.posicao_atual && d.posicao_atual.lat){
-        setMarcador('moto', d.posicao_atual.lat, d.posicao_atual.lng, icone('#f59e0b','●'), 'Motoboy');
-        pontos.push([d.posicao_atual.lat, d.posicao_atual.lng]);
-      } else if(marcadores.moto){ mapa.removeLayer(marcadores.moto); delete marcadores.moto; }
-
-      if(pontos.length && !mapa._ajustou){
-        try{ mapa.fitBounds(pontos, { padding:[40,40], maxZoom:15 }); mapa._ajustou = true; }catch(e){}
-      }
-    }
-
-    function setMarcador(id, lat, lng, ic, titulo){
-      if(marcadores[id]){ marcadores[id].setLatLng([lat,lng]); }
-      else { marcadores[id] = L.marker([lat,lng], { icon:ic, title:titulo }).addTo(mapa); if(titulo) marcadores[id].bindPopup(titulo); }
-    }
-
-    // ── início ──
-    if(!token){ estado('Link inválido', 'Falta o código de rastreio no endereço.'); }
-    else {
-      carregar(true);
-      timerPoll = setInterval(function(){ carregar(false); }, 15000);
-    }
-  })();
-  </script>
+  <div id="app"><div class="carregando"><div class="spin"></div><div>Carregando sua entrega…</div></div></div>
+<script>
+(function(){
+  var API = window.LOGIX_API;
+  var mPath = location.pathname.match(/\/rastreio\/([^/?#]+)/);
+  var qp = new URLSearchParams(location.search);
+  var token = (mPath && mPath[1]) || qp.get('t') || qp.get('token') || '';
+  var app = document.getElementById('app');
+  var mapa=null, mkMoto=null, mkDest=null, mkColeta=null, linha=null, primeiraCentragem=true;
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function hora(iso){ if(!iso) return ''; try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+  function distKm(a,b){ if(!a||!b) return null; var R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180; var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2); return 2*R*Math.asin(Math.sqrt(x)); }
+  function estagio(st){ if(st==='entregue') return 3; if(st==='em_rota') return 2; if(st==='em_coleta') return 1; return 0; }
+  function render(d){
+    var cor=(d.marca&&d.marca.cor)||'#185FA5'; document.documentElement.style.setProperty('--marca',cor);
+    var nomeMarca=(d.marca&&d.marca.nome)||d.loja||'Acompanhe sua entrega'; var logo=d.marca&&d.marca.logo;
+    var cancelada=d.status==='cancelada', entregue=d.status==='entregue', est=estagio(d.status);
+    var pts=d.pontos||[]; var destino=pts.find(function(p){return p.status!=='entregue'&&p.status!=='finalizado';})||pts[pts.length-1]||null;
+    var etaTxt='';
+    if(d.status==='em_rota'&&d.posicao&&destino&&destino.lat){ var km=distKm({lat:d.posicao.lat,lng:d.posicao.lng},{lat:Number(destino.lat),lng:Number(destino.lng)}); if(km!=null){var min=Math.max(1,Math.round(km/22*60)); etaTxt='chega em ~'+min+' min';} }
+    var heroTitulo,chipCls,chipTxt;
+    if(cancelada){heroTitulo='Entrega cancelada';chipCls='c';chipTxt='Cancelada';}
+    else if(entregue){heroTitulo='Entrega concluída!';chipCls='f';chipTxt='Entregue';}
+    else if(d.status==='em_rota'){heroTitulo='Seu pedido está a caminho';chipCls='a';chipTxt='A caminho';}
+    else if(d.status==='em_coleta'||d.status==='aguardando_coleta'){heroTitulo='Preparando sua entrega';chipCls='sp';chipTxt='Em coleta';}
+    else {heroTitulo='Pedido recebido';chipCls='sp';chipTxt='Recebido';}
+    var passos=[{b:'Pedido recebido',s:hora(d.criado_em)},{b:'Coletado',s:hora(d.chegada_coleta_em)||'Na coleta'},{b:'A caminho da entrega',s:d.iniciada_em?('Desde '+hora(d.iniciada_em)):'O entregador está indo até você'},{b:'Entregue',s:d.concluida_em?hora(d.concluida_em):'—'}];
+    var tlHtml=passos.map(function(p,i){var cls=i<est?'done':(i===est&&!entregue?'now':(entregue&&i===3?'done':'next'));var ic=cls==='done'?'✓':(cls==='now'?'●':(i+1));var lnOn=i<est?'on':'';var futu=cls==='next'?'fut':'';return '<div class="step '+futu+'"><div class="dot '+cls+'">'+ic+'</div>'+(i<3?'<div class="ln '+lnOn+'"></div>':'')+'<div class="tx"><b>'+p.b+'</b><small>'+esc(p.s)+'</small></div></div>';}).join('');
+    var iniMarca=(nomeMarca||'IG').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var selo=logo?'<img src="'+esc(logo)+'" alt="">':esc(iniMarca);
+    var iniMb=d.motoboy&&d.motoboy.nome?d.motoboy.nome.trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase():'—';
+    var avMb=d.motoboy&&d.motoboy.foto?'<img src="'+esc(d.motoboy.foto)+'" alt="">':esc(iniMb);
+    app.innerHTML='<div class="top"><div class="mono">'+selo+'</div><div><b>'+esc(nomeMarca)+'</b><div class="s">Acompanhe sua entrega em tempo real</div></div><div class="prot">Protocolo <b>'+esc(d.protocolo||'')+'</b><br>atualiza automaticamente</div></div>'+
+      '<div class="wrap"><div class="map"><div id="mapa"></div><div class="etatag" id="eta"><i></i> <span></span></div></div>'+
+      '<div class="side"><div class="big">'+esc(heroTitulo)+'</div><div class="subl">'+(entregue?('Entregue '+esc(hora(d.concluida_em))):(cancelada?'Esta entrega foi cancelada.':''))+'</div>'+
+      '<span class="chip '+chipCls+'"><span class="d"></span>'+esc(chipTxt)+'</span><div class="tl">'+tlHtml+'</div>'+
+      '<div class="card"><div class="rot">Entrega em</div><div class="v">'+esc(destino?(destino.endereco||destino.nome_fantasia||'—'):'—')+'</div>'+
+      (d.motoboy&&d.motoboy.nome?'<div class="mb"><div class="av">'+avMb+'</div><div><b>'+esc(d.motoboy.nome)+'</b><small>Entregador</small></div></div>':'')+'</div>'+
+      '<div class="foot">Atualiza sozinho · você não precisa recarregar</div></div></div>';
+    var etaEl=document.getElementById('eta'); if(etaTxt){etaEl.style.display='flex';etaEl.querySelector('span').textContent=etaTxt;}
+    desenharMapa(d,destino);
+  }
+  function desenharMapa(d,destino){
+    if(!window.L) return;
+    if(!mapa){mapa=L.map('mapa',{zoomControl:true});L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19}).addTo(mapa);}
+    var pts=[];
+    if(destino&&destino.lat){var dll=[Number(destino.lat),Number(destino.lng)];pts.push(dll);if(mkDest)mkDest.setLatLng(dll);else mkDest=L.marker(dll,{icon:pinIcon('#D0584F')}).addTo(mapa).bindPopup('Destino');}
+    if(d.coleta&&d.coleta.lat){var cll=[Number(d.coleta.lat),Number(d.coleta.lng)];pts.push(cll);if(mkColeta)mkColeta.setLatLng(cll);else mkColeta=L.marker(cll,{icon:pinIcon('#1F9D6B')}).addTo(mapa).bindPopup('Coleta');}
+    if(d.posicao){var mll=[d.posicao.lat,d.posicao.lng];pts.push(mll);if(mkMoto)mkMoto.setLatLng(mll);else mkMoto=L.marker(mll,{icon:motoIcon(),zIndexOffset:1000}).addTo(mapa).bindPopup('Entregador');}else if(mkMoto){mapa.removeLayer(mkMoto);mkMoto=null;}
+    if(d.posicao&&destino&&destino.lat){var seg=[[d.posicao.lat,d.posicao.lng],[Number(destino.lat),Number(destino.lng)]];if(linha)linha.setLatLngs(seg);else linha=L.polyline(seg,{color:'#185FA5',weight:4,opacity:.55,dashArray:'2 10'}).addTo(mapa);}
+    if(primeiraCentragem&&pts.length){mapa.fitBounds(pts,{padding:[50,50],maxZoom:15});primeiraCentragem=false;setTimeout(function(){mapa.invalidateSize();},60);}
+  }
+  function pinIcon(cor){return L.divIcon({className:'',iconSize:[30,38],iconAnchor:[15,36],html:'<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:'+cor+';transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.3)"></div>'});}
+  function motoIcon(){return L.divIcon({className:'',iconSize:[46,46],iconAnchor:[23,23],html:'<div style="width:46px;height:46px;border-radius:50%;background:#fff;border:3px solid #185FA5;box-shadow:0 4px 12px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:22px">🛵</div>'});}
+  function erro(t,s){app.innerHTML='<div class="erro"><div style="font-size:34px">📦</div><div style="font-size:16px;font-weight:800;color:var(--tinta)">'+esc(t)+'</div><div>'+esc(s||'')+'</div></div>';}
+  async function carregar(){
+    if(!token){erro('Link inválido','Falta o código de rastreio no endereço.');return;}
+    try{var r=await fetch(API+'/integracao/rastreio/'+encodeURIComponent(token));if(!r.ok){erro('Entrega não encontrada','Confira o link com quem enviou.');return;}var d=await r.json();render(d);if(d.status==='entregue'||d.status==='cancelada'){if(window._t)clearInterval(window._t);}}catch(e){}
+  }
+  function carregarLeaflet(cb){if(window.L)return cb();var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=cb;document.body.appendChild(s);}
+  carregarLeaflet(function(){carregar();window._t=setInterval(carregar,12000);});
+})();
+</script>
 </body>
 </html>

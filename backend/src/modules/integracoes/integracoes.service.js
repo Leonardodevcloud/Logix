@@ -560,7 +560,7 @@ async function rastreioPublico(token) {
   const tk = M.s(token);
   if (!tk) throw AppError.validacao('Token de rastreio ausente');
   const { rows } = await query(
-    `SELECT e.id, e.protocolo, e.status, e.criado_em, e.concluida_em,
+    `SELECT e.id, e.protocolo, e.status, e.criado_em, e.concluida_em, e.iniciada_em, e.chegada_coleta_em,
             e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
             e.distancia_km, e.tempo_estimado_min, e.motoboy_id,
             m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto,
@@ -593,6 +593,8 @@ async function rastreioPublico(token) {
     status: e.status,
     status_sigla: M.statusParaSigla(e.status, e.motoboy_id),
     criado_em: e.criado_em,
+    chegada_coleta_em: e.chegada_coleta_em,
+    iniciada_em: e.iniciada_em,
     concluida_em: e.concluida_em,
     distancia_km: e.distancia_km != null ? Number(e.distancia_km) : null,
     loja: e.loja_nome || null,
