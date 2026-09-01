@@ -142,6 +142,7 @@ async function motoboysOnline(empresaId, lojaId) {
             AND e.status = ANY($2) AND ($3::uuid IS NULL OR e.loja_id = $3)
       WHERE ($1::uuid IS NULL OR m.empresa_id = $1)
         AND m.status = 'ativo' AND m.online = TRUE AND r.lat IS NOT NULL
+        AND r.capturado_em > now() - interval '1 hour'
       GROUP BY m.id, r.lat, r.lng, r.capturado_em`,
     [empresaId || null, STATUS_ATIVOS, lojaId || null]
   );

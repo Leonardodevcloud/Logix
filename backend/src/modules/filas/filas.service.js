@@ -27,6 +27,7 @@ async function listarDisponiveis(empresaId) {
           WHERE empresa_id = $1 AND status = ANY($2) GROUP BY motoboy_id
        ) c ON c.motoboy_id = m.id
       WHERE m.empresa_id = $1 AND m.online = TRUE AND m.status = 'ativo'
+        AND EXISTS (SELECT 1 FROM rastreamento rr WHERE rr.motoboy_id = m.id AND rr.capturado_em > now() - interval '1 hour')
       ORDER BY carga ASC, m.nome_completo`,
     [empresaId, STATUS_ATIVOS]
   );
