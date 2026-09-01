@@ -54,23 +54,24 @@ export default async function handler(req) {
     );
   }
 
-  // Card 1200x630 — layout em coluna simples (sem position:absolute), todos os
-  // divs com display:flex, que é o que o Satori (@vercel/og) exige.
+  // Card 1200x630 — CENTRALIZADO (o WhatsApp recorta as bordas; centralizar garante
+  // que logo + nome apareçam inteiros em qualquer recorte). Todos os divs com display:flex.
+  const nomeCurto = String(nome).length > 30;
   return new ImageResponse(
     h('div', {
       style: {
         width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
-        justifyContent: 'center', padding: '0 90px',
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '60px 80px',
         backgroundColor: fundo,
         backgroundImage: `linear-gradient(135deg, ${prim} 0%, ${fundo} 60%)`,
         color: '#fff', fontFamily: 'sans-serif',
       },
     },
-      h('div', { style: { display: 'flex', marginBottom: 34 } }, selo(120)),
-      h('div', { style: { display: 'flex', fontSize: 76, fontWeight: 900, lineHeight: 1.05 } }, nome),
-      h('div', { style: { display: 'flex', fontSize: 30, fontWeight: 600, color: 'rgba(255,255,255,0.82)', marginTop: 18, maxWidth: 900 } },
-        'Central de entregas. Acompanhe suas corridas em tempo real.'),
-      h('div', { style: { display: 'flex', fontSize: 24, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginTop: 40 } }, host)
+      h('div', { style: { display: 'flex', marginBottom: 30 } }, selo(140)),
+      h('div', { style: { display: 'flex', textAlign: 'center', fontSize: nomeCurto ? 52 : 68, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-1px', maxWidth: 1000 } }, nome),
+      h('div', { style: { display: 'flex', fontSize: 27, fontWeight: 600, color: 'rgba(255,255,255,0.8)', marginTop: 22 } },
+        'Central de entregas — em tempo real'),
+      h('div', { style: { display: 'flex', fontSize: 22, fontWeight: 800, color: 'rgba(255,255,255,0.65)', marginTop: 30, textTransform: 'uppercase', letterSpacing: '1px' } }, host)
     ),
     { width: 1200, height: 630 }
   );
