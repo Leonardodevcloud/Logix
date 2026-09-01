@@ -68,6 +68,7 @@ export async function montar(container) {
     const logoInp = el('input', { class: 'lx-input', value: ehDataUri(dados.logo_url) ? '' : (dados.logo_url || ''), placeholder: 'https://…/logo.png (ou envie um arquivo)' });
     const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
     const dominioInp = el('input', { class: 'lx-input', value: dados.dominio || '', placeholder: 'painel.ig-express.com (domínio próprio)' });
+    const ogInp = el('input', { class: 'lx-input', value: dados.og_image_url || '', placeholder: 'https://…/card.png (opcional — senão é gerado do logo)' });
     // Textos da tela de login (guardados em extra.login)
     const exLogin = (dados.extra && dados.extra.login) || {};
     const fraseInp = el('input', { class: 'lx-input', value: exLogin.frase || '', placeholder: 'Sua entrega, na velocidade certa.' });
@@ -201,6 +202,7 @@ export async function montar(container) {
           logo_url: logoData || logoInp.value.trim() || undefined,
           subdominio: sub || undefined,
           dominio: dom || undefined,
+          og_image_url: ogInp.value.trim() || undefined,
           extra,
         }, { empresaId });
         msg.style.color = 'var(--lx-ok)';
@@ -218,6 +220,7 @@ export async function montar(container) {
         campo('Logo por upload', el('div', { style: 'display:flex;align-items:center;gap:10px' }, thumb, btnUpload, btnLimpar, fileInp)),
         campo('Domínio do cliente (subdomínio)', subdominioInp),
         campo('Domínio próprio (host completo)', dominioInp),
+        campo('Imagem de card (WhatsApp/redes)', ogInp),
         campo('Login · frase de impacto', fraseInp),
         campo('Login · subtítulo', subtituloInp),
         campo('Login · diferenciais (separados por vírgula)', difsInp),
