@@ -20,8 +20,10 @@ async function initBrandingTables() {
       remetente_email    TEXT,
       mostrar_powered_by BOOLEAN NOT NULL DEFAULT TRUE,
       extra              JSONB,
+      og_image_url       TEXT,
       atualizado_em      TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+  await query(`ALTER TABLE empresa_branding ADD COLUMN IF NOT EXISTS og_image_url TEXT`);
   await query(`CREATE INDEX IF NOT EXISTS idx_branding_dominio ON empresa_branding(dominio)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_branding_subdominio ON empresa_branding(subdominio)`);
 }

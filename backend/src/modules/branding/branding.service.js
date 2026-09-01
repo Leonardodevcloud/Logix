@@ -38,6 +38,7 @@ async function obterPublico({ empresaId = null, host = null }) {
     logo_escuro_url: b.logo_escuro_url,
     icone_app_url: b.icone_app_url,
     favicon_url: b.favicon_url,
+    og_image_url: b.og_image_url,
     cor_primaria: b.cor_primaria || TEMA_PADRAO.cor_primaria,
     cor_secundaria: b.cor_secundaria || TEMA_PADRAO.cor_secundaria,
     cor_destaque: b.cor_destaque || TEMA_PADRAO.cor_destaque,
@@ -66,8 +67,8 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
     const { rows } = await query(
       `INSERT INTO empresa_branding (empresa_id, nome_exibicao, logo_url, logo_escuro_url, icone_app_url,
          favicon_url, cor_primaria, cor_secundaria, cor_destaque, cor_clara,
-         dominio, subdominio, remetente_nome, remetente_email, mostrar_powered_by, extra, atualizado_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+         dominio, subdominio, remetente_nome, remetente_email, mostrar_powered_by, extra, og_image_url, atualizado_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
        ON CONFLICT (empresa_id) DO UPDATE SET
          nome_exibicao      = COALESCE(EXCLUDED.nome_exibicao, empresa_branding.nome_exibicao),
          logo_url           = COALESCE(EXCLUDED.logo_url, empresa_branding.logo_url),
@@ -84,6 +85,7 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
          remetente_email    = COALESCE(EXCLUDED.remetente_email, empresa_branding.remetente_email),
          mostrar_powered_by = COALESCE(EXCLUDED.mostrar_powered_by, empresa_branding.mostrar_powered_by),
          extra              = COALESCE(EXCLUDED.extra, empresa_branding.extra),
+         og_image_url       = COALESCE(EXCLUDED.og_image_url, empresa_branding.og_image_url),
          atualizado_em      = now()
        RETURNING *`,
       [empresaId, dados.nome_exibicao || null, dados.logo_url || null, dados.logo_escuro_url || null,
@@ -93,7 +95,8 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
        dados.subdominio ? dados.subdominio.toLowerCase() : null,
        dados.remetente_nome || null, dados.remetente_email || null,
        dados.mostrar_powered_by === undefined ? true : !!dados.mostrar_powered_by,
-       dados.extra ? JSON.stringify(dados.extra) : null]
+       dados.extra ? JSON.stringify(dados.extra) : null,
+       dados.og_image_url || null]
     );
     await registrarAuditoria({
       empresaId, usuarioId, categoria: AUDIT_CATEGORIES.BRANDING, acao: 'definir', ip,
