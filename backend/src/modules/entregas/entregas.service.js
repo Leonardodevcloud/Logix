@@ -1762,7 +1762,7 @@ async function gerarProtocoloHtml(id) {
 
   <div class="rodape">
     <span>Gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Bahia' })}</span>
-    <span>Logix · Gestão de Entregas</span>
+    <span>${nomeEmpresa} · Gestão de Entregas</span>
   </div>
 
 </div>

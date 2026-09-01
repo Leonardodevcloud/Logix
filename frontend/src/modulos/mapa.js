@@ -5,6 +5,7 @@
 import { get, getToken } from '../core/api.js';
 import { el } from '../core/ui.js';
 import { aplicarBasemap } from '../core/mapa-tiles.js';
+import { reaplicarTema } from '../core/tema.js';
 
 const COR = {
   navy: '#042C53', azul: '#185FA5', azulC: '#B5D4F4',
@@ -133,7 +134,7 @@ export async function montar(container) {
 
   const titulo = el('div', { style: `position:absolute;top:14px;left:14px;z-index:900;background:#fff;border:1px solid ${COR.linha};
     border-radius:12px;padding:10px 14px;box-shadow:0 2px 10px rgba(4,44,83,.08);display:flex;align-items:center;gap:10px` },
-    el('div', { style: `width:30px;height:30px;border-radius:8px;background:${COR.navy};color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px` }, 'LX'),
+    el('div', { class: 'lx-mono', 'data-lx-logo': '', style: `width:30px;height:30px;border-radius:8px;overflow:hidden;background:${COR.navy};color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px` }, 'LX'),
     el('div', {}, el('div', { style: 'font-weight:800;font-size:14px;color:#0e2138' }, 'Mapa em tempo real'),
       el('div', { id: 'mapa-status', style: 'font-size:11px;color:#8ba5bc' }, 'Carregando…')));
 
@@ -146,6 +147,7 @@ export async function montar(container) {
     el('div', { style: 'display:flex;align-items:center;gap:7px' }, el('span', { style: `width:14px;height:14px;border-radius:50%;border:3px solid ${COR.vermelho};box-sizing:border-box;box-shadow:0 0 0 3px rgba(226,59,59,.35)` }), 'Alerta do radar'));
 
   const wrap = el('div', { style: 'position:fixed;inset:0;background:#eef4fb' }, mapaDiv, titulo, legenda, painel);
+  setTimeout(reaplicarTema, 0); // troca o "LX" do card pela logo do cliente
   container.append(wrap);
 
   const mapa = window.L.map(mapaDiv, { center: [-12.97, -38.5], zoom: 13, zoomControl: false });

@@ -1,7 +1,10 @@
 const { query } = require('../../shared/db');
 
 async function initEntregasTables() {
-  // Sequência para o protocolo legível (LX-NNNNN)
+  // Protocolo agora é só número. Remove o prefixo 'LX-' das corridas antigas
+  // (idempotente: após a 1ª execução, nenhuma linha casa mais).
+  await query(`UPDATE entregas SET protocolo = substring(protocolo from 4) WHERE protocolo LIKE 'LX-%'`);
+  // Sequência para o protocolo legível (número)
   await query(`CREATE SEQUENCE IF NOT EXISTS seq_protocolo_entrega START 20000`);
 
   await query(`
