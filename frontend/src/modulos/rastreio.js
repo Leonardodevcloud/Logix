@@ -377,7 +377,7 @@ export async function montar(container) {
             el('span', { class: 'lx-mb-sub' }, m.telefone_principal || '—')),
           el('span', { class: `lx-pill ${pillClass}` }, pillLabel)),
         el('div', { class: 'lx-mb-meta' },
-          el('span', {}, ico(SVG.pin, '#7BA4C7'), dist != null ? dist.toFixed(1) + ' km da loja' : 'sem GPS'),
+          el('span', {}, ico(SVG.pin, '#7BA4C7'), (m.lat != null && m.lng != null) ? (dist != null ? dist.toFixed(1) + ' km da loja' : 'no mapa') : 'sem GPS'),
           el('span', {}, ico(SVG.clock, '#7BA4C7'), fmtAgo(m.ultima_posicao_em))));
 
       if (m.entregas_ativas > 0) {
