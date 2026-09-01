@@ -18,6 +18,7 @@ const auth = require('./src/modules/auth');
 const empresas = require('./src/modules/empresas');
 const motoboys = require('./src/modules/motoboys');
 const entregas = require('./src/modules/entregas');
+const rotas = require('./src/modules/rotas');
 const branding = require('./src/modules/branding');
 const permissoes = require('./src/modules/permissoes');
 const filas = require('./src/modules/filas');
@@ -90,6 +91,7 @@ function montarApp() {
   api.use('/empresas', empresas.initEmpresasRoutes());
   api.use('/motoboys', motoboys.initMotoboysRoutes());
   api.use('/entregas', entregas.initEntregasRoutes());
+  api.use('/rotas', rotas.initRotasRoutes());
   api.use('/branding', branding.initBrandingRoutes());
   api.use('/permissoes', permissoes.initPermissoesRoutes());
   api.use('/filas', filas.initFilasRoutes());

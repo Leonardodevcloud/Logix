@@ -16,7 +16,10 @@ function gruposNav() {
       ]},
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
-        { rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' },
+        { rotulo: 'Entregadores', icone: 'motoboys', filhos: [
+          { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
+          { rota: '/rotas', rotulo: 'Rotas traçadas' },
+        ] },
         { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
       ]},
       { titulo: 'Sistema', itens: [
@@ -49,7 +52,10 @@ function gruposNav() {
   if (central && auth.temModulo('lojas') && auth.pode('lojas.ver'))
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
   if (auth.temModulo('motoboys') && auth.pode('motoboys.ver'))
-    operacao.push({ rota: '/motoboys', rotulo: 'Motoboys', icone: 'motoboys' });
+    operacao.push({ rotulo: 'Entregadores', icone: 'motoboys', filhos: [
+      { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
+      { rota: '/rotas', rotulo: 'Rotas traçadas' },
+    ] });
   // Financeiro: ferramenta da central — aparece por permissão (não é módulo
   // vendável por cliente, então não depende de temModulo).
   if (central && auth.pode('financeiro.ver'))
@@ -116,12 +122,28 @@ export function casca(titulo, conteudo, subtitulo) {
 
   const grupos = gruposNav().map((g) => el('div', {},
     el('div', { class: 'lx-nav-lbl' }, g.titulo),
-    ...g.itens.map((n) => el('button', {
-      class: 'lx-nav-i' + (ativo === n.rota ? ' on' : ''),
-      onClick: () => n.novaAba
-        ? window.open(location.pathname + '#' + n.rota, '_blank')
-        : navegar(n.rota),
-    }, el('span', { html: iconeNav(n.icone) }), n.rotulo)),
+    ...g.itens.map((n) => {
+      if (n.filhos) {
+        const aberto = n.filhos.some((f) => ativo === f.rota);
+        const sub = el('div', { style: aberto ? '' : 'display:none' },
+          ...n.filhos.map((f) => el('button', {
+            class: 'lx-nav-i' + (ativo === f.rota ? ' on' : ''),
+            style: 'padding-left:46px;font-size:13px',
+            onClick: () => navegar(f.rota),
+          }, f.rotulo)));
+        const cab = el('button', { class: 'lx-nav-i',
+          onClick: () => { sub.style.display = sub.style.display === 'none' ? '' : 'none'; } },
+          el('span', { html: iconeNav(n.icone) }), n.rotulo,
+          el('span', { style: 'margin-left:auto;font-size:10px;opacity:.65' }, '\u25be'));
+        return el('div', {}, cab, sub);
+      }
+      return el('button', {
+        class: 'lx-nav-i' + (ativo === n.rota ? ' on' : ''),
+        onClick: () => n.novaAba
+          ? window.open(location.pathname + '#' + n.rota, '_blank')
+          : navegar(n.rota),
+      }, el('span', { html: iconeNav(n.icone) }), n.rotulo);
+    }),
   ));
 
   const side = el('aside', { class: 'lx-side' },
