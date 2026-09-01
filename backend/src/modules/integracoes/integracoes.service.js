@@ -577,7 +577,7 @@ async function rastreioPublico(token) {
   if (!e) throw AppError.naoEncontrado('Rastreio não encontrado');
 
   const { rows: pontos } = await query(
-    `SELECT ordem, nome_fantasia, endereco, lat, lng, status, chegou_em, finalizado_em, entregue_em
+    `SELECT ordem, nome_fantasia, endereco, lat, lng, status, eh_retorno, chegou_em, finalizado_em, entregue_em
        FROM entregas_pontos WHERE entrega_id = $1 ORDER BY ordem`, [e.id]);
 
   let posicao = null;
@@ -615,7 +615,7 @@ async function rastreioPublico(token) {
     posicao_atual: posicao,
     pontos: pontos.map((p) => ({
       ordem: p.ordem, nome: p.nome_fantasia, endereco: p.endereco,
-      lat: p.lat, lng: p.lng, status: p.status,
+      lat: p.lat, lng: p.lng, status: p.status, eh_retorno: p.eh_retorno,
       chegou_em: p.chegou_em, finalizado_em: p.finalizado_em || p.entregue_em,
     })),
     trajeto: trajeto,

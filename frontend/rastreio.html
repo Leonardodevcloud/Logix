@@ -60,19 +60,19 @@
   var qp = new URLSearchParams(location.search);
   var token = (mPath && mPath[1]) || qp.get('t') || qp.get('token') || '';
   var boot=document.getElementById('boot'), app=document.getElementById('app');
-  var mapa=null, mkMoto=null, mkDest=null, mkColeta=null, linhaTraj=null, primeira=true, montado=false, brandFeito=false, timer=null;
+  var mapa=null, mkMoto=null, mkDest=null, mkColeta=null, linhaTraj=null, primeira=true, montado=false, brandFeito=false, timer=null, corMarca='#185FA5';
 
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function hora(iso){ if(!iso) return ''; try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
   function distKm(a,b){ if(!a||!b) return null; var R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180; var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2); return 2*R*Math.asin(Math.sqrt(x)); }
   function ini(t){return String(t||'').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();}
-  function estagio(st){ if(st==='entregue') return 3; if(st==='em_rota') return 2; if(st==='em_coleta') return 1; return 0; }
+  function estagio(st){ if(st==='entregue') return 4; if(st==='em_rota') return 2; if(st==='em_coleta'||st==='aguardando_coleta') return 1; return 0; }
   function soDigitos(t){return String(t||'').replace(/\D/g,'');}
 
   // Marca (favicon + título + cor) — aplica uma vez.
   function aplicarMarca(d){
     if(brandFeito) return; brandFeito=true;
-    var cor=(d.marca&&d.marca.cor)||'#185FA5'; document.documentElement.style.setProperty('--marca',cor);
+    var cor=(d.marca&&d.marca.cor)||'#185FA5'; corMarca=cor; document.documentElement.style.setProperty('--marca',cor);
     var nome=(d.marca&&d.marca.nome)||d.loja||'Acompanhe sua entrega';
     document.getElementById('marcaNome').textContent=nome;
     document.getElementById('ttl').textContent=nome+' · Rastreio';
@@ -86,14 +86,32 @@
   function atualizarSide(d){
     var entregue=d.status==='entregue', cancelada=d.status==='cancelada', est=estagio(d.status);
     var pts=d.pontos||[]; var destino=pts.find(function(p){return p.status!=='entregue'&&p.status!=='finalizado';})||pts[pts.length-1]||null;
+    var mb0=d.motoboy||{};
+    // Retorno / insucesso = houve problema na entrega (não foi entregue).
+    var problema = pts.some(function(p){return p.status==='insucesso';}) || pts.some(function(p){return p.eh_retorno;});
     var heroTitulo,chipCls,chipTxt,ativo=false;
     if(cancelada){heroTitulo='Entrega cancelada';chipCls='c';chipTxt='Cancelada';}
+    else if(problema && (entregue || est>=2)){heroTitulo='Houve um problema na entrega';chipCls='c';chipTxt='Não entregue';}
     else if(entregue){heroTitulo='Entrega concluída!';chipCls='f';chipTxt='Entregue';}
     else if(d.status==='em_rota'){heroTitulo='Seu pedido está a caminho';chipCls='a';chipTxt='A caminho';ativo=true;}
-    else if(d.status==='em_coleta'||d.status==='aguardando_coleta'){heroTitulo='Preparando sua entrega';chipCls='sp';chipTxt='Em coleta';ativo=true;}
-    else {heroTitulo='Pedido recebido';chipCls='sp';chipTxt='Recebido';ativo=true;}
-    var passos=[{b:'Pedido recebido',s:hora(d.criado_em)},{b:'Coletado',s:hora(d.chegada_coleta_em)||'Na coleta'},{b:'A caminho da entrega',s:d.iniciada_em?('Desde '+hora(d.iniciada_em)):'O entregador está indo até você'},{b:'Entregue',s:d.concluida_em?hora(d.concluida_em):'—'}];
-    var tl=passos.map(function(p,i){var cls=i<est?'done':(i===est&&!entregue?'now':(entregue&&i===3?'done':'next'));var ic=cls==='done'?'✓':(cls==='now'?'●':(i+1));return '<div class="step '+(cls==='next'?'fut':'')+'"><div class="dot '+cls+'">'+ic+'</div>'+(i<3?'<div class="ln '+(i<est?'on':'')+'"></div>':'')+'<div class="tx"><b>'+p.b+'</b><small>'+esc(p.s)+'</small></div></div>';}).join('');
+    else if(d.status==='em_coleta'||d.status==='aguardando_coleta'){heroTitulo='Entregador a caminho da coleta';chipCls='sp';chipTxt='A caminho da coleta';ativo=true;}
+    else {heroTitulo='Preparando sua entrega';chipCls='sp';chipTxt='Recebido';ativo=true;}
+    var passoFinal = problema ? {b:'Não entregue',s:'Houve um problema na entrega'} : {b:'Entregue',s:d.concluida_em?hora(d.concluida_em):'—'};
+    var passos=[
+      {b:'Pedido recebido',s:hora(d.criado_em)},
+      {b:'Entregador a caminho da coleta',s: mb0.nome ? esc(mb0.nome) : 'Localizando entregador'},
+      {b:'Coletado · a caminho da entrega',s: d.chegada_coleta_em?('Coletado '+hora(d.chegada_coleta_em)):(d.status==='em_rota'?'A caminho da entrega':'—')},
+      passoFinal
+    ];
+    var finalErro = problema && (entregue || est>=2);
+    var tl=passos.map(function(p,i){
+      var cls;
+      if(i===3){ cls = finalErro ? 'done' : (entregue ? 'done' : 'next'); }
+      else { cls = i<est?'done':(i===est?'now':'next'); }
+      var ic = i===3&&finalErro ? '!' : (cls==='done'?'✓':(cls==='now'?'●':(i+1)));
+      var extra = i===3&&finalErro ? ' style="background:#D0584F;color:#fff"' : '';
+      return '<div class="step '+(cls==='next'?'fut':'')+'"><div class="dot '+cls+'"'+extra+'>'+ic+'</div>'+(i<3?'<div class="ln '+(i<est?'on':'')+'"></div>':'')+'<div class="tx"><b>'+p.b+'</b><small>'+esc(p.s)+'</small></div></div>';
+    }).join('');
     var mb=d.motoboy||{}; var avMb=mb.foto?'<img src="'+esc(mb.foto)+'" alt="">':esc(ini(mb.nome)||'—');
     var tel=soDigitos(mb.telefone);
     var ligar= tel? '<a class="lig" href="tel:+55'+tel+'">📞 Ligar</a>' : '';
@@ -119,11 +137,11 @@
     // Traçado real (trajeto GPS)
     if(d.trajeto&&d.trajeto.length>1){var seg=d.trajeto.map(function(p){return [p.lat,p.lng];});seg.forEach(function(ll){pts.push(ll);});if(linhaTraj)linhaTraj.setLatLngs(seg);else linhaTraj=L.polyline(seg,{color:'#185FA5',weight:5,opacity:.85,lineJoin:'round'}).addTo(mapa);}
     // Motoboy ao vivo
-    if(d.posicao_atual){var mll=[d.posicao_atual.lat,d.posicao_atual.lng];pts.push(mll);if(mkMoto)mkMoto.setLatLng(mll);else mkMoto=L.marker(mll,{icon:motoIcon(),zIndexOffset:1000}).addTo(mapa).bindPopup('Entregador');}
+    if(d.posicao_atual){var mll=[d.posicao_atual.lat,d.posicao_atual.lng];pts.push(mll);if(mkMoto)mkMoto.setLatLng(mll);else mkMoto=L.marker(mll,{icon:motoIcon(d.motoboy&&d.motoboy.foto,corMarca),zIndexOffset:1000}).addTo(mapa).bindPopup('Entregador');}
     if(primeira&&pts.length){mapa.fitBounds(pts,{padding:[50,50],maxZoom:16});primeira=false;setTimeout(function(){mapa.invalidateSize();},60);}
   }
   function pinIcon(cor){return L.divIcon({className:'',iconSize:[30,38],iconAnchor:[15,36],html:'<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:'+cor+';transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.3)"></div>'});}
-  function motoIcon(){return L.divIcon({className:'',iconSize:[46,46],iconAnchor:[23,23],html:'<div style="width:46px;height:46px;border-radius:50%;background:#fff;border:3px solid #185FA5;box-shadow:0 4px 12px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:22px">🛵</div>'});}
+  function motoIcon(foto,cor){var inner=foto?('<img src="'+foto+'" style="width:100%;height:100%;object-fit:cover">'):'🛵';return L.divIcon({className:'',iconSize:[52,52],iconAnchor:[26,26],html:'<div style="width:52px;height:52px;border-radius:50%;background:#fff;border:3px solid '+(cor||'#185FA5')+';box-shadow:0 4px 14px rgba(0,0,0,.4);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px">'+inner+'</div>'});}
 
   function iniciarMapa(googleKey, cb){
     mapa=L.map('mapa',{zoomControl:true});
