@@ -11,8 +11,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BACKEND = process.env.BRANDING_API || 'https://logix-production-61ae.up.railway.app/api/v1';
-// URL da API que o app usa em runtime (mantém o comportamento atual).
-const APP_API = process.env.LOGIX_API || 'https://logix-production-61ae.up.railway.app/api/v1';
+// A API é chamada pelo MESMO domínio do cliente (/bff), e o Vercel repassa pro
+// Railway — assim o "railway.app" some do código-fonte (white-label).
+const APP_API = '/bff/v1';
+// O WebSocket NÃO passa por proxy (Vercel não repassa WS): aponta direto pro backend.
+const APP_WS = process.env.LOGIX_WS || 'wss://logix-production-61ae.up.railway.app/ws';
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -70,7 +73,7 @@ function montarHtml({ nome, desc, cor, corPrim, logo, iniciais, favicon, ogImage
 <body>
   ${preload}
   <div id="app"></div>
-  <script>window.LOGIX_API = '${APP_API}';</script>
+  <script>window.LOGIX_API = '${APP_API}'; window.LOGIX_WS = '${APP_WS}';</script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>`;

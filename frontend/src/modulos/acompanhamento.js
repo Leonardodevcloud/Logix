@@ -1243,9 +1243,10 @@ export async function montar(container) {
   try {
     const token = getToken();
     if (token) {
-      const base = (window.LOGIX_API || '/api/v1');
-      const httpBase = base.startsWith('http') ? base : (location.origin + base);
-      const wsUrl = httpBase.replace(/^http/, 'ws').replace('/api/v1', '') + '/ws?token=' + token;
+      // WS direto no backend (LOGIX_WS). Fallback: deriva do API só se ele for absoluto.
+      const wsBase = window.LOGIX_WS
+        || (((window.LOGIX_API || '').startsWith('http') ? window.LOGIX_API : (location.origin + '/api/v1')).replace(/^http/, 'ws').replace('/api/v1', '') + '/ws');
+      const wsUrl = wsBase + '?token=' + token;
       _ws = new WebSocket(wsUrl);
       _ws.onmessage = (ev) => {
         try {

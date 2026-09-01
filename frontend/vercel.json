@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/og-image", "destination": "/api/og" },
     { "source": "/app.webmanifest", "destination": "/api/manifest" },
+    { "source": "/bff/:path*", "destination": "https://logix-production-61ae.up.railway.app/api/:path*" },
     { "source": "/(.*)", "destination": "/api/render" }
   ]
 }

@@ -159,7 +159,9 @@ function cardChave(c, recarregar) {
 
 // ── Bloco com link para a documentação completa ──────────────────────────────
 function blocoDocs() {
-  const baseApi = (window.LOGIX_API || (location.origin + '/api/v1')).replace(/\/$/, '');
+  // URL absoluta no domínio do cliente (o /bff é repassado ao backend pelo Vercel).
+  const rawApi = window.LOGIX_API || '/api/v1';
+  const baseApi = (rawApi.startsWith('http') ? rawApi : location.origin + rawApi).replace(/\/$/, '');
   const urlDocs = location.origin + '/integracao-docs.html';
   const ICONE_DOC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
   const ICONE_LINK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
