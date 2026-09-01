@@ -54,21 +54,23 @@ export default async function handler(req) {
     );
   }
 
-  // Card 1200x630
+  // Card 1200x630 — layout em coluna simples (sem position:absolute), todos os
+  // divs com display:flex, que é o que o Satori (@vercel/og) exige.
   return new ImageResponse(
     h('div', {
       style: {
         width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
         justifyContent: 'center', padding: '0 90px',
-        background: `linear-gradient(135deg, ${prim} 0%, ${fundo} 60%)`,
+        backgroundColor: fundo,
+        backgroundImage: `linear-gradient(135deg, ${prim} 0%, ${fundo} 60%)`,
         color: '#fff', fontFamily: 'sans-serif',
       },
     },
       h('div', { style: { display: 'flex', marginBottom: 34 } }, selo(120)),
-      h('div', { style: { fontSize: 76, fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.05 } }, nome),
-      h('div', { style: { fontSize: 30, fontWeight: 600, color: 'rgba(255,255,255,0.82)', marginTop: 18, maxWidth: 900 } },
+      h('div', { style: { display: 'flex', fontSize: 76, fontWeight: 900, lineHeight: 1.05 } }, nome),
+      h('div', { style: { display: 'flex', fontSize: 30, fontWeight: 600, color: 'rgba(255,255,255,0.82)', marginTop: 18, maxWidth: 900 } },
         'Central de entregas. Acompanhe suas corridas em tempo real.'),
-      h('div', { style: { position: 'absolute', bottom: 52, left: 90, fontSize: 24, fontWeight: 800, color: 'rgba(255,255,255,0.7)' } }, host)
+      h('div', { style: { display: 'flex', fontSize: 24, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginTop: 40 } }, host)
     ),
     { width: 1200, height: 630 }
   );
