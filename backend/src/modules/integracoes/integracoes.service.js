@@ -563,7 +563,7 @@ async function rastreioPublico(token) {
     `SELECT e.id, e.protocolo, e.status, e.criado_em, e.concluida_em, e.iniciada_em, e.chegada_coleta_em,
             e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng,
             e.distancia_km, e.tempo_estimado_min, e.motoboy_id,
-            m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto,
+            m.nome_completo AS motoboy_nome, m.foto_url AS motoboy_foto, m.telefone_principal AS motoboy_telefone,
             l.nome_fantasia AS loja_nome,
             b.nome_exibicao, b.logo_url, b.cor_primaria
        FROM entregas e
@@ -588,6 +588,17 @@ async function rastreioPublico(token) {
     if (pos[0]) posicao = { lat: Number(pos[0].lat), lng: Number(pos[0].lng), em: pos[0].capturado_em };
   }
 
+  const { rows: tj } = await query(`SELECT lat, lng FROM rastreamento WHERE entrega_id = $1 ORDER BY capturado_em ASC`, [e.id]);
+  const trajeto = tj.map(function (p) { return { lat: Number(p.lat), lng: Number(p.lng) }; });
+  let fotoUrl = e.motoboy_foto || null;
+  if (e.motoboy_id) {
+    try {
+      const storage = require('../../shared/storage');
+      const { rows: doc } = await query(`SELECT storage_key FROM motoboy_documentos WHERE tipo='selfie' AND motoboy_id=$1 LIMIT 1`, [e.motoboy_id]);
+      if (doc[0] && doc[0].storage_key) fotoUrl = await storage.urlDe(doc[0].storage_key).catch(function () { return null; });
+    } catch (e2) {}
+  }
+
   return {
     protocolo: e.protocolo,
     status: e.status,
@@ -599,7 +610,7 @@ async function rastreioPublico(token) {
     distancia_km: e.distancia_km != null ? Number(e.distancia_km) : null,
     loja: e.loja_nome || null,
     marca: { nome: e.nome_exibicao || null, logo: e.logo_url || null, cor: e.cor_primaria || null },
-    motoboy: e.motoboy_id ? { nome: e.motoboy_nome || null, foto: e.motoboy_foto || null } : null,
+    motoboy: e.motoboy_id ? { nome: e.motoboy_nome || null, foto: fotoUrl, telefone: e.motoboy_telefone || null } : null,
     coleta: { nome: e.coleta_nome, endereco: e.coleta_endereco, lat: e.coleta_lat, lng: e.coleta_lng },
     posicao_atual: posicao,
     pontos: pontos.map((p) => ({
@@ -607,6 +618,8 @@ async function rastreioPublico(token) {
       lat: p.lat, lng: p.lng, status: p.status,
       chegou_em: p.chegou_em, finalizado_em: p.finalizado_em || p.entregue_em,
     })),
+    trajeto: trajeto,
+    google_key: process.env.GOOGLE_MAPS_BROWSER_KEY || null,
   };
 }
 
