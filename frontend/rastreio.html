@@ -17,6 +17,10 @@
     .top .mono img{width:100%;height:100%;object-fit:contain}
     .top b{font-size:15px}.top .s{font-size:12px;color:var(--tinta2)}
     .top .prot{margin-left:auto;font-size:12px;color:var(--tinta2);text-align:right}.top .prot b{color:var(--tinta)}
+    .gps{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:3px;font-size:11.5px;font-weight:700}
+    .gps.on{color:var(--ok)}.gps.off{color:var(--erro)}
+    .gps .p{width:8px;height:8px;border-radius:50%;background:currentColor;flex:0 0 8px}
+    .gps.on .p{animation:pulseDot 1.4s infinite}
     .wrap{display:grid;grid-template-columns:1fr 400px;height:calc(100vh - 65px);min-height:520px}
     .map{position:relative;background:#dfe8f2}#mapa{position:absolute;inset:0}
     .etatag{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:#fff;border-radius:30px;padding:10px 20px;box-shadow:0 8px 22px rgba(4,44,83,.18);font-weight:800;color:var(--navy);font-size:15px;z-index:600;display:none;align-items:center;gap:8px;white-space:nowrap}
@@ -50,7 +54,7 @@
 <body>
   <div id="boot" class="carregando"><div class="spin"></div><div>Carregando sua entrega…</div></div>
   <div id="app" style="display:none">
-    <div class="top"><div class="mono" id="mono"></div><div><b id="marcaNome">Acompanhe sua entrega</b><div class="s">Acompanhe sua entrega em tempo real</div></div><div class="prot">Protocolo <b id="prot"></b><br>atualiza automaticamente</div></div>
+    <div class="top"><div class="mono" id="mono"></div><div><b id="marcaNome">Acompanhe sua entrega</b><div class="s">Acompanhe sua entrega em tempo real</div></div><div class="prot">Protocolo <b id="prot"></b><div id="gpsStatus" class="gps"></div></div></div>
     <div class="wrap"><div class="map"><div id="mapa"></div><div class="etatag" id="eta"><i></i> <span></span></div></div><div class="side" id="side"></div></div>
   </div>
 <script>
@@ -64,6 +68,7 @@
 
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function hora(iso){ if(!iso) return ''; try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
+  function horaHms(iso){ try{return new Date(iso).toLocaleTimeString('pt-BR',{timeZone:'America/Bahia'});}catch(e){return '';} }
   function distKm(a,b){ if(!a||!b) return null; var R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180; var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2); return 2*R*Math.asin(Math.sqrt(x)); }
   function ini(t){return String(t||'').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();}
   function estagio(st){ if(st==='entregue') return 4; if(st==='em_rota') return 2; if(st==='em_coleta'||st==='aguardando_coleta') return 1; return 0; }
@@ -127,6 +132,16 @@
     var etaEl=document.getElementById('eta'), etaTxt='';
     if(d.status==='em_rota'&&d.posicao_atual&&destino&&destino.lat){var km=distKm({lat:d.posicao_atual.lat,lng:d.posicao_atual.lng},{lat:Number(destino.lat),lng:Number(destino.lng)});if(km!=null){etaTxt='chega em ~'+Math.max(1,Math.round(km/22*60))+' min';}}
     if(etaTxt){etaEl.style.display='flex';etaEl.querySelector('span').textContent=etaTxt;} else {etaEl.style.display='none';}
+    // Indicador de conexão do GPS do entregador
+    var gpsEl=document.getElementById('gpsStatus');
+    var ativoGps = d.status==='aguardando_coleta' || d.status==='em_coleta' || d.status==='em_rota';
+    if(!ativoGps){ gpsEl.className='gps'; gpsEl.innerHTML = entregue ? 'Entrega finalizada' : (cancelada ? '' : ''); }
+    else {
+      var pos=d.posicao_atual;
+      var idade = (pos&&pos.em) ? (Date.now()-new Date(pos.em).getTime()) : Infinity;
+      if(pos && idade < 180000){ gpsEl.className='gps on'; gpsEl.innerHTML='<span class="p"></span> Atualizado às '+horaHms(pos.em); }
+      else { gpsEl.className='gps off'; gpsEl.innerHTML='<span class="p"></span> Sem conexão com o GPS do entregador'; }
+    }
     return destino;
   }
 
