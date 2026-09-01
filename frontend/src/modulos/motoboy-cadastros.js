@@ -176,6 +176,22 @@ async function abrirRevisao(motoboyId, aoFechar) {
     grid2(inp('Bairro', 'bairro', d.bairro), inp('Estado', 'estado', d.estado)),
     inp('Nova senha (deixe vazio para manter)', 'senha', '', 'text'));
 
+  // ── Dados bancários / Pix ──
+  const sel = (label, key, valor, opcoes) => {
+    const s = el('select', { class: 'lx-input' },
+      ...opcoes.map(([v, r]) => el('option', { value: v, ...(String(valor || '') === v ? { selected: true } : {}) }, r)));
+    campos[key] = s;
+    return el('div', { class: 'lx-field', style: 'margin-bottom:10px' }, el('label', {}, label), s);
+  };
+  const blocoBancario = el('div', {},
+    grid2(
+      sel('Tipo de chave Pix', 'pix_tipo', d.pix_tipo, [['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['email', 'E-mail'], ['telefone', 'Telefone'], ['aleatoria', 'Aleatória']]),
+      inp('Chave Pix', 'pix_chave', d.pix_chave)),
+    grid2(inp('Titular da conta', 'titular_nome', d.titular_nome), inp('CPF/CNPJ do titular', 'titular_doc', d.titular_doc)),
+    grid2(inp('Código do banco', 'banco_codigo', d.banco_codigo), inp('Nome do banco', 'banco_nome', d.banco_nome)),
+    grid2(inp('Agência', 'agencia', d.agencia), inp('Conta c/ dígito', 'conta', d.conta)),
+    sel('Tipo de conta', 'conta_tipo', d.conta_tipo, [['corrente', 'Corrente'], ['poupanca', 'Poupança']]));
+
   // ── Documentos ──
   const docsMap = {};
   (d.documentos || []).forEach(doc => { docsMap[doc.tipo] = doc; });
@@ -212,6 +228,7 @@ async function abrirRevisao(motoboyId, aoFechar) {
       d.origem_cadastro === 'app' ? el('span', { style: 'font-size:11px;color:var(--lx-tinta-3)' }, '· via app') : el('span', {})),
     d.motivo_reenvio ? el('div', { style: 'padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12.5px;color:#7c2d12' }, 'Motivo do último reenvio: ' + d.motivo_reenvio) : el('span', {}),
     el('div', {}, el('div', { style: 'font-size:12px;font-weight:800;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px' }, 'Dados pessoais'), blocoDados),
+    el('div', {}, el('div', { style: 'font-size:12px;font-weight:800;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px' }, 'Dados bancários / Pix'), blocoBancario),
     el('div', {}, el('div', { style: 'font-size:12px;font-weight:800;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px' }, 'Documentos'), blocoDocs));
 
   const btnSalvar = el('button', { class: 'lx-btn lx-btn-secundario' }, 'Salvar alterações');

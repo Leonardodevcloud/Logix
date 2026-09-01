@@ -32,6 +32,8 @@ export function abaNovoMotoboy(aoCriar) {
     email: '', senha: '',
     cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
     modalidade_interesse_id: '',
+    pix_tipo: 'cpf', pix_chave: '', titular_nome: '', titular_doc: '',
+    banco_codigo: '', banco_nome: '', agencia: '', conta: '', conta_tipo: 'corrente',
   };
   const docs = {}; // tipo -> dataUri
   let modalidades = [];
@@ -45,7 +47,7 @@ export function abaNovoMotoboy(aoCriar) {
       el('p', { style: 'font-size:12.5px;color:var(--lx-tinta-2);margin:0 0 18px' }, 'Cadastro completo pela central. Nenhum campo é obrigatório — você pode salvar incompleto e completar depois.'),
       nav, painel, rodape));
 
-  const ETAPAS = ['Dados', 'Endereço', 'Documentos'];
+  const ETAPAS = ['Dados', 'Endereço', 'Bancário', 'Documentos'];
   function renderNav() {
     nav.innerHTML = '';
     ETAPAS.forEach((t, i) => {
@@ -100,6 +102,42 @@ export function abaNovoMotoboy(aoCriar) {
       grid2(inp('Cidade', 'cidade'), inp('Estado (UF)', 'estado')));
   }
 
+  function etapaBancario() {
+    // Segmento reutilizável (tipo de chave / tipo de conta).
+    const seg = (opcoes, key) => {
+      const box = el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px' });
+      opcoes.forEach(([val, rot]) => {
+        const on = form[key] === val;
+        box.append(el('button', {
+          style: `font-weight:700;font-size:12px;padding:8px 12px;border-radius:9px;cursor:pointer;border:1px solid ${on ? 'var(--lx-azul-vivo)' : 'var(--lx-linha)'};background:${on ? '#eaf3fc' : 'var(--lx-superficie)'};color:${on ? 'var(--lx-azul-primario)' : 'var(--lx-tinta-2)'}`,
+          onClick: () => { form[key] = val; render(); },
+        }, rot));
+      });
+      return box;
+    };
+    // "A conta é minha": copia nome/CPF do cadastro para o titular.
+    const btnMinha = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px;margin-bottom:12px', onClick: () => {
+      form.titular_nome = form.nome_completo || form.titular_nome;
+      form.titular_doc = form.cpf || form.titular_doc;
+      render();
+    } }, '↳ Usar nome e CPF do cadastro como titular');
+
+    return el('div', {},
+      el('div', { class: 'lx-field', style: 'margin-bottom:8px' }, el('label', {}, 'Tipo de chave Pix'),
+        seg([['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['email', 'E-mail'], ['telefone', 'Telefone'], ['aleatoria', 'Aleatória']], 'pix_tipo')),
+      inp('Chave Pix', 'pix_chave'),
+      btnMinha,
+      grid2(inp('Titular da conta', 'titular_nome'), inp('CPF/CNPJ do titular', 'titular_doc')),
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin:8px 0 14px' },
+        el('span', { style: 'flex:1;height:1px;background:var(--lx-linha)' }),
+        el('b', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--lx-tinta-3)' }, 'Dados bancários (TED — opcional)'),
+        el('span', { style: 'flex:1;height:1px;background:var(--lx-linha)' })),
+      grid2(inp('Código do banco', 'banco_codigo'), inp('Nome do banco', 'banco_nome')),
+      grid2(inp('Agência', 'agencia'), inp('Conta c/ dígito', 'conta')),
+      el('div', { class: 'lx-field' }, el('label', {}, 'Tipo de conta'),
+        seg([['corrente', 'Corrente'], ['poupanca', 'Poupança']], 'conta_tipo')));
+  }
+
   function etapaDocs() {
     const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' });
     DOCS.forEach(({ tipo, rotulo }) => {
@@ -137,6 +175,7 @@ export function abaNovoMotoboy(aoCriar) {
     painel.innerHTML = '';
     if (_etapa === 0) painel.append(etapaDados());
     else if (_etapa === 1) painel.append(etapaEndereco());
+    else if (_etapa === 2) painel.append(etapaBancario());
     else painel.append(etapaDocs());
 
     rodape.innerHTML = '';
@@ -144,7 +183,7 @@ export function abaNovoMotoboy(aoCriar) {
       _etapa > 0 ? el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => { _etapa--; render(); } }, '‹ Voltar') : el('span', {}),
       el('div', { style: 'display:flex;gap:10px' },
         el('button', { class: 'lx-btn lx-btn-secundario', onClick: salvar }, 'Salvar agora'),
-        _etapa < 2 ? el('button', { class: 'lx-btn lx-btn-primario', onClick: () => { _etapa++; render(); } }, 'Continuar ›') : el('button', { class: 'lx-btn lx-btn-primario', onClick: salvar }, 'Cadastrar motoboy')));
+        _etapa < 3 ? el('button', { class: 'lx-btn lx-btn-primario', onClick: () => { _etapa++; render(); } }, 'Continuar ›') : el('button', { class: 'lx-btn lx-btn-primario', onClick: salvar }, 'Cadastrar motoboy')));
   }
 
   async function salvar() {

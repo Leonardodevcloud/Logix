@@ -99,7 +99,11 @@ module.exports = function motoboyAppRoutes() {
     try {
       const id = req.motoboy.id;
       const { rows } = await query(
-        `SELECT m.id, m.nome_completo, m.cpf, m.codigo, m.telefone_principal, m.telefone_emergencia,
+        `SELECT m.id, m.nome_completo, m.cpf, m.codigo, m.data_nascimento,
+                m.telefone_principal, m.telefone_emergencia,
+                m.cep, m.logradouro, m.numero, m.complemento, m.bairro, m.cidade, m.estado,
+                m.pix_tipo, m.pix_chave, m.titular_nome, m.titular_doc,
+                m.banco_codigo, m.banco_nome, m.agencia, m.conta, m.conta_tipo,
                 m.foto_url, m.online, m.status, m.criado_em
            FROM motoboys m WHERE m.id = $1`,
         [id]

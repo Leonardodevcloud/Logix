@@ -58,6 +58,16 @@ function rotasAppCadastro() {
     try { res.json(await service.reenviarCadastro({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, dados: req.body })); } catch (e) { next(e); }
   });
 
+  // PATCH /motoboys/app/meus-dados — o motoboy atualiza contato/endereço/bancário.
+  router.patch('/meus-dados', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await service.atualizarMeusDados({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, dados: req.body })); } catch (e) { next(e); }
+  });
+
+  // POST /motoboys/app/documentos — o motoboy (re)envia um documento.
+  router.post('/documentos', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await service.enviarDocumentoApp({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, tipo: req.body.tipo, arquivo: req.body.arquivo })); } catch (e) { next(e); }
+  });
+
   return router;
 }
 

@@ -43,6 +43,17 @@ async function migrarMotoboys() {
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS revisado_por UUID",
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS revisado_em TIMESTAMPTZ",
     "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS ativado_em TIMESTAMPTZ",
+    // ── Dados bancários / Pix (usados pelo módulo Financeiro para repasses) ──
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS pix_tipo TEXT",       // cpf|cnpj|email|telefone|aleatoria
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS pix_chave TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS titular_nome TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS titular_doc TEXT",    // CPF/CNPJ do titular (só dígitos)
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS banco_codigo TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS banco_nome TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS agencia TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS conta TEXT",
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS conta_tipo TEXT",     // corrente|poupanca
+    "ALTER TABLE motoboys ADD COLUMN IF NOT EXISTS bancario_atualizado_em TIMESTAMPTZ",
   ];
   for (const sql of cols) { try { await query(sql); } catch {} }
 

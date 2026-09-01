@@ -21,6 +21,39 @@ function statusExibicao({ situacao_cadastro, status }) {
 
 const TIPOS_DOC = ['selfie', 'habilitacao', 'comprovante_endereco', 'antecedentes'];
 
+// ── Dados bancários / Pix ─────────────────────────────────────────
+const PIX_TIPOS = ['cpf', 'cnpj', 'email', 'telefone', 'aleatoria'];
+const CONTA_TIPOS = ['corrente', 'poupanca'];
+
+// Extrai/normaliza SÓ os campos bancários presentes em `d`. Retorna objeto
+// { coluna: valor } pronto para UPDATE (undefined = não veio → não mexe).
+function coletarBancario(d = {}) {
+  const out = {};
+  if (d.pix_tipo !== undefined) out.pix_tipo = PIX_TIPOS.includes(String(d.pix_tipo)) ? String(d.pix_tipo) : null;
+  if (d.pix_chave !== undefined) out.pix_chave = String(d.pix_chave || '').trim() || null;
+  if (d.titular_nome !== undefined) out.titular_nome = String(d.titular_nome || '').trim() || null;
+  if (d.titular_doc !== undefined) out.titular_doc = String(d.titular_doc || '').replace(/\D/g, '') || null;
+  if (d.banco_codigo !== undefined) out.banco_codigo = String(d.banco_codigo || '').trim() || null;
+  if (d.banco_nome !== undefined) out.banco_nome = String(d.banco_nome || '').trim() || null;
+  if (d.agencia !== undefined) out.agencia = String(d.agencia || '').replace(/[^\dxX-]/g, '').trim() || null;
+  if (d.conta !== undefined) out.conta = String(d.conta || '').replace(/[^\dxX-]/g, '').trim() || null;
+  if (d.conta_tipo !== undefined) out.conta_tipo = CONTA_TIPOS.includes(String(d.conta_tipo)) ? String(d.conta_tipo) : null;
+  return out;
+}
+
+// Aplica os campos bancários (se houver) a um motoboy já existente.
+async function aplicarBancario({ empresaId, motoboyId, dados }) {
+  const b = coletarBancario(dados || {});
+  const cols = Object.keys(b);
+  if (!cols.length) return;
+  const sets = cols.map((c, i) => `${c} = $${i + 3}`);
+  sets.push('bancario_atualizado_em = now()');
+  await query(
+    `UPDATE motoboys SET ${sets.join(', ')} WHERE id = $1 AND empresa_id = $2`,
+    [motoboyId, empresaId, ...cols.map(c => b[c])]
+  );
+}
+
 // Converte data para o formato AAAA-MM-DD que o Postgres aceita.
 // Aceita "DD/MM/AAAA" (padrão BR do app) e "AAAA-MM-DD" (já no formato).
 function normalizarData(valor) {
@@ -184,6 +217,9 @@ async function cadastrarPeloApp({ empresaId, dados }) {
   // Notifica a central (badge de cadastros pendentes).
   emitirParaEmpresa(empresaId, 'motoboy.cadastro_novo', { motoboyId });
 
+  // Dados bancários / Pix (opcionais no app).
+  try { await aplicarBancario({ empresaId, motoboyId, dados: d }); } catch {}
+
   // Nome da modalidade escolhida (para a mensagem de confirmação).
   let modalidadeNome = null;
   if (d.modalidade_interesse_id) {
@@ -254,6 +290,8 @@ async function cadastrarPeloAdmin({ empresaId, dados, usuarioId }) {
       } catch (e) { /* documento opcional: ignora falha individual */ }
     }
   }
+  // Dados bancários / Pix (opcionais).
+  try { await aplicarBancario({ empresaId, motoboyId, dados: d }); } catch {}
   return { ok: true, motoboy_id: motoboyId, codigo: rows[0].codigo };
 }
 
@@ -418,6 +456,11 @@ async function editarCadastro({ empresaId, motoboyId, dados, usuarioId }) {
   if (d.modalidade_interesse_id !== undefined) set('modalidade_interesse_id', d.modalidade_interesse_id || null);
   if (d.senha) { const h = await bcrypt.hash(String(d.senha), 10); set('senha_hash', h); }
 
+  // Campos bancários (se vierem) — mesmo tratamento do app e do painel.
+  const b = coletarBancario(d);
+  for (const [col, val] of Object.entries(b)) set(col, val);
+  if (Object.keys(b).length) set('bancario_atualizado_em', new Date());
+
   if (!campos.length) return { ok: true };
   const { rows } = await query(
     `UPDATE motoboys SET ${campos.join(', ')} WHERE id = $1 AND empresa_id = $2 RETURNING id`,
@@ -473,6 +516,42 @@ async function reenviarCadastro({ empresaId, motoboyId, dados }) {
   return { ok: true, situacao: 'pendente' };
 }
 
+// ── App: o próprio motoboy atualiza seus dados (contato, endereço, bancário) ──
+// NÃO permite alterar nome/CPF/nascimento/e-mail/senha (identidade → só a central).
+// Avisa a central por WebSocket para acompanhamento/auditoria.
+async function atualizarMeusDados({ empresaId, motoboyId, dados }) {
+  const d = dados || {};
+  const permitidos = ['telefone_principal', 'telefone_emergencia',
+    'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+    'pix_tipo', 'pix_chave', 'titular_nome', 'titular_doc',
+    'banco_codigo', 'banco_nome', 'agencia', 'conta', 'conta_tipo'];
+  const filtrado = {};
+  for (const k of permitidos) if (d[k] !== undefined) filtrado[k] = d[k];
+  if (!Object.keys(filtrado).length) return { ok: true };
+
+  await editarCadastro({ empresaId, motoboyId, dados: filtrado });
+  // Avisa a central (acompanhamento). Reaproveita canal de eventos do motoboy.
+  try { emitirParaEmpresa(empresaId, 'motoboy.dados_atualizados', { motoboyId }); } catch {}
+  return { ok: true };
+}
+
+// ── App: o próprio motoboy (re)envia um documento sem derrubar a operação ──
+// Faz upsert do arquivo e marca como 'enviado' para a central re-analisar.
+// NÃO mexe em situacao_cadastro (aprovado continua operando normalmente).
+async function enviarDocumentoApp({ empresaId, motoboyId, tipo, arquivo }) {
+  if (!TIPOS_DOC.includes(tipo)) throw AppError.validacao('Tipo de documento inválido');
+  if (!arquivo) throw AppError.validacao('Envie um arquivo');
+  const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: arquivo });
+  await query(
+    `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho, status)
+     VALUES ($1,$2,$3,$4,$5,$6,'enviado')
+     ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
+    [empresaId, motoboyId, tipo, key, mime, tamanho]
+  );
+  try { emitirParaEmpresa(empresaId, 'motoboy.documento_atualizado', { motoboyId, tipo }); } catch {}
+  return { ok: true };
+}
+
 module.exports = {
   obterConfigCadastro, salvarConfigCadastro,
   listarModalidadesInteresse, criarModalidadeInteresse, atualizarModalidadeInteresse, excluirModalidadeInteresse,
@@ -480,4 +559,5 @@ module.exports = {
   aprovarCadastro, recusarCadastro, solicitarReenvio, editarCadastro, removerDocumento,
   ativarMotoboy, desativarMotoboy,
   meuCadastro, reenviarCadastro,
+  atualizarMeusDados, enviarDocumentoApp,
 };
