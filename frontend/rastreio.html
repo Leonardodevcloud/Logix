@@ -60,7 +60,7 @@
   var qp = new URLSearchParams(location.search);
   var token = (mPath && mPath[1]) || qp.get('t') || qp.get('token') || '';
   var boot=document.getElementById('boot'), app=document.getElementById('app');
-  var mapa=null, mkMoto=null, mkDest=null, mkColeta=null, linhaTraj=null, primeira=true, montado=false, brandFeito=false, timer=null, corMarca='#185FA5';
+  var mapa=null, mkMoto=null, mkDest=null, mkColeta=null, linhaTraj=null, primeira=true, montado=false, brandFeito=false, timer=null, corMarca='#185FA5', fotoMotoboy=null;
 
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function hora(iso){ if(!iso) return ''; try{return new Date(iso).toLocaleString('pt-BR',{timeZone:'America/Bahia',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';} }
@@ -84,6 +84,7 @@
   }
 
   function atualizarSide(d){
+    if(!fotoMotoboy && d.motoboy && d.motoboy.foto) fotoMotoboy = d.motoboy.foto; // fixa a foto (URL assinada muda a cada request -> evita piscar)
     var entregue=d.status==='entregue', cancelada=d.status==='cancelada', est=estagio(d.status);
     var pts=d.pontos||[]; var destino=pts.find(function(p){return p.status!=='entregue'&&p.status!=='finalizado';})||pts[pts.length-1]||null;
     var mb0=d.motoboy||{};
@@ -112,7 +113,7 @@
       var extra = i===3&&finalErro ? ' style="background:#D0584F;color:#fff"' : '';
       return '<div class="step '+(cls==='next'?'fut':'')+'"><div class="dot '+cls+'"'+extra+'>'+ic+'</div>'+(i<3?'<div class="ln '+(i<est?'on':'')+'"></div>':'')+'<div class="tx"><b>'+p.b+'</b><small>'+esc(p.s)+'</small></div></div>';
     }).join('');
-    var mb=d.motoboy||{}; var avMb=mb.foto?'<img src="'+esc(mb.foto)+'" alt="">':esc(ini(mb.nome)||'—');
+    var mb=d.motoboy||{}; var avMb=fotoMotoboy?'<img src="'+esc(fotoMotoboy)+'" alt="">':esc(ini(mb.nome)||'—');
     var tel=soDigitos(mb.telefone);
     var ligar= tel? '<a class="lig" href="tel:+55'+tel+'">📞 Ligar</a>' : '';
     document.getElementById('side').innerHTML =
@@ -137,7 +138,7 @@
     // Traçado real (trajeto GPS)
     if(d.trajeto&&d.trajeto.length>1){var seg=d.trajeto.map(function(p){return [p.lat,p.lng];});seg.forEach(function(ll){pts.push(ll);});if(linhaTraj)linhaTraj.setLatLngs(seg);else linhaTraj=L.polyline(seg,{color:'#185FA5',weight:5,opacity:.85,lineJoin:'round'}).addTo(mapa);}
     // Motoboy ao vivo
-    if(d.posicao_atual){var mll=[d.posicao_atual.lat,d.posicao_atual.lng];pts.push(mll);if(mkMoto)mkMoto.setLatLng(mll);else mkMoto=L.marker(mll,{icon:motoIcon(d.motoboy&&d.motoboy.foto,corMarca),zIndexOffset:1000}).addTo(mapa).bindPopup('Entregador');}
+    if(d.posicao_atual){var mll=[d.posicao_atual.lat,d.posicao_atual.lng];pts.push(mll);if(mkMoto)mkMoto.setLatLng(mll);else mkMoto=L.marker(mll,{icon:motoIcon(fotoMotoboy,corMarca),zIndexOffset:1000}).addTo(mapa).bindPopup('Entregador');}
     if(primeira&&pts.length){mapa.fitBounds(pts,{padding:[50,50],maxZoom:16});primeira=false;setTimeout(function(){mapa.invalidateSize();},60);}
   }
   function pinIcon(cor){return L.divIcon({className:'',iconSize:[30,38],iconAnchor:[15,36],html:'<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:'+cor+';transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.3)"></div>'});}
