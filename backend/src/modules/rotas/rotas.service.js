@@ -60,4 +60,20 @@ async function pontosRota({ empresaId, lojaId = null, entregaIds = [] }) {
   return { rotas: Array.from(map.values()) };
 }
 
-module.exports = { listarRotas, pontosRota };
+// Autocomplete de entregador por nome ou código.
+async function buscarEntregadores({ empresaId, q }) {
+  if (!q || !String(q).trim()) return { entregadores: [] };
+  const termo = '%' + String(q).trim() + '%';
+  const { rows } = await query(
+    `SELECT id, codigo, nome_completo
+       FROM motoboys
+      WHERE empresa_id = $1 AND status = 'ativo'
+        AND (nome_completo ILIKE $2 OR codigo::text ILIKE $2)
+      ORDER BY nome_completo
+      LIMIT 10`,
+    [empresaId, termo]
+  );
+  return { entregadores: rows };
+}
+
+module.exports = { listarRotas, pontosRota, buscarEntregadores };

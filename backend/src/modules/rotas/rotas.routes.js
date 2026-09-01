@@ -18,6 +18,11 @@ function initRotasRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /rotas/entregadores?q=  — autocomplete de entregador (nome ou código)
+  router.get('/entregadores', async (req, res, next) => {
+    try { res.json(await service.buscarEntregadores({ empresaId: req.empresaId, q: req.query.q || '' })); } catch (e) { next(e); }
+  });
+
   // GET /rotas/pontos?ids=uuid1,uuid2  — traçado de uma ou várias corridas
   router.get('/pontos', async (req, res, next) => {
     try {
