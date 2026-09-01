@@ -87,7 +87,7 @@
   }
   function desenharMapa(d,destino){
     if(!window.L) return;
-    if(!mapa){mapa=L.map('mapa',{zoomControl:true});L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19}).addTo(mapa);}
+    if(!mapa){mapa=L.map('mapa',{zoomControl:true});L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(mapa);}
     var pts=[];
     if(destino&&destino.lat){var dll=[Number(destino.lat),Number(destino.lng)];pts.push(dll);if(mkDest)mkDest.setLatLng(dll);else mkDest=L.marker(dll,{icon:pinIcon('#D0584F')}).addTo(mapa).bindPopup('Destino');}
     if(d.coleta&&d.coleta.lat){var cll=[Number(d.coleta.lat),Number(d.coleta.lng)];pts.push(cll);if(mkColeta)mkColeta.setLatLng(cll);else mkColeta=L.marker(cll,{icon:pinIcon('#1F9D6B')}).addTo(mapa).bindPopup('Coleta');}
