@@ -37,12 +37,19 @@ async function garantirLeaflet() {
   });
 }
 
-function pinDiv(cor, tam) {
-  return window.L.divIcon({
-    className: '',
-    html: `<div style="width:${tam}px;height:${tam}px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>`,
-    iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2],
-  });
+function bearing(a, b) {
+  const r = (d) => d * Math.PI / 180;
+  const y = Math.sin(r(b.lng - a.lng)) * Math.cos(r(b.lat));
+  const x = Math.cos(r(a.lat)) * Math.sin(r(b.lat)) - Math.sin(r(a.lat)) * Math.cos(r(b.lat)) * Math.cos(r(b.lng - a.lng));
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function setaIcon(cor, ang) {
+  return window.L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+    html: `<div style="transform:rotate(${ang}deg);color:${cor};font-size:14px;line-height:14px;text-shadow:0 0 3px #fff,0 0 3px #fff">\u25b2</div>` });
+}
+function rotuloIcon(cor, texto) {
+  return window.L.divIcon({ className: '', iconSize: [1, 1], iconAnchor: [0, 0],
+    html: `<div style="transform:translate(-50%,-115%);white-space:nowrap;background:${cor};color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:14px;box-shadow:0 3px 8px rgba(0,0,0,.35);position:relative">${texto}<span style="position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:5px solid ${cor}"></span></div>` });
 }
 
 export function montar(container) {
@@ -54,14 +61,48 @@ export function montar(container) {
   const campo = (rot, node) => el('div', {}, el('label', { style: 'display:block;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:4px' }, rot), node);
 
   const inProt = el('input', { style: inpEstilo, placeholder: 'nº do protocolo', onInput: (e) => estado.protocolo = e.target.value.trim() });
-  const inEnt = el('input', { style: inpEstilo, placeholder: 'nome ou código', onInput: (e) => estado.entregador = e.target.value.trim() });
+  // Autocomplete de entregador: dropdown que busca conforme a digitação.
+  const acWrap = el('div', { style: 'position:relative' });
+  const inEnt = el('input', { style: inpEstilo, placeholder: 'nome ou código', autocomplete: 'off' });
+  const acLista = el('div', { style: 'position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--lx-linha);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 10px 24px rgba(4,44,83,.14);z-index:40;max-height:230px;overflow:auto;display:none' });
+  acWrap.append(inEnt, acLista);
+  let acTimer = null;
+  inEnt.addEventListener('input', () => {
+    estado.entregador = inEnt.value.trim();
+    clearTimeout(acTimer);
+    const q = inEnt.value.trim();
+    if (!q) { acLista.style.display = 'none'; return; }
+    acTimer = setTimeout(async () => {
+      try {
+        const r = await get('/rotas/entregadores?q=' + encodeURIComponent(q));
+        const itens = r.entregadores || [];
+        acLista.innerHTML = '';
+        if (!itens.length) { acLista.style.display = 'none'; return; }
+        itens.forEach((m) => {
+          const rot = (m.codigo != null ? m.codigo + ' - ' : '') + (m.nome_completo || '');
+          const opt = el('div', { style: 'padding:9px 12px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--lx-fundo)' }, rot);
+          opt.addEventListener('mouseenter', () => opt.style.background = 'var(--lx-fundo)');
+          opt.addEventListener('mouseleave', () => opt.style.background = '');
+          opt.addEventListener('mousedown', (ev) => {
+            ev.preventDefault();
+            inEnt.value = rot;
+            estado.entregador = m.codigo != null ? String(m.codigo) : (m.nome_completo || '');
+            acLista.style.display = 'none';
+          });
+          acLista.append(opt);
+        });
+        acLista.style.display = 'block';
+      } catch (e) { acLista.style.display = 'none'; }
+    }, 250);
+  });
+  inEnt.addEventListener('blur', () => setTimeout(() => { acLista.style.display = 'none'; }, 150));
   const inData = el('input', { style: inpEstilo, type: 'date', onInput: (e) => estado.data = e.target.value });
   const inHi = el('input', { style: inpEstilo, type: 'time', onInput: (e) => estado.hora_ini = e.target.value });
   const inHf = el('input', { style: inpEstilo, type: 'time', onInput: (e) => estado.hora_fim = e.target.value });
 
   const filtros = el('div', { class: 'lx-card', style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px' },
     campo('Protocolo', inProt),
-    campo('Entregador (nome ou código)', inEnt),
+    campo('Entregador (nome ou código)', acWrap),
     campo('Data', inData),
     el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' }, campo('Hora início', inHi), campo('Hora fim', inHf)));
 
@@ -160,19 +201,34 @@ export function montar(container) {
     const todosPts = [];
     rotas.forEach((r, idx) => {
       const cor = CORES[idx % CORES.length];
-      const latlngs = r.pontos.map(p => [p.lat, p.lng]);
+      const pts = r.pontos;
+      const latlngs = pts.map(p => [p.lat, p.lng]);
       latlngs.forEach(ll => todosPts.push(ll));
-      // Trajeto (linha ligando os pontos)
-      window.L.polyline(latlngs, { color: cor, weight: 4, opacity: 0.85 }).addTo(mapa);
-      // Posições — cada ponto mostra a hora ao clicar
-      r.pontos.forEach((p, i) => {
-        const primeiro = i === 0, ultimo = i === r.pontos.length - 1;
-        const mk = window.L.marker([p.lat, p.lng], {
-          icon: primeiro ? pinDiv('#1F9D6B', 16) : ultimo ? pinDiv('#042C53', 16) : pinDiv('#D0584F', 10),
-        }).addTo(mapa);
-        const rotulo = primeiro ? 'Início' : ultimo ? 'Fim' : 'Posição';
-        mk.bindPopup(`<b>Hora:</b> ${horaCompleta(p.hora)}<br><span style="color:#8ba5bc">${rotulo}${ids.length > 1 ? ' · ' + r.protocolo : ''}</span>`);
+
+      // Traçado: linha grossa
+      window.L.polyline(latlngs, { color: cor, weight: 5, opacity: 0.9, lineJoin: 'round', lineCap: 'round' }).addTo(mapa);
+
+      // Setas de direção ao longo do trajeto (uma a cada ~14 pontos)
+      const passo = Math.max(1, Math.floor(pts.length / 14));
+      for (let i = passo; i < pts.length; i += passo) {
+        const ang = bearing(pts[i - 1], pts[i]);
+        window.L.marker([pts[i].lat, pts[i].lng], { icon: setaIcon(cor, ang), interactive: false, zIndexOffset: 200 }).addTo(mapa);
+      }
+
+      // Pontos intermediários: bolinhas leves, clicáveis pra ver a hora
+      pts.forEach((p, i) => {
+        if (i === 0 || i === pts.length - 1) return;
+        window.L.circleMarker([p.lat, p.lng], { radius: 3.5, color: '#fff', weight: 1, fillColor: cor, fillOpacity: 0.95 })
+          .addTo(mapa)
+          .bindPopup(`<b>Hora:</b> ${horaCompleta(p.hora)}<br><span style="color:#8ba5bc">Posição${ids.length > 1 ? ' · ' + r.protocolo : ''}</span>`);
       });
+
+      // Início (verde) e Fim (azul) com rótulo
+      const ini = pts[0], fim = pts[pts.length - 1];
+      window.L.marker([ini.lat, ini.lng], { icon: rotuloIcon('#1F9D6B', 'Início'), zIndexOffset: 600 }).addTo(mapa)
+        .bindPopup(`<b>Início</b> · ${horaCompleta(ini.hora)}${ids.length > 1 ? '<br>' + r.protocolo : ''}`);
+      window.L.marker([fim.lat, fim.lng], { icon: rotuloIcon('#042C53', 'Fim'), zIndexOffset: 600 }).addTo(mapa)
+        .bindPopup(`<b>Fim</b> · ${horaCompleta(fim.hora)}${ids.length > 1 ? '<br>' + r.protocolo : ''}`);
     });
 
     if (todosPts.length) mapa.fitBounds(todosPts, { padding: [30, 30] });
