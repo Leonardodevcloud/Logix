@@ -1,7 +1,14 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, getToken } from '../core/api.js';
+import { acessoAtual } from '../core/auth.js';
 import { aplicarBasemap } from '../core/mapa-tiles.js';
+
+// Offline = sem enviar GPS há mais de 1h, mesmo que o flag 'online' esteja true.
+const ONLINE_MAX_MS = 60 * 60 * 1000;
+function estaOnline(m) {
+  return !!(m.online && m.ultima_posicao_em && (Date.now() - new Date(m.ultima_posicao_em).getTime()) < ONLINE_MAX_MS);
+}
 
 // Avatar do motoboy no rastreio: foto (selfie) com fallback para iniciais.
 function avatarRast(m, cor, ini) {
@@ -209,7 +216,9 @@ export async function montar(container) {
 
   // Carregar ponto de coleta padrão da empresa (para mostrar no mapa)
   try {
-    const salvos = await get('/entregas/enderecos-salvos').catch(() => []);
+    // O pino "LOJA" (ponto de coleta padrão) só vale para o perfil loja. Para o
+    // admin da central, um endereço salvo NÃO representa uma loja física.
+    const salvos = acessoAtual().perfil === 'loja' ? await get('/entregas/enderecos-salvos').catch(() => []) : [];
     _coletaPadrao = salvos.find(s => s.is_coleta_padrao);
     if (_coletaPadrao?.lat) {
       _pinLoja = window.L.marker([_coletaPadrao.lat, _coletaPadrao.lng], {
@@ -304,7 +313,7 @@ export async function montar(container) {
     // Atualizar card de detalhe
     const dist = m.lat ? calcDist(m) : null;
     detalheName.textContent = m.nome_completo;
-    detalheSub.textContent = m.status === 'ativo' && m.online ? 'Online' : 'Offline';
+    detalheSub.textContent = estaOnline(m) ? 'Online' : 'Offline';
     detalheRows.innerHTML = '';
     const rows = [
       ['Distância da loja', dist ? dist.toFixed(1) + ' km' : '—'],
@@ -341,9 +350,9 @@ export async function montar(container) {
 
   function renderSidebar() {
     listaScroll.innerHTML = '';
-    const emRota  = _motoboys.filter(m => m.online && m.entregas_ativas > 0);
-    const livres  = _motoboys.filter(m => m.online && m.entregas_ativas === 0);
-    const offline = _motoboys.filter(m => !m.online);
+    const emRota  = _motoboys.filter(m => estaOnline(m) && m.entregas_ativas > 0);
+    const livres  = _motoboys.filter(m => estaOnline(m) && m.entregas_ativas === 0);
+    const offline = _motoboys.filter(m => !estaOnline(m));
 
     kpiLivre.textContent = livres.length;
     kpiRota.textContent  = emRota.length;
@@ -403,7 +412,7 @@ export async function montar(container) {
     if (!_mapa) return;
 
     _motoboys.forEach((m, i) => {
-      if (!m.online) return;            // offline não aparece no mapa
+      if (!estaOnline(m)) return;        // offline (inclui sem GPS há +1h) não aparece no mapa
       if (!m.lat || !m.lng) return;
       const ini = iniciais(m.nome_completo);
       const cor = CORES_MB(i);
