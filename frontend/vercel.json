@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/og-image", "destination": "/api/og" },
+    { "source": "/app.webmanifest", "destination": "/api/manifest" },
     { "source": "/(.*)", "destination": "/api/render" }
   ]
 }

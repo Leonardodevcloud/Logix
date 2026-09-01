@@ -41,7 +41,7 @@ function montarHtml({ nome, desc, cor, corPrim, logo, iniciais, favicon, ogImage
 
   <link rel="icon" href="${esc(favicon)}">
   <link rel="apple-touch-icon" href="${esc(favicon)}">
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="/app.webmanifest">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="${esc(nome)}">
