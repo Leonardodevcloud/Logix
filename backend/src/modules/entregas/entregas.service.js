@@ -20,6 +20,8 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
   naoOtimizar = false, naoDispararAutomatico = false, referenciaExterna = null, origem = null, integracaoChaveId = null, rastreioToken = null }) {
   if (!coleta || !coleta.endereco) throw AppError.validacao('Informe o ponto de coleta');
   if (!Array.isArray(destinos) || destinos.length === 0) throw AppError.validacao('Informe ao menos um destino');
+  // Todo pedido nasce com um token de rastreio (link público pro cliente final).
+  const rastreio = rastreioToken || require('crypto').randomBytes(12).toString('hex');
 
   const coletaGeo = await comCoordenadas(coleta);
   const destinosGeo = [];
@@ -85,7 +87,7 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
       [empresaId, lojaId, protocolo, motoboyId, status, distribuicao, coleta.nome || null, coleta.endereco,
        coletaGeo.lat, coletaGeo.lng, distanciaKm, tempoEstimado, criadoPor, modalidadeId || null, centroCustoId || null,
        valorClienteCent, valorMotoboyCent,
-       referenciaExterna || null, origem || null, integracaoChaveId || null, rastreioToken || null,
+       referenciaExterna || null, origem || null, integracaoChaveId || null, rastreio,
        precoDinamicoId, dinamicaAddCliente, dinamicaAddMotoboy]
     );
     const entregaId = rows[0].id;
