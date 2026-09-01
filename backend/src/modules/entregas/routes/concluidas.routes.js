@@ -40,15 +40,6 @@ module.exports = function concluidasRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /entregas/:id/protocolo  — PÚBLICO, sem auth, gera HTML imprimível
-  // URL acessada diretamente no browser como nova aba
-  router.get('/:id/protocolo', async (req, res, next) => {
-    try {
-      const html = await service.gerarProtocoloHtml(req.params.id);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
-    } catch (e) { next(e); }
-  });
 
   return router;
 };
