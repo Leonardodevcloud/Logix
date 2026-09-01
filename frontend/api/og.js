@@ -71,7 +71,6 @@ export default async function handler(req) {
         width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '60px 80px',
         backgroundColor: fundo,
-        backgroundImage: `linear-gradient(135deg, ${prim} 0%, ${fundo} 60%)`,
         color: '#fff', fontFamily: 'sans-serif',
       },
     },
