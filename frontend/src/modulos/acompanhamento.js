@@ -4,6 +4,26 @@ import { aplicarBasemap } from '../core/mapa-tiles.js';
 import { get, post, put, patch, getToken } from '../core/api.js';
 import * as auth from '../core/auth.js';
 
+// Copia o link PÚBLICO de rastreio da entrega para enviar ao cliente final.
+function copiarLinkRastreio(c) {
+  const tok = c && c.rastreio_token;
+  if (!tok) { toastRastreio('Esta corrida não tem link de rastreio.', true); return; }
+  const url = location.origin + '/rastreio/' + tok;
+  const feito = () => toastRastreio('Link de rastreio copiado!');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(feito).catch(() => promptCopia(url));
+  else promptCopia(url);
+}
+function promptCopia(url) { window.prompt('Copie o link de rastreio:', url); }
+function toastRastreio(msg, erro) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:' + (erro ? '#D0584F' : '#042C53') + ';color:#fff;font-size:13px;font-weight:700;padding:11px 18px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:99999;opacity:0;transition:opacity .2s';
+  document.body.append(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 250); }, 2200);
+}
+
+
 const LS_KEY = 'logix_acomp_filtros';
 
 async function garantirLeaflet() {
@@ -738,7 +758,7 @@ export async function montar(container) {
       if (podeCancelar) w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
     } else if (_aba === 'and') {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
-      w.append(botaoIcone(P.mapa, 'Rastreio ao vivo (nova guia)', () => { window.open(location.origin + location.pathname + '#/rastreio', '_blank'); }));
+      w.append(botaoIcone(P.mapa, 'Copiar link de rastreio (enviar ao cliente)', () => copiarLinkRastreio(c)));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar', () => abrirEditar(c))); if (podeFinalizar) w.append(botaoIcone(P.check, 'Finalizar', () => abrirFinalizar(c), 'var(--lx-ok)'));
       if (podeLiberar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
