@@ -20,7 +20,17 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function montarHtml({ nome, desc, cor, favicon, ogImage, base }) {
+function montarHtml({ nome, desc, cor, corPrim, logo, iniciais, favicon, ogImage, base }) {
+  // Preload (tela de carregamento) JÁ com a marca do cliente — evita o flash do
+  // "LX" da Logix enquanto o app inicializa. O main.js detecta este #lx-boot e não cria outro.
+  const selo = logo
+    ? `<img src="${esc(logo)}" alt="" style="width:100%;height:100%;object-fit:contain">`
+    : esc(iniciais);
+  const preload =
+    `<div id="lx-boot" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#eef4fb">` +
+      `<div style="width:60px;height:60px;border-radius:15px;background:${esc(corPrim)};color:#fff;display:grid;place-items:center;font-weight:800;font-size:22px;overflow:hidden;box-shadow:0 8px 24px -8px rgba(4,44,83,.4)">${selo}</div>` +
+      `<div style="width:26px;height:26px;border:3px solid #cddcec;border-top-color:${esc(corPrim)};border-radius:50%;animation:lxspin .8s linear infinite"></div>` +
+    `</div><style>@keyframes lxspin{to{transform:rotate(360deg)}}</style>`;
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -58,6 +68,7 @@ function montarHtml({ nome, desc, cor, favicon, ogImage, base }) {
   <style>body{margin:0}#app{min-height:100vh}</style>
 </head>
 <body>
+  ${preload}
   <div id="app"></div>
   <script>window.LOGIX_API = '${APP_API}';</script>
   <script type="module" src="/src/main.js"></script>
@@ -84,6 +95,9 @@ export default async function handler(req, res) {
   const nome = marca.nome_exibicao || 'Logix';
   const desc = `Central de entregas ${nome}. Acompanhe suas corridas em tempo real.`;
   const cor = marca.cor_secundaria || '#042C53';
+  const corPrim = marca.cor_primaria || '#185FA5';
+  const logo = marca.logo_url || null;
+  const iniciais = String(nome).trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'LX';
   // Favicon: usa o do cliente; senão, o gerado automaticamente (quadrado) por /api/og.
   const favicon = marca.favicon_url || `${base}/og-image?tipo=favicon`;
   // Card: usa a arte enviada pelo cliente (opção A); senão, gera do logo+cores (opção B).
@@ -93,5 +107,5 @@ export default async function handler(req, res) {
   // Cache curto na borda: o robô do WhatsApp e o navegador pegam rápido, e a marca
   // atualiza em até ~5 min se o cliente mudar algo.
   res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
-  res.status(200).send(montarHtml({ nome, desc, cor, favicon, ogImage, base }));
+  res.status(200).send(montarHtml({ nome, desc, cor, corPrim, logo, iniciais, favicon, ogImage, base }));
 }
