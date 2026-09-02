@@ -19,6 +19,7 @@ function gruposNav() {
         { rotulo: 'Entregadores', icone: 'motoboys', filhos: [
           { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
           { rota: '/rotas', rotulo: 'Rotas traçadas' },
+          { rota: '/gamificacao', rotulo: 'Gamificação' },
         ] },
         { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
       ]},
@@ -55,6 +56,7 @@ function gruposNav() {
     operacao.push({ rotulo: 'Entregadores', icone: 'motoboys', filhos: [
       { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
       { rota: '/rotas', rotulo: 'Rotas traçadas' },
+      { rota: '/gamificacao', rotulo: 'Gamificação' },
     ] });
   // Financeiro: ferramenta da central — aparece por permissão (não é módulo
   // vendável por cliente, então não depende de temModulo).

@@ -32,6 +32,7 @@ const mapa = require('./src/modules/mapa');
 const precos = require('./src/modules/precos');
 const integracoes = require('./src/modules/integracoes');
 const relatorios = require('./src/modules/relatorios');
+const score = require('./src/modules/score');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -51,6 +52,7 @@ async function migrar() {
   await financeiro.initFinanceiroTables();  // tabelas de lancamentos/fechamentos + ALTER entregas
   await radar.initRadarTables();            // config + alertas do radar operacional
   await integracoes.initIntegracoesTables(); // chaves de API + ALTER entregas (referencia_externa, rastreio_token...)
+  await score.initScoreTables();             // gamificação: score_config por empresa (só depende de empresas)
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -105,6 +107,7 @@ function montarApp() {
   api.use('/precos', precos.initPrecosRoutes());
   api.use('/integracoes', integracoes.initIntegracoesRoutes());
   api.use('/relatorios', relatorios.initRelatoriosRoutes());
+  api.use('/score', score.initScoreRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último
