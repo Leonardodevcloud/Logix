@@ -126,6 +126,26 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
+  // GET /motoboys/app/extras — bônus e extras do motoboy AINDA em aberto
+  // (fechamento_id IS NULL = ainda não repassados). É o que o motoboy vê em Ganhos.
+  router.get('/app/extras', verificarTokenMotoboy, async (req, res, next) => {
+    try {
+      const { rows } = await query(
+        `SELECT id, tipo, valor_cent, descricao, competencia, criado_em
+           FROM financeiro_lancamentos
+          WHERE empresa_id = $1 AND motoboy_id = $2 AND fechamento_id IS NULL
+          ORDER BY criado_em DESC LIMIT 50`,
+        [req.motoboy.empresaId, req.motoboy.id]
+      );
+      let credito = 0, abatimento = 0;
+      for (const r of rows) {
+        if (r.tipo === 'credito') credito += Number(r.valor_cent);
+        else if (r.tipo === 'abatimento') abatimento += Number(r.valor_cent);
+      }
+      res.json({ extras: rows, total_credito_cent: credito, total_abatimento_cent: abatimento, saldo_cent: credito - abatimento });
+    } catch (e) { next(e); }
+  });
+
   // GET /motoboys/app/eu
   router.get('/app/eu', verificarTokenMotoboy, async (req, res, next) => {
     try {
@@ -541,6 +561,14 @@ module.exports = function motoboyAppRoutes() {
       // 5. Responder imediatamente ao app.
       res.json({ ok: true, todos_entregues: todosResolvidos, retorno_gerado: pontoRetornoCriado });
 
+      // 5b. Score (fire-and-forget, blindado): registra os eventos deste ponto.
+      try {
+        require('../score/score.service').registrarEventosConclusao({
+          empresaId, motoboyId: req.motoboy.id, entregaId, refId: pontoId,
+          insucesso: ehInsucesso, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+        }).catch(() => {});
+      } catch {}
+
       // 6. Fotos em background, vinculadas ao protocolo do ponto.
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
         setImmediate(async () => {
@@ -625,6 +653,14 @@ module.exports = function motoboyAppRoutes() {
 
       // Responder imediatamente
       res.json({ ok: true, todos_entregues: todosEntregues });
+
+      // Score (fire-and-forget): sempre sucesso neste fluxo (sem ocorrência de insucesso).
+      try {
+        require('../score/score.service').registrarEventosConclusao({
+          empresaId, motoboyId: req.motoboy.id, entregaId, refId: pontoId,
+          insucesso: false, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+        }).catch(() => {});
+      } catch {}
 
       // Fotos em background
       if (pontoId && Array.isArray(fotos_urls) && fotos_urls.length) {

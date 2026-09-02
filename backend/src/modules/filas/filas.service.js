@@ -457,6 +457,8 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
     );
     outros.forEach(o => emitirParaMotoboy(o.motoboy_id, 'oferta.encerrada', { ofertaId }));
   } catch {}
+  // Score (fire-and-forget): pontua o aceite.
+  try { if (scoreService && scoreService.registrarEvento) scoreService.registrarEvento({ empresaId, motoboyId, tipo: 'aceitar_oferta', refId: ofertaId }).catch(() => {}); } catch {}
   return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
 }
 
@@ -466,6 +468,7 @@ async function recusarOferta({ empresaId, ofertaId, motoboyId }) {
   const ofe = await query(`SELECT id FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
   if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
   await query(`UPDATE entregas_ofertas_candidatos SET recusada_em = now() WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
+  try { if (scoreService && scoreService.registrarEvento) scoreService.registrarEvento({ empresaId, motoboyId, tipo: 'recusar_oferta', refId: ofertaId }).catch(() => {}); } catch {}
   return { ok: true };
 }
 

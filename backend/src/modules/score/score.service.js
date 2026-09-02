@@ -47,55 +47,92 @@ function nivelDe(pontos, niveis) {
   };
 }
 
-// SCORE READ-ONLY (últimos 30 dias). Não escreve nada e não toca no fluxo de
-// conclusão — só lê 'entregas'. As métricas com emVigor=false entram na Fase 2
-// (motor de eventos/campanhas).
+// SCORE a partir do LEDGER de eventos (últimos N dias da config). Soma pontos
+// por tipo e monta o detalhe com o rótulo de cada métrica.
 async function meuScore({ empresaId, motoboyId }) {
   const cfg = await obterConfig(empresaId);
-  const m = cfg.metricas;
-  const pt = (chave) => {
-    const it = m[chave];
-    return it && it.ativo !== false ? Number(it.pontos || 0) : 0;
-  };
-
-  let entregues = 0, insucessos = 0;
   const janela = String(Number(cfg.config && cfg.config.janela_dias) || 30);
+  let linhas = [];
   try {
     const { rows } = await query(
-      `SELECT count(*)::int AS n FROM entregas
-        WHERE empresa_id = $1 AND motoboy_id = $2 AND status = 'entregue'
-          AND concluida_em >= now() - (($3)::text || ' days')::interval`,
+      `SELECT tipo, count(*)::int AS qtd, COALESCE(SUM(pontos),0)::int AS pontos
+         FROM score_eventos
+        WHERE empresa_id = $1 AND motoboy_id = $2
+          AND criado_em >= now() - (($3)::text || ' days')::interval
+        GROUP BY tipo`,
       [empresaId, motoboyId, janela]
     );
-    entregues = rows[0] ? rows[0].n : 0;
-  } catch {}
-  try {
-    const { rows } = await query(
-      `SELECT count(*)::int AS n
-         FROM entregas_pontos p JOIN entregas en ON en.id = p.entrega_id
-        WHERE en.empresa_id = $1 AND en.motoboy_id = $2 AND p.status = 'insucesso'
-          AND COALESCE(en.concluida_em, en.criado_em) >= now() - (($3)::text || ' days')::interval`,
-      [empresaId, motoboyId, janela]
-    );
-    insucessos = rows[0] ? rows[0].n : 0;
+    linhas = rows;
   } catch {}
 
-  const ptEntrega = pt('entrega_concluida');
-  const ptInsucesso = pt('insucesso_culpa');
-  const pontos = Math.max(0, entregues * ptEntrega + insucessos * ptInsucesso);
-
-  const detalhe = [{ rotulo: 'Entregas concluídas', qtd: entregues, pontos: entregues * ptEntrega }];
-  if (insucessos) detalhe.push({ rotulo: 'Insucessos', qtd: insucessos, pontos: insucessos * ptInsucesso });
+  const pontos = Math.max(0, linhas.reduce((s, r) => s + Number(r.pontos), 0));
+  const detalhe = linhas
+    .map(r => ({ rotulo: (cfg.metricas[r.tipo] && cfg.metricas[r.tipo].rotulo) || r.tipo, qtd: r.qtd, pontos: r.pontos }))
+    .sort((a, b) => Math.abs(b.pontos) - Math.abs(a.pontos));
 
   return {
     pontos,
-    entregues_30d: entregues,
-    insucessos_30d: insucessos,
     nivel: nivelDe(pontos, cfg.niveis),
     niveis: cfg.niveis,
     detalhe,
-    janela: '30 dias',
+    janela: janela + ' dias',
   };
+}
+
+// Registra um evento pontuável (fire-and-forget nos chamadores). Idempotente por
+// (empresa, motoboy, tipo, ref_id). Usa os pontos ATUAIS da métrica; se a métrica
+// estiver desligada (ativo=false) ou valer 0, não grava.
+async function registrarEvento({ empresaId, motoboyId, tipo, refId }) {
+  if (!empresaId || !motoboyId || !tipo || !refId) return;
+  try {
+    const cfg = await obterConfig(empresaId);
+    const m = cfg.metricas[tipo];
+    if (!m || m.ativo === false) return;
+    const pontos = Math.round(Number(m.pontos) || 0);
+    if (!pontos) return;
+    await query(
+      `INSERT INTO score_eventos (empresa_id, motoboy_id, tipo, pontos, ref_id)
+       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (empresa_id, motoboy_id, tipo, ref_id) DO NOTHING`,
+      [empresaId, motoboyId, tipo, pontos, String(refId)]
+    );
+  } catch {}
+}
+
+// Eventos da conclusão de um PONTO (ou de uma entrega sem ponto, usando entregaId
+// como ref). Emite entrega_concluida OU insucesso_culpa + foto_ok + dia_ativo +
+// no_prazo (best-effort via SLA padrão). Tudo blindado — nunca lança.
+async function registrarEventosConclusao({ empresaId, motoboyId, entregaId, refId, insucesso, temFoto }) {
+  const ref = refId || entregaId;
+  try {
+    if (insucesso) {
+      await registrarEvento({ empresaId, motoboyId, tipo: 'insucesso_culpa', refId: ref });
+      return; // insucesso não ganha foto/prazo/dia
+    }
+    await registrarEvento({ empresaId, motoboyId, tipo: 'entrega_concluida', refId: ref });
+    if (temFoto) await registrarEvento({ empresaId, motoboyId, tipo: 'foto_ok', refId: ref });
+    // dia ativo (1x por dia, ref = data em America/Bahia)
+    try {
+      const { rows } = await query(`SELECT (now() AT TIME ZONE 'America/Bahia')::date::text AS d`);
+      if (rows[0]) await registrarEvento({ empresaId, motoboyId, tipo: 'dia_ativo', refId: 'dia:' + rows[0].d });
+    } catch {}
+    // no prazo (best-effort): concluída até criado_em + SLA padrão da empresa/loja.
+    try {
+      const { rows } = await query(
+        `SELECT e.criado_em, e.concluida_em, e.loja_id,
+                COALESCE((SELECT sla_padrao_min FROM sla_config s WHERE s.empresa_id = e.empresa_id AND s.loja_id = e.loja_id),
+                         (SELECT sla_padrao_min FROM sla_config s WHERE s.empresa_id = e.empresa_id AND s.loja_id IS NULL),
+                         90) AS sla_min
+           FROM entregas e WHERE e.id = $1`,
+        [entregaId]
+      );
+      const r = rows[0];
+      if (r && r.criado_em) {
+        const limite = new Date(new Date(r.criado_em).getTime() + Number(r.sla_min || 90) * 60000);
+        const fim = r.concluida_em ? new Date(r.concluida_em) : new Date();
+        if (fim <= limite) await registrarEvento({ empresaId, motoboyId, tipo: 'no_prazo', refId: ref });
+      }
+    } catch {}
+  } catch {}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -288,31 +325,28 @@ async function missoesDoMotoboy({ empresaId, motoboyId }) {
 async function rankingSemana({ empresaId, motoboyId }) {
   const cfg = await obterConfig(empresaId);
   if (cfg.config && cfg.config.ranking_ativo === false) return { janela: 'semana', total: 0, top: [], eu: null, desativado: true };
-  const met = cfg.metricas.entrega_concluida;
-  const ptE = met && met.ativo !== false ? Number(met.pontos || 0) : 0;
   const { rows } = await query(
-    `SELECT m.id, m.nome_completo, m.codigo, COALESCE(e.n, 0)::int AS entregues
+    `SELECT m.id, m.nome_completo, m.codigo, COALESCE(e.pts, 0)::int AS pontos
        FROM motoboys m
        LEFT JOIN (
-         SELECT motoboy_id, count(*) AS n FROM entregas
-          WHERE empresa_id = $1 AND status = 'entregue'
-            AND concluida_em >= date_trunc('week', now() AT TIME ZONE 'America/Bahia')
+         SELECT motoboy_id, SUM(pontos) AS pts FROM score_eventos
+          WHERE empresa_id = $1 AND criado_em >= date_trunc('week', now() AT TIME ZONE 'America/Bahia')
           GROUP BY motoboy_id
        ) e ON e.motoboy_id = m.id
       WHERE m.empresa_id = $1 AND m.status = 'ativo' AND m.situacao_cadastro = 'aprovado'`,
     [empresaId]
   );
   const lista = rows
-    .map(r => ({ id: r.id, nome: r.nome_completo, codigo: r.codigo, entregues: r.entregues, pontos: r.entregues * ptE }))
-    .sort((a, b) => b.pontos - a.pontos || b.entregues - a.entregues);
+    .map(r => ({ id: r.id, nome: r.nome_completo, codigo: r.codigo, pontos: Math.max(0, r.pontos) }))
+    .sort((a, b) => b.pontos - a.pontos);
   lista.forEach((r, i) => { r.posicao = i + 1; });
   const primeiroNome = (n) => { const p = String(n || '').trim().split(/\s+/); return p[0] + (p[1] ? ' ' + p[1][0] + '.' : ''); };
   const eu = lista.find(r => r.id === motoboyId) || null;
   return {
     janela: 'semana',
     total: lista.length,
-    top: lista.slice(0, 10).map(r => ({ posicao: r.posicao, nome: primeiroNome(r.nome), pontos: r.pontos, entregues: r.entregues, eu: r.id === motoboyId })),
-    eu: eu ? { posicao: eu.posicao, pontos: eu.pontos, entregues: eu.entregues } : null,
+    top: lista.slice(0, 10).map(r => ({ posicao: r.posicao, nome: primeiroNome(r.nome), pontos: r.pontos, eu: r.id === motoboyId })),
+    eu: eu ? { posicao: eu.posicao, pontos: eu.pontos } : null,
   };
 }
 
@@ -322,24 +356,19 @@ async function niveisDeMotoboys({ empresaId, motoboyIds }) {
   const out = {};
   if (!motoboyIds || !motoboyIds.length) return out;
   const cfg = await obterConfig(empresaId);
-  const met = cfg.metricas.entrega_concluida;
-  const ptE = met && met.ativo !== false ? Number(met.pontos || 0) : 0;
   const janela = String(Number(cfg.config && cfg.config.janela_dias) || 30);
-  let mapaN = {};
+  let mapa = {};
   try {
     const { rows } = await query(
-      `SELECT motoboy_id, count(*)::int AS n FROM entregas
-        WHERE empresa_id = $1 AND status = 'entregue' AND motoboy_id = ANY($2::uuid[])
-          AND concluida_em >= now() - (($3)::text || ' days')::interval
+      `SELECT motoboy_id, COALESCE(SUM(pontos),0)::int AS pts FROM score_eventos
+        WHERE empresa_id = $1 AND motoboy_id = ANY($2::uuid[])
+          AND criado_em >= now() - (($3)::text || ' days')::interval
         GROUP BY motoboy_id`,
       [empresaId, motoboyIds, janela]
     );
-    for (const r of rows) mapaN[r.motoboy_id] = r.n;
+    for (const r of rows) mapa[r.motoboy_id] = r.pts;
   } catch {}
-  for (const id of motoboyIds) {
-    const pts = Math.max(0, (mapaN[id] || 0) * ptE);
-    out[id] = nivelDe(pts, cfg.niveis).nome;
-  }
+  for (const id of motoboyIds) out[id] = nivelDe(Math.max(0, mapa[id] || 0), cfg.niveis).nome;
   return out;
 }
 
@@ -347,4 +376,5 @@ module.exports = {
   obterConfig, salvarConfig, meuScore, nivelDe,
   previaAlvo, listarCampanhas, obterCampanha, criarCampanha, atualizarCampanha, excluirCampanha,
   avaliarMissao, liberarPremio, missoesDoMotoboy, rankingSemana, niveisDeMotoboys,
+  registrarEvento, registrarEventosConclusao,
 };

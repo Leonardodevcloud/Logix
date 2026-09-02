@@ -71,6 +71,53 @@ async function initScoreTables() {
       pago_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (campanha_id, motoboy_id)
     )`);
+
+  // ── Fase 4: ledger de eventos de score ──────────────────────────
+  // Cada evento pontuável vira uma linha, com os pontos "congelados" no momento
+  // (mudar a config depois não reescreve o histórico). O score = soma do ledger
+  // na janela. ref_id evita duplicar (entrega, ponto, oferta, ou a data do dia).
+  await query(`
+    CREATE TABLE IF NOT EXISTS score_eventos (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      motoboy_id  UUID NOT NULL REFERENCES motoboys(id) ON DELETE CASCADE,
+      tipo        TEXT NOT NULL,
+      pontos      INTEGER NOT NULL DEFAULT 0,
+      ref_id      TEXT NOT NULL,
+      criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (empresa_id, motoboy_id, tipo, ref_id)
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_score_eventos_mb ON score_eventos(empresa_id, motoboy_id, criado_em)`);
+
+  // Backfill (uma vez, idempotente): gera eventos de 'entrega_concluida' e
+  // 'insucesso_culpa' dos últimos 60 dias a partir das entregas/pontos já feitos,
+  // usando os pontos configurados da empresa — assim o score não zera no deploy.
+  try {
+    await query(`
+      INSERT INTO score_eventos (empresa_id, motoboy_id, tipo, pontos, ref_id, criado_em)
+      SELECT e.empresa_id, e.motoboy_id, 'entrega_concluida',
+             COALESCE((sc.metricas->'entrega_concluida'->>'pontos')::int, 10),
+             p.id::text, COALESCE(e.concluida_em, e.criado_em)
+        FROM entregas_pontos p
+        JOIN entregas e ON e.id = p.entrega_id
+        LEFT JOIN score_config sc ON sc.empresa_id = e.empresa_id
+       WHERE p.status = 'entregue' AND e.motoboy_id IS NOT NULL
+         AND COALESCE(e.concluida_em, e.criado_em) >= now() - interval '60 days'
+      ON CONFLICT (empresa_id, motoboy_id, tipo, ref_id) DO NOTHING`);
+  } catch {}
+  try {
+    await query(`
+      INSERT INTO score_eventos (empresa_id, motoboy_id, tipo, pontos, ref_id, criado_em)
+      SELECT e.empresa_id, e.motoboy_id, 'insucesso_culpa',
+             COALESCE((sc.metricas->'insucesso_culpa'->>'pontos')::int, -8),
+             p.id::text, COALESCE(e.concluida_em, e.criado_em)
+        FROM entregas_pontos p
+        JOIN entregas e ON e.id = p.entrega_id
+        LEFT JOIN score_config sc ON sc.empresa_id = e.empresa_id
+       WHERE p.status = 'insucesso' AND e.motoboy_id IS NOT NULL
+         AND COALESCE(e.concluida_em, e.criado_em) >= now() - interval '60 days'
+      ON CONFLICT (empresa_id, motoboy_id, tipo, ref_id) DO NOTHING`);
+  } catch {}
 }
 
 module.exports = { initScoreTables, METRICAS_PADRAO, NIVEIS_PADRAO };
