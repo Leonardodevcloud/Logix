@@ -2,6 +2,7 @@ const express = require('express');
 const { verificarToken, verificarTokenMotoboy } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirModulo, exigirPermissao } = require('../../middleware/permissoes');
+const { limiteChat } = require('../../middleware/rateLimit');
 const service = require('./chat.service');
 
 function initChatRoutes() {
@@ -21,7 +22,7 @@ function initChatRoutes() {
   router.get('/app/conversas/:id/mensagens', verificarTokenMotoboy, async (req, res, next) => {
     try { res.json(await service.mensagens({ empresaId: emp(req), conversaId: req.params.id, lado: 'motoboy' })); } catch (e) { next(e); }
   });
-  router.post('/app/conversas/:id/mensagens', verificarTokenMotoboy, async (req, res, next) => {
+  router.post('/app/conversas/:id/mensagens', verificarTokenMotoboy, limiteChat, async (req, res, next) => {
     try {
       res.json(await service.enviar({
         empresaId: emp(req), conversaId: req.params.id, autorTipo: 'motoboy', autorId: req.motoboy.id, autorNome: 'Entregador',
@@ -46,7 +47,7 @@ function initChatRoutes() {
   router.get('/conversas/:id/mensagens', exigirPermissao('chat.ver'), async (req, res, next) => {
     try { res.json(await service.mensagens({ empresaId: req.empresaId, conversaId: req.params.id, lado: lado(req) })); } catch (e) { next(e); }
   });
-  router.post('/conversas/:id/mensagens', exigirPermissao('chat.responder'), async (req, res, next) => {
+  router.post('/conversas/:id/mensagens', exigirPermissao('chat.responder'), limiteChat, async (req, res, next) => {
     try {
       res.json(await service.enviar({
         empresaId: req.empresaId, conversaId: req.params.id, autorTipo: lado(req),

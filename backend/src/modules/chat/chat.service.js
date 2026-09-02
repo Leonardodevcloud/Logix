@@ -3,6 +3,8 @@ const AppError = require('../../shared/AppError');
 const storage = require('../../shared/storage');
 let emitirParaEmpresa = () => {}, emitirParaMotoboy = () => {};
 try { const ws = require('../../realtime/ws'); emitirParaEmpresa = ws.emitirParaEmpresa; emitirParaMotoboy = ws.emitirParaMotoboy; } catch {}
+let notificarMotoboy = async () => {};
+try { notificarMotoboy = require('../../shared/push').notificarMotoboy; } catch {}
 let empresaTemModulo = async () => true;
 try { empresaTemModulo = require('../permissoes/permissoes.service').empresaTemModulo; } catch {}
 
@@ -136,13 +138,17 @@ async function _conversa(empresaId, conversaId) {
 // ── Envia mensagem (autorTipo: motoboy|central|loja) ──
 async function enviar({ empresaId, conversaId, autorTipo, autorId, autorNome, tipo = 'texto', texto, arquivo, lat, lng }) {
   const conv = await _conversa(empresaId, conversaId);
+  if (conv.status === 'encerrada' && tipo !== 'sistema') throw AppError.validacao('Esta conversa foi encerrada.');
   let midiaKey = null;
   if (tipo === 'foto') {
     if (!arquivo) throw AppError.validacao('Envie a foto');
+    if (String(arquivo).length > 11 * 1024 * 1024) throw AppError.validacao('Foto muito grande (máx ~8MB).');
     const up = await storage.subirBase64({ empresaId, motoboyId: conv.motoboy_id || empresaId, tipo: 'chat', dataUri: arquivo });
     midiaKey = up.key;
   } else if (tipo === 'local') {
     if (lat == null || lng == null) throw AppError.validacao('Localização inválida');
+  } else if (tipo === 'sistema') {
+    // nota do sistema — sem validação de texto do usuário
   } else {
     if (!String(texto || '').trim()) throw AppError.validacao('Mensagem vazia');
     tipo = 'texto';
@@ -150,16 +156,41 @@ async function enviar({ empresaId, conversaId, autorTipo, autorId, autorNome, ti
   const { rows } = await query(
     `INSERT INTO chat_mensagens (conversa_id, empresa_id, autor_tipo, autor_id, autor_nome, tipo, texto, midia_key, lat, lng)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, criado_em`,
-    [conversaId, empresaId, autorTipo, autorId || null, autorNome || null, tipo, tipo === 'texto' ? String(texto).trim() : null, midiaKey, lat != null ? lat : null, lng != null ? lng : null]
+    [conversaId, empresaId, autorTipo, autorId || null, autorNome || null, tipo, (tipo === 'texto' || tipo === 'sistema') ? String(texto || '').trim() : null, midiaKey, lat != null ? lat : null, lng != null ? lng : null]
   );
   await query(`UPDATE chat_conversas SET ultima_msg_em = now(), ultima_previa = $2 WHERE id = $1`, [conversaId, previa(tipo, texto)]);
-  await marcarLida({ conversaId, lado: autorTipo }); // quem enviou já "leu"
+  if (autorTipo !== 'sistema') await marcarLida({ conversaId, lado: autorTipo });
 
   const evt = { conversaId, entregaId: conv.entrega_id, tipo: conv.tipo, autorTipo, motoboyId: conv.motoboy_id, lojaId: conv.loja_id, protocolo: conv.protocolo };
   try { if (conv.motoboy_id && autorTipo !== 'motoboy') emitirParaMotoboy(conv.motoboy_id, 'chat.mensagem', evt); } catch {}
   try { emitirParaEmpresa(empresaId, 'chat.mensagem', evt); } catch {}
 
+  // Push pro motoboy quando a mensagem vem do outro lado (funciona com o app fechado).
+  if (conv.motoboy_id && (autorTipo === 'central' || autorTipo === 'loja')) {
+    const de = autorTipo === 'central' ? 'Suporte' : 'Loja';
+    const corpo = tipo === 'foto' ? 'Enviou uma foto' : tipo === 'local' ? 'Enviou uma localização' : String(texto || '').slice(0, 80);
+    notificarMotoboy(conv.motoboy_id, {
+      titulo: `💬 ${de}${conv.protocolo ? ' · ' + conv.protocolo : ''}`,
+      corpo: corpo || 'Nova mensagem',
+      dados: { tipo: 'chat', conversaId, entregaId: conv.entrega_id, chatTipo: conv.tipo },
+    }).catch(() => {});
+  }
+
   return { id: rows[0].id, criado_em: rows[0].criado_em };
+}
+
+// Encerra as conversas de uma corrida (ao finalizar a entrega). Deixa uma nota
+// do sistema visível para todos os lados (inclusive a central entende o motivo).
+async function encerrarPorCorrida({ empresaId, entregaId }) {
+  const { rows } = await query(
+    `SELECT id FROM chat_conversas WHERE empresa_id = $1 AND entrega_id = $2 AND status <> 'encerrada'`,
+    [empresaId, entregaId]
+  );
+  for (const c of rows) {
+    await query(`UPDATE chat_conversas SET status = 'encerrada', encerrada_em = now(), encerrada_motivo = 'corrida_finalizada' WHERE id = $1`, [c.id]);
+    try { await enviar({ empresaId, conversaId: c.id, autorTipo: 'sistema', tipo: 'sistema', texto: 'Conversa encerrada — a corrida foi finalizada.' }); } catch {}
+  }
+  return { ok: true, encerradas: rows.length };
 }
 
 // ── Lista mensagens de uma conversa + marca lida para o lado ──
@@ -175,14 +206,14 @@ async function mensagens({ empresaId, conversaId, lado }) {
     delete m.midia_key;
   }
   if (lado) await marcarLida({ conversaId, lado });
-  return { conversa: { id: conv.id, tipo: conv.tipo, protocolo: conv.protocolo, entrega_id: conv.entrega_id }, mensagens: rows };
+  return { conversa: { id: conv.id, tipo: conv.tipo, protocolo: conv.protocolo, entrega_id: conv.entrega_id, status: conv.status }, mensagens: rows };
 }
 
 // ── App: lista as conversas do motoboy ──
 async function conversasApp({ empresaId, motoboyId }) {
   if (!(await chatAtivo(empresaId))) return { ativo: false, conversas: [] };
   const { rows } = await query(
-    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.ultima_previa, c.ultima_msg_em,
+    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.status, c.ultima_previa, c.ultima_msg_em,
             ${SQL_NAO_LIDAS('c', "'motoboy'")} AS nao_lidas,
             l.nome_fantasia AS loja_nome
        FROM chat_conversas c LEFT JOIN lojas l ON l.id = c.loja_id
@@ -199,7 +230,7 @@ async function conversasCentral({ empresaId, lojaId }) {
   const cond = lojaId ? "c.tipo = 'solicitante' AND c.loja_id = $2" : "c.tipo = 'suporte'";
   const params = lojaId ? [empresaId, lojaId] : [empresaId];
   const { rows } = await query(
-    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.ultima_previa, c.ultima_msg_em,
+    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.status, c.ultima_previa, c.ultima_msg_em,
             ${SQL_NAO_LIDAS('c', lado)} AS nao_lidas,
             m.nome_completo AS motoboy_nome, m.codigo AS motoboy_codigo
        FROM chat_conversas c LEFT JOIN motoboys m ON m.id = c.motoboy_id
@@ -234,4 +265,5 @@ module.exports = {
   chatAtivo, abrirConversaApp, abrirConversaLoja, enviar, mensagens,
   conversasApp, conversasCentral, naoLidasApp, naoLidasCentral,
   chatDaLojaAtivo, lojasChatConfig, centrosChatConfig, definirChatLoja, definirChatCentro,
+  encerrarPorCorrida,
 };

@@ -63,6 +63,7 @@ export async function montar(container) {
   if (!podeResponder) composer.style.display = 'none';
 
   function bolha(m) {
+    if (m.tipo === 'sistema') return el('div', { style: 'align-self:center;background:#dfe7f1;color:var(--lx-tinta-2);font-size:10.5px;font-weight:700;padding:4px 12px;border-radius:99px;margin:2px 0' }, m.texto || '');
     const meu = ehLoja ? m.autor_tipo === 'loja' : m.autor_tipo === 'central';
     const b = el('div', { style: `max-width:78%;padding:8px 11px;border-radius:14px;font-size:12.5px;line-height:1.4;box-shadow:0 1px 1px rgba(0,0,0,.05);align-self:${meu ? 'flex-end' : 'flex-start'};background:${meu ? '#d7ebff' : '#fff'};border-bottom-${meu ? 'right' : 'left'}-radius:5px` });
     if (m.tipo === 'foto' && m.midia_url) b.append(el('img', { src: m.midia_url, style: 'width:170px;max-width:100%;border-radius:9px;display:block;cursor:pointer', onClick: () => window.open(m.midia_url, '_blank') }));
@@ -79,6 +80,14 @@ export async function montar(container) {
       msgsDiv.innerHTML = '';
       (r.mensagens || []).forEach(m => msgsDiv.append(bolha(m)));
       msgsDiv.scrollTop = msgsDiv.scrollHeight;
+      // Conversa encerrada: trava o composer.
+      const encerrada = r.conversa && r.conversa.status === 'encerrada';
+      composer.style.display = (!podeResponder || encerrada) ? 'none' : 'flex';
+      if (encerrada && !msgsDiv.querySelector('[data-enc]')) {
+        thread.querySelector('[data-encbar]')?.remove();
+        const bar = el('div', { 'data-encbar': '1', style: 'padding:9px;text-align:center;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);background:#eef2f7;border-top:1px solid var(--lx-linha)' }, 'Conversa encerrada (corrida finalizada)');
+        thread.append(bar);
+      } else { thread.querySelector('[data-encbar]')?.remove(); }
     } catch (e) { /* mantém */ }
   }
 

@@ -7,6 +7,8 @@ const limiteLogin = rateLimit({
 });
 // Rastreamento recebe muitos pings; limite mais alto.
 const limiteRastreamento = rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false });
+// Chat: anti-spam no envio de mensagens (por IP/sessão).
+const limiteChat = rateLimit({ windowMs: 10_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { erro: 'Você está enviando muito rápido. Aguarde um instante.' } });
 
 // GPS do app: por MOTOBOY (não por IP — vários motoboys compartilham IP de operadora).
 // App envia a cada 15s (~4/min); 12/min dá folga para retentativas sem permitir flood.
@@ -16,4 +18,4 @@ const limiteRastreamentoMotoboy = rateLimit({
   standardHeaders: true, legacyHeaders: false,
 });
 
-module.exports = { limiteGlobal, limiteLogin, limiteRastreamento, limiteRastreamentoMotoboy };
+module.exports = { limiteGlobal, limiteLogin, limiteRastreamento, limiteRastreamentoMotoboy, limiteChat };

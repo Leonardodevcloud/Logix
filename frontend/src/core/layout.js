@@ -2,6 +2,7 @@ import { el, icones } from './ui.js';
 import { navegar } from './router.js';
 import * as auth from './auth.js';
 import { reaplicarTema } from './tema.js';
+import { get as apiGet } from './api.js';
 
 const iconeWhitelabel = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 22a10 10 0 1 1 0-20 8 8 0 0 1 0 16h-1.5a2.5 2.5 0 0 0 0 4z"/></svg>';
 const iconeApi = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
@@ -148,10 +149,12 @@ export function casca(titulo, conteudo, subtitulo) {
       }
       return el('button', {
         class: 'lx-nav-i' + (ativo === n.rota ? ' on' : ''),
+        ...(n.rota === '/chat' ? { 'data-chatnav': '1' } : {}),
         onClick: () => n.novaAba
           ? window.open(location.pathname + '#' + n.rota, '_blank')
           : navegar(n.rota),
-      }, el('span', { html: iconeNav(n.icone) }), n.rotulo);
+      }, el('span', { html: iconeNav(n.icone) }), n.rotulo,
+        n.rota === '/chat' ? el('span', { 'data-chatbadge': '', style: 'margin-left:auto;display:none;background:var(--lx-erro);color:#fff;font-size:9px;font-weight:800;border-radius:99px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 4px' }) : '');
     }),
   ));
 
@@ -170,6 +173,19 @@ export function casca(titulo, conteudo, subtitulo) {
       el('button', { class: 'lx-sair', onClick: async () => { await auth.logout(); navegar('/login'); } }, 'Sair')));
 
   const sub = subtitulo || (u.empresa_nome ? u.empresa_nome : perfilRotulo(u.perfil));
+  // Badge de não lidas no item de chat do menu (poll leve; só se o item existe).
+  try {
+    if (auth.temModulo('chat') && (u.perfil === 'central_admin' || u.perfil === 'loja')) {
+      clearInterval(window.__lxChatBadge);
+      const atualizar = async () => {
+        const alvo = side.querySelector('[data-chatbadge]');
+        if (!alvo) { clearInterval(window.__lxChatBadge); return; }
+        try { const r = await apiGet('/chat/nao-lidas'); const t = (r && r.total) || 0; alvo.textContent = t > 9 ? '9+' : String(t); alvo.style.display = t > 0 ? '' : 'none'; } catch {}
+      };
+      atualizar();
+      window.__lxChatBadge = setInterval(atualizar, 15000);
+    }
+  } catch {}
   const main = el('div', { class: 'lx-main' },
     bannerImpersonacao(u),  // banner só aparece quando impersonando
     el('div', { class: 'lx-topbar' },

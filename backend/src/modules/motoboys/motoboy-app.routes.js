@@ -568,6 +568,8 @@ module.exports = function motoboyAppRoutes() {
           insucesso: ehInsucesso, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
         }).catch(() => {});
       } catch {}
+      // 5c. Chat (fire-and-forget): corrida finalizada → encerra as conversas dela.
+      if (todosResolvidos) { try { require('../chat/chat.service').encerrarPorCorrida({ empresaId, entregaId }).catch(() => {}); } catch {} }
 
       // 6. Fotos em background, vinculadas ao protocolo do ponto.
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
@@ -661,6 +663,7 @@ module.exports = function motoboyAppRoutes() {
           insucesso: false, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
         }).catch(() => {});
       } catch {}
+      if (todosEntregues) { try { require('../chat/chat.service').encerrarPorCorrida({ empresaId, entregaId }).catch(() => {}); } catch {} }
 
       // Fotos em background
       if (pontoId && Array.isArray(fotos_urls) && fotos_urls.length) {
