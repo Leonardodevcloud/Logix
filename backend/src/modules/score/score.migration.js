@@ -37,6 +37,39 @@ async function initScoreTables() {
       WHERE NOT EXISTS (SELECT 1 FROM score_config c WHERE c.empresa_id = e.id)`,
     [JSON.stringify(METRICAS_PADRAO), JSON.stringify(NIVEIS_PADRAO)]
   );
+
+  // ── Fase 2: campanhas (missões) e registro de prêmios pagos ──
+  await query(`
+    CREATE TABLE IF NOT EXISTS score_campanhas (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      nome        TEXT NOT NULL,
+      tipo        TEXT NOT NULL DEFAULT 'missao',
+      alvo        JSONB NOT NULL DEFAULT '{}'::jsonb,   -- { todos, motoboys[], clientes[], novatos_dias }
+      meta        JSONB NOT NULL DEFAULT '{}'::jsonb,   -- { qtd, sucesso_min }
+      premio      JSONB NOT NULL DEFAULT '{}'::jsonb,   -- { tipo:'bonus_rs', valor_cent }
+      inicio      DATE,
+      fim         DATE,
+      status      TEXT NOT NULL DEFAULT 'rascunho',     -- rascunho|ativa|pausada|encerrada
+      prioridade  INTEGER NOT NULL DEFAULT 0,
+      exclusivo   BOOLEAN NOT NULL DEFAULT FALSE,
+      criado_por  UUID,
+      criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_score_campanhas_empresa ON score_campanhas(empresa_id, status)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS score_missao_premios (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id    UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      campanha_id   UUID NOT NULL REFERENCES score_campanhas(id) ON DELETE CASCADE,
+      motoboy_id    UUID NOT NULL REFERENCES motoboys(id) ON DELETE CASCADE,
+      lancamento_id UUID,
+      valor_cent    INTEGER NOT NULL DEFAULT 0,
+      pago_por      UUID,
+      pago_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (campanha_id, motoboy_id)
+    )`);
 }
 
 module.exports = { initScoreTables, METRICAS_PADRAO, NIVEIS_PADRAO };

@@ -91,4 +91,194 @@ async function meuScore({ empresaId, motoboyId }) {
   };
 }
 
-module.exports = { obterConfig, salvarConfig, meuScore, nivelDe };
+// ═══════════════════════════════════════════════════════════════════
+//  FASE 2 — Campanhas (missões) com alvo + bônus em R$ (liberação manual)
+// ═══════════════════════════════════════════════════════════════════
+const AppError = require('../../shared/AppError');
+const financeiro = require('../financeiro/financeiro.service');
+
+const HOJE = "(now() AT TIME ZONE 'America/Bahia')::date";
+
+// Resolve QUEM participa (motoboys) a partir do alvo. Alvo vazio (sem filtro e
+// sem 'todos') → ninguém, de propósito (evita atingir a base toda por engano).
+async function resolverCandidatos(empresaId, alvo = {}) {
+  const cond = ['empresa_id = $1', "status = 'ativo'", "situacao_cadastro = 'aprovado'"];
+  const params = [empresaId];
+  if (!alvo.todos) {
+    const ors = [];
+    if (Array.isArray(alvo.motoboys) && alvo.motoboys.length) { params.push(alvo.motoboys); ors.push(`id = ANY($${params.length}::uuid[])`); }
+    if (alvo.novatos_dias) { params.push(String(alvo.novatos_dias)); ors.push(`criado_em >= now() - (($${params.length})::text || ' days')::interval`); }
+    if (!ors.length) return [];
+    cond.push('(' + ors.join(' OR ') + ')');
+  }
+  const { rows } = await query(`SELECT id, nome_completo, codigo FROM motoboys WHERE ${cond.join(' AND ')} ORDER BY codigo`, params);
+  return rows;
+}
+
+// Conta entregas concluídas por motoboy dentro da janela + filtro de cliente.
+async function contarEntregues(empresaId, ids, campanha) {
+  if (!ids.length) return {};
+  const cond = ['empresa_id = $1', "status = 'entregue'", 'motoboy_id = ANY($2::uuid[])'];
+  const params = [empresaId, ids];
+  if (campanha.inicio) { params.push(campanha.inicio); cond.push(`concluida_em >= $${params.length}::date`); }
+  if (campanha.fim) { params.push(campanha.fim); cond.push(`concluida_em < ($${params.length}::date + 1)`); }
+  const clientes = campanha.alvo && campanha.alvo.clientes;
+  if (Array.isArray(clientes) && clientes.length) { params.push(clientes); cond.push(`loja_id = ANY($${params.length}::uuid[])`); }
+  const { rows } = await query(`SELECT motoboy_id, count(*)::int AS n FROM entregas WHERE ${cond.join(' AND ')} GROUP BY motoboy_id`, params);
+  const mapa = {};
+  for (const r of rows) mapa[r.motoboy_id] = r.n;
+  return mapa;
+}
+
+async function previaAlvo({ empresaId, alvo }) {
+  const c = await resolverCandidatos(empresaId, alvo || {});
+  return { total: c.length };
+}
+
+async function listarCampanhas({ empresaId }) {
+  const { rows } = await query(`SELECT * FROM score_campanhas WHERE empresa_id = $1 ORDER BY criado_em DESC`, [empresaId]);
+  return { campanhas: rows };
+}
+async function obterCampanha({ empresaId, id }) {
+  const { rows } = await query(`SELECT * FROM score_campanhas WHERE id = $1 AND empresa_id = $2`, [id, empresaId]);
+  if (!rows[0]) throw AppError.naoEncontrado('Campanha não encontrada');
+  return rows[0];
+}
+function sanitizarCampanha(d = {}) {
+  const alvo = d.alvo || {}, meta = d.meta || {}, premio = d.premio || {};
+  return {
+    nome: String(d.nome || '').trim() || 'Campanha',
+    tipo: 'missao',
+    alvo: {
+      todos: !!alvo.todos,
+      motoboys: Array.isArray(alvo.motoboys) ? alvo.motoboys.filter(Boolean) : [],
+      clientes: Array.isArray(alvo.clientes) ? alvo.clientes.filter(Boolean) : [],
+      novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null,
+    },
+    meta: { qtd: Math.max(1, parseInt(meta.qtd, 10) || 1), sucesso_min: Math.min(100, Math.max(0, parseInt(meta.sucesso_min, 10) || 0)) },
+    premio: { tipo: 'bonus_rs', valor_cent: Math.max(0, Math.round(Number(premio.valor_cent) || 0)) },
+    inicio: d.inicio || null,
+    fim: d.fim || null,
+    status: ['rascunho', 'ativa', 'pausada', 'encerrada'].includes(d.status) ? d.status : 'rascunho',
+    prioridade: parseInt(d.prioridade, 10) || 0,
+    exclusivo: !!d.exclusivo,
+  };
+}
+async function criarCampanha({ empresaId, dados, usuarioId }) {
+  const c = sanitizarCampanha(dados);
+  const { rows } = await query(
+    `INSERT INTO score_campanhas (empresa_id, nome, tipo, alvo, meta, premio, inicio, fim, status, prioridade, exclusivo, criado_por)
+     VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    [empresaId, c.nome, c.tipo, JSON.stringify(c.alvo), JSON.stringify(c.meta), JSON.stringify(c.premio), c.inicio, c.fim, c.status, c.prioridade, c.exclusivo, usuarioId || null]
+  );
+  return { id: rows[0].id };
+}
+async function atualizarCampanha({ empresaId, id, dados }) {
+  await obterCampanha({ empresaId, id });
+  const c = sanitizarCampanha(dados);
+  await query(
+    `UPDATE score_campanhas SET nome=$3, alvo=$4::jsonb, meta=$5::jsonb, premio=$6::jsonb, inicio=$7, fim=$8, status=$9, prioridade=$10, exclusivo=$11
+      WHERE id=$1 AND empresa_id=$2`,
+    [id, empresaId, c.nome, JSON.stringify(c.alvo), JSON.stringify(c.meta), JSON.stringify(c.premio), c.inicio, c.fim, c.status, c.prioridade, c.exclusivo]
+  );
+  return { ok: true };
+}
+async function excluirCampanha({ empresaId, id }) {
+  await query(`DELETE FROM score_campanhas WHERE id=$1 AND empresa_id=$2`, [id, empresaId]);
+  return { ok: true };
+}
+
+// Avalia uma missão: cada candidato com progresso, se completou e se já foi pago.
+async function avaliarMissao({ empresaId, id }) {
+  const campanha = await obterCampanha({ empresaId, id });
+  const candidatos = await resolverCandidatos(empresaId, campanha.alvo);
+  const ids = candidatos.map(c => c.id);
+  const entregues = await contarEntregues(empresaId, ids, campanha);
+  const { rows: pagosRows } = await query(`SELECT motoboy_id FROM score_missao_premios WHERE campanha_id = $1`, [id]);
+  const pagos = new Set(pagosRows.map(r => r.motoboy_id));
+  const metaQtd = campanha.meta.qtd || 1;
+  const lista = candidatos.map(c => {
+    const n = entregues[c.id] || 0;
+    return { motoboy_id: c.id, nome: c.nome_completo, codigo: c.codigo, entregues: n, meta: metaQtd, completo: n >= metaQtd, jaPago: pagos.has(c.id) };
+  }).sort((a, b) => b.entregues - a.entregues);
+  return { campanha, valor_cent: campanha.premio.valor_cent || 0, candidatos: lista };
+}
+
+// Libera (paga) o bônus — IDEMPOTENTE. Reserva o registro (UNIQUE) ANTES de
+// criar o lançamento; se o financeiro falhar, desfaz a reserva.
+async function liberarPremio({ empresaId, campanhaId, motoboyId, usuarioId }) {
+  const campanha = await obterCampanha({ empresaId, id: campanhaId });
+  if (campanha.tipo !== 'missao' || !campanha.premio || campanha.premio.tipo !== 'bonus_rs') throw AppError.validacao('Campanha sem bônus em R$.');
+  const valor = Math.round(Number(campanha.premio.valor_cent) || 0);
+  if (valor <= 0) throw AppError.validacao('Valor do bônus inválido.');
+
+  const mapa = await contarEntregues(empresaId, [motoboyId], campanha);
+  if ((mapa[motoboyId] || 0) < (campanha.meta.qtd || 1)) throw AppError.validacao('Este entregador ainda não bateu a meta.');
+
+  const { rows } = await query(
+    `INSERT INTO score_missao_premios (empresa_id, campanha_id, motoboy_id, valor_cent, pago_por)
+     VALUES ($1,$2,$3,$4,$5) ON CONFLICT (campanha_id, motoboy_id) DO NOTHING RETURNING id`,
+    [empresaId, campanhaId, motoboyId, valor, usuarioId || null]
+  );
+  if (!rows[0]) return { ok: true, jaPago: true };
+
+  try {
+    const lanc = await financeiro.criarLancamento({
+      empresaId, motoboyId, categoriaId: null, tipo: 'credito', valorCent: valor,
+      descricao: 'Bônus — ' + campanha.nome, competencia: null, usuarioId,
+    });
+    await query(`UPDATE score_missao_premios SET lancamento_id = $2 WHERE id = $1`, [rows[0].id, lanc.id]);
+  } catch (e) {
+    await query(`DELETE FROM score_missao_premios WHERE id = $1`, [rows[0].id]).catch(() => {});
+    throw e;
+  }
+  return { ok: true, pago: true, valor_cent: valor };
+}
+
+// Missões ATIVAS que valem para um motoboy (com o progresso dele).
+async function missoesDoMotoboy({ empresaId, motoboyId }) {
+  const { rows: campanhas } = await query(
+    `SELECT * FROM score_campanhas
+      WHERE empresa_id = $1 AND tipo = 'missao' AND status = 'ativa'
+        AND (inicio IS NULL OR inicio <= ${HOJE})
+        AND (fim IS NULL OR fim >= ${HOJE})
+      ORDER BY prioridade DESC, criado_em DESC`,
+    [empresaId]
+  );
+  if (!campanhas.length) return { missoes: [] };
+
+  const { rows: mb } = await query(`SELECT criado_em FROM motoboys WHERE id = $1`, [motoboyId]);
+  const criadoEm = mb[0] ? new Date(mb[0].criado_em) : null;
+  const pagos = await query(`SELECT campanha_id FROM score_missao_premios WHERE motoboy_id = $1`, [motoboyId]);
+  const setPagos = new Set(pagos.rows.map(r => r.campanha_id));
+
+  const aplica = (alvo) => {
+    if (alvo.todos) return true;
+    if (Array.isArray(alvo.motoboys) && alvo.motoboys.includes(motoboyId)) return true;
+    if (alvo.novatos_dias && criadoEm) {
+      const dias = (Date.now() - criadoEm.getTime()) / 86400000;
+      if (dias <= Number(alvo.novatos_dias)) return true;
+    }
+    return false;
+  };
+
+  const missoes = [];
+  for (const c of campanhas) {
+    if (!aplica(c.alvo || {})) continue;
+    const mapa = await contarEntregues(empresaId, [motoboyId], c);
+    const feitas = mapa[motoboyId] || 0;
+    const metaQtd = (c.meta && c.meta.qtd) || 1;
+    missoes.push({
+      id: c.id, nome: c.nome, meta: metaQtd, feitas, completo: feitas >= metaQtd,
+      progresso: Math.min(100, Math.round((feitas / metaQtd) * 100)),
+      premio_cent: (c.premio && c.premio.valor_cent) || 0, jaPago: setPagos.has(c.id), fim: c.fim,
+    });
+  }
+  return { missoes };
+}
+
+module.exports = {
+  obterConfig, salvarConfig, meuScore, nivelDe,
+  previaAlvo, listarCampanhas, obterCampanha, criarCampanha, atualizarCampanha, excluirCampanha,
+  avaliarMissao, liberarPremio, missoesDoMotoboy,
+};
