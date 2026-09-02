@@ -34,6 +34,7 @@ const integracoes = require('./src/modules/integracoes');
 const relatorios = require('./src/modules/relatorios');
 const score = require('./src/modules/score');
 const regioes = require('./src/modules/regioes');
+const chat = require('./src/modules/chat');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
 async function migrar() {
@@ -55,6 +56,7 @@ async function migrar() {
   await integracoes.initIntegracoesTables(); // chaves de API + ALTER entregas (referencia_externa, rastreio_token...)
   await score.initScoreTables();             // gamificação: score_config por empresa (só depende de empresas)
   await regioes.initRegioesTables();         // regiões (polígonos) por empresa
+  await chat.initChatTables();               // chat interno (conversas/mensagens) — depois de entregas/lojas/motoboys
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -111,6 +113,7 @@ function montarApp() {
   api.use('/relatorios', relatorios.initRelatoriosRoutes());
   api.use('/score', score.initScoreRoutes());
   api.use('/regioes', regioes.initRegioesRoutes());
+  api.use('/chat', chat.initChatRoutes());
   app.use('/api/v1', api);
 
   app.use(errorHandler); // sempre por último

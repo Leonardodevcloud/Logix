@@ -63,6 +63,12 @@ function gruposNav() {
   if (central && auth.pode('financeiro.ver'))
     operacao.push({ rota: '/financeiro', rotulo: 'Financeiro', icone: 'financeiro' });
 
+  // Chat interno — módulo vendável. Central: "Suporte"; Loja: "Mensagens".
+  if (central && auth.temModulo('chat') && auth.pode('chat.ver'))
+    operacao.push({ rota: '/chat', rotulo: 'Suporte', icone: 'chat' });
+  else if (a.perfil === 'loja' && auth.temModulo('chat'))
+    operacao.push({ rota: '/chat', rotulo: 'Mensagens', icone: 'chat' });
+
   const config = [];
   if (auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });

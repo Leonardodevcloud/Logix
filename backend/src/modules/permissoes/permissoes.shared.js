@@ -9,6 +9,7 @@ const MODULOS = [
   { codigo: 'financeiro', nome: 'Financeiro', categoria: 'Gestão', ordem: 6 },
   { codigo: 'maquininhas', nome: 'Maquininhas', categoria: 'Gestão', ordem: 7 },
   { codigo: 'bi', nome: 'Relatórios', categoria: 'Gestão', ordem: 8 },
+  { codigo: 'chat', nome: 'Chat interno', categoria: 'Operação', ordem: 10 },
   { codigo: 'marca', nome: 'Marca', categoria: 'Configuração', ordem: 9 },
 ];
 
@@ -85,6 +86,10 @@ const CATALOGO = [
   { modulo: 'usuarios', nome: 'Equipe e permissões', categoria: 'Configuração', acoes: [
     { codigo: 'usuarios.ver',       rotulo: 'Ver equipe',                desc: 'Visualizar membros da equipe' },
     { codigo: 'usuarios.gerenciar', rotulo: 'Gerenciar equipe e permissões', desc: 'Criar usuários e definir permissões' },
+  ]},
+  { modulo: 'chat', nome: 'Chat interno', categoria: 'Operação', acoes: [
+    { codigo: 'chat.ver',      rotulo: 'Ver conversas',      desc: 'Abrir o chat/suporte e ler as conversas dos entregadores' },
+    { codigo: 'chat.responder', rotulo: 'Responder no chat', desc: 'Enviar mensagens no chat (suporte / com a loja)' },
   ]},
 ];
 
