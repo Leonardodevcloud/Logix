@@ -22,6 +22,7 @@ function gruposNav() {
           { rota: '/gamificacao', rotulo: 'Gamificação' },
         ] },
         { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
+        { rota: '/regioes', rotulo: 'Regiões', icone: 'mapa' },
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
@@ -58,6 +59,7 @@ function gruposNav() {
       { rota: '/rotas', rotulo: 'Rotas traçadas' },
       { rota: '/gamificacao', rotulo: 'Gamificação' },
     ] });
+  if (central) operacao.push({ rota: '/regioes', rotulo: 'Regiões', icone: 'mapa' });
   // Financeiro: ferramenta da central — aparece por permissão (não é módulo
   // vendável por cliente, então não depende de temModulo).
   if (central && auth.pode('financeiro.ver'))

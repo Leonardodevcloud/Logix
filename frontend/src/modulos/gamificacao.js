@@ -37,10 +37,11 @@ export async function montar(container) {
   let cfg = { metricas: {}, niveis: [] };
   try { cfg = await get('/score/config'); } catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
   // Listas para os alvos (carregadas sob demanda).
-  let lojas = null, motoboys = null;
+  let lojas = null, motoboys = null, regioes = null;
   async function carregarListas() {
     if (!lojas) { try { const r = await get('/lojas'); lojas = (r.lojas || r || []).map(l => ({ id: l.id, nome: l.nome_fantasia || l.nome || l.razao_social || '—' })); } catch { lojas = []; } }
     if (!motoboys) { try { const r = await get('/motoboys'); motoboys = (r.motoboys || r || []).map(m => ({ id: m.id, nome: m.nome_completo || '—', codigo: m.codigo })); } catch { motoboys = []; } }
+    if (!regioes) { try { const r = await get('/regioes'); regioes = (r.regioes || []).map(x => ({ id: x.id, nome: x.nome, cor: x.cor })); } catch { regioes = []; } }
   }
 
   let aba = 'metricas';
@@ -128,6 +129,7 @@ export async function montar(container) {
     if (alvo.todos) c.push('Todos');
     if (alvo.novatos_dias) c.push('Novatos < ' + alvo.novatos_dias + 'd');
     if (Array.isArray(alvo.clientes) && alvo.clientes.length) c.push(alvo.clientes.length + ' cliente(s)');
+    if (Array.isArray(alvo.regioes) && alvo.regioes.length) c.push(alvo.regioes.length + ' região(ões)');
     if (Array.isArray(alvo.motoboys) && alvo.motoboys.length) c.push(alvo.motoboys.length + ' entregador(es)');
     if (!c.length) c.push('Sem alvo');
     return c;
@@ -164,7 +166,7 @@ export async function montar(container) {
   async function abrirBuilder(existente) {
     await carregarListas();
     const d = existente || { alvo: { todos: true }, meta: { qtd: 30, sucesso_min: 0 }, premio: { valor_cent: 4000 }, status: 'rascunho' };
-    const alvo = { todos: !!(d.alvo && d.alvo.todos), novatos_dias: (d.alvo && d.alvo.novatos_dias) || '', clientes: new Set((d.alvo && d.alvo.clientes) || []), motoboys: new Set((d.alvo && d.alvo.motoboys) || []) };
+    const alvo = { todos: !!(d.alvo && d.alvo.todos), novatos_dias: (d.alvo && d.alvo.novatos_dias) || '', clientes: new Set((d.alvo && d.alvo.clientes) || []), motoboys: new Set((d.alvo && d.alvo.motoboys) || []), regioes: new Set((d.alvo && d.alvo.regioes) || []) };
 
     const inNome = el('input', { class: 'lx-input', value: d.nome || '' });
     const selStatus = el('select', { class: 'lx-input' }, ...['rascunho', 'ativa', 'pausada', 'encerrada'].map(s => el('option', { value: s, ...(d.status === s ? { selected: true } : {}) }, ST[s][0])));
@@ -185,15 +187,19 @@ export async function montar(container) {
     (lojas || []).forEach(l => { const cb = el('input', { type: 'checkbox', ...(alvo.clientes.has(l.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.clientes.add(l.id) : alvo.clientes.delete(l.id)); listaCli.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, l.nome)); });
     const listaMb = el('div', { style: 'max-height:120px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
     (motoboys || []).forEach(m => { const cb = el('input', { type: 'checkbox', ...(alvo.motoboys.has(m.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.motoboys.add(m.id) : alvo.motoboys.delete(m.id)); listaMb.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, (m.codigo != null ? '#' + m.codigo + ' ' : '') + m.nome)); });
+    const listaReg = el('div', { style: 'max-height:120px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
+    if (!(regioes || []).length) listaReg.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:4px' }, 'Nenhuma região cadastrada. Crie em Regiões.'));
+    (regioes || []).forEach(rg => { const cb = el('input', { type: 'checkbox', ...(alvo.regioes.has(rg.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.regioes.add(rg.id) : alvo.regioes.delete(rg.id)); listaReg.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, el('span', { style: `width:9px;height:9px;border-radius:2px;background:${rg.cor || '#185FA5'}` }), rg.nome)); });
     inNov.addEventListener('input', () => alvo.novatos_dias = inNov.value);
     filtroBox.append(
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:4px' }, 'Novatos (cadastro há até X dias)'), inNov,
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Clientes (filtra as entregas que contam)'), listaCli,
+      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Regiões (coleta dentro da área)'), listaReg,
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Entregadores específicos'), listaMb);
     rTodos.addEventListener('change', () => { alvo.todos = true; filtroBox.style.display = 'none'; });
     rFiltrar.addEventListener('change', () => { alvo.todos = false; filtroBox.style.display = ''; });
 
-    const montarAlvo = () => ({ todos: alvo.todos, novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null, clientes: [...alvo.clientes], motoboys: [...alvo.motoboys] });
+    const montarAlvo = () => ({ todos: alvo.todos, novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null, clientes: [...alvo.clientes], motoboys: [...alvo.motoboys], regioes: [...alvo.regioes] });
     const btnPrevia = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: async () => { try { const r = await post('/score/campanhas/previa', { alvo: montarAlvo() }); previaTxt.textContent = 'Atinge ' + r.total + ' entregador(es)'; } catch (e) { toast(e.message, 'erro'); } } }, 'Ver quantos atinge');
 
     const campo = (rot, node) => el('div', { style: 'margin-bottom:12px' }, el('label', { style: 'display:block;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:5px' }, rot), node);

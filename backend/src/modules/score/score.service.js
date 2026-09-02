@@ -159,18 +159,39 @@ async function resolverCandidatos(empresaId, alvo = {}) {
   return rows;
 }
 
-// Conta entregas concluídas por motoboy dentro da janela + filtro de cliente.
+// Conta entregas concluídas por motoboy dentro da janela + filtro de cliente
+// (e de região, quando a campanha tem alvo por região — coleta dentro do polígono).
 async function contarEntregues(empresaId, ids, campanha) {
   if (!ids.length) return {};
+  const regioesIds = campanha.alvo && Array.isArray(campanha.alvo.regioes) ? campanha.alvo.regioes.filter(Boolean) : [];
   const cond = ['empresa_id = $1', "status = 'entregue'", 'motoboy_id = ANY($2::uuid[])'];
   const params = [empresaId, ids];
   if (campanha.inicio) { params.push(campanha.inicio); cond.push(`concluida_em >= $${params.length}::date`); }
   if (campanha.fim) { params.push(campanha.fim); cond.push(`concluida_em < ($${params.length}::date + 1)`); }
   const clientes = campanha.alvo && campanha.alvo.clientes;
   if (Array.isArray(clientes) && clientes.length) { params.push(clientes); cond.push(`loja_id = ANY($${params.length}::uuid[])`); }
-  const { rows } = await query(`SELECT motoboy_id, count(*)::int AS n FROM entregas WHERE ${cond.join(' AND ')} GROUP BY motoboy_id`, params);
+
+  // Caminho rápido: sem região, conta direto no banco.
+  if (!regioesIds.length) {
+    const { rows } = await query(`SELECT motoboy_id, count(*)::int AS n FROM entregas WHERE ${cond.join(' AND ')} GROUP BY motoboy_id`, params);
+    const mapa = {};
+    for (const r of rows) mapa[r.motoboy_id] = r.n;
+    return mapa;
+  }
+
+  // Com região: puxa as entregas (com coleta) e filtra em JS (ponto no polígono).
+  let regioesSvc = null;
+  try { regioesSvc = require('../regioes/regioes.service'); } catch {}
+  let polys = [];
+  if (regioesSvc) { try { polys = await regioesSvc.poligonosDe({ empresaId, ids: regioesIds }); } catch {} }
+  const { rows } = await query(`SELECT motoboy_id, coleta_lat, coleta_lng FROM entregas WHERE ${cond.join(' AND ')}`, params);
   const mapa = {};
-  for (const r of rows) mapa[r.motoboy_id] = r.n;
+  for (const r of rows) {
+    const la = r.coleta_lat != null ? Number(r.coleta_lat) : null;
+    const ln = r.coleta_lng != null ? Number(r.coleta_lng) : null;
+    if (la == null || ln == null) continue;
+    if (regioesSvc && polys.some(p => regioesSvc.dentroDoPoligono(la, ln, p))) mapa[r.motoboy_id] = (mapa[r.motoboy_id] || 0) + 1;
+  }
   return mapa;
 }
 
@@ -197,6 +218,7 @@ function sanitizarCampanha(d = {}) {
       todos: !!alvo.todos,
       motoboys: Array.isArray(alvo.motoboys) ? alvo.motoboys.filter(Boolean) : [],
       clientes: Array.isArray(alvo.clientes) ? alvo.clientes.filter(Boolean) : [],
+      regioes: Array.isArray(alvo.regioes) ? alvo.regioes.filter(Boolean) : [],
       novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null,
     },
     meta: { qtd: Math.max(1, parseInt(meta.qtd, 10) || 1), sucesso_min: Math.min(100, Math.max(0, parseInt(meta.sucesso_min, 10) || 0)) },
