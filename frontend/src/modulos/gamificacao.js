@@ -16,6 +16,24 @@ function modal(titulo, corpo, acoes, larguraMax = '620px') {
   document.body.append(ov); return ov;
 }
 const ic = (k, cor) => el('span', { style: `display:inline-flex;color:${cor || 'var(--lx-tinta-2)'}`, html: icones[k] || '' });
+async function garantirLeaflet() {
+  if (window.L) return;
+  if (!document.getElementById('lx-leaflet-css')) {
+    const l = document.createElement('link');
+    l.id = 'lx-leaflet-css'; l.rel = 'stylesheet';
+    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.append(l);
+  }
+  if (!document.getElementById('lx-leaflet-js')) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.id = 'lx-leaflet-js';
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.append(s);
+    });
+  }
+}
 const reais = (c) => 'R$ ' + (Number(c || 0) / 100).toFixed(2).replace('.', ',');
 const centDe = (v) => { const s = String(v).replace(/[^\d,]/g, '').replace(',', '.'); const n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n * 100); };
 const ST = {
@@ -63,11 +81,10 @@ export async function montar(container) {
   let cfg = { metricas: {}, niveis: [] };
   try { cfg = await get('/score/config'); } catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
   // Listas para os alvos (carregadas sob demanda).
-  let lojas = null, motoboys = null, regioes = null;
+  let lojas = null, motoboys = null;
   async function carregarListas() {
     if (!lojas) { try { const r = await get('/lojas'); lojas = (r.lojas || r || []).map(l => ({ id: l.id, nome: l.nome_fantasia || l.nome || l.razao_social || '—' })); } catch { lojas = []; } }
     if (!motoboys) { try { const r = await get('/motoboys'); motoboys = (r.motoboys || r || []).map(m => ({ id: m.id, nome: m.nome_completo || '—', codigo: m.codigo })); } catch { motoboys = []; } }
-    if (!regioes) { try { const r = await get('/regioes'); regioes = (r.regioes || []).map(x => ({ id: x.id, nome: x.nome, cor: x.cor })); } catch { regioes = []; } }
   }
 
   let aba = 'metricas';
@@ -155,7 +172,7 @@ export async function montar(container) {
     if (alvo.todos) c.push('Todos');
     if (alvo.novatos_dias) c.push('Novatos < ' + alvo.novatos_dias + 'd');
     if (Array.isArray(alvo.clientes) && alvo.clientes.length) c.push(alvo.clientes.length + ' cliente(s)');
-    if (Array.isArray(alvo.regioes) && alvo.regioes.length) c.push(alvo.regioes.length + ' região(ões)');
+    if (Array.isArray(alvo.areas) && alvo.areas.length) c.push('área no mapa');
     if (Array.isArray(alvo.motoboys) && alvo.motoboys.length) c.push(alvo.motoboys.length + ' entregador(es)');
     if (!c.length) c.push('Sem alvo');
     return c;
@@ -192,7 +209,8 @@ export async function montar(container) {
   async function abrirBuilder(existente) {
     await carregarListas();
     const d = existente || { alvo: { todos: true }, meta: { qtd: 30, sucesso_min: 0 }, premio: { valor_cent: 4000 }, status: 'rascunho' };
-    const alvo = { todos: !!(d.alvo && d.alvo.todos), novatos_dias: (d.alvo && d.alvo.novatos_dias) || '', clientes: new Set((d.alvo && d.alvo.clientes) || []), motoboys: new Set((d.alvo && d.alvo.motoboys) || []), regioes: new Set((d.alvo && d.alvo.regioes) || []) };
+    const alvo = { todos: !!(d.alvo && d.alvo.todos), novatos_dias: (d.alvo && d.alvo.novatos_dias) || '', clientes: new Set((d.alvo && d.alvo.clientes) || []), motoboys: new Set((d.alvo && d.alvo.motoboys) || []) };
+    let areaPoligono = (d.alvo && Array.isArray(d.alvo.areas) && Array.isArray(d.alvo.areas[0])) ? d.alvo.areas[0].map(p => [p[0], p[1]]) : [];
 
     const inNome = el('input', { class: 'lx-input', value: d.nome || '' });
     const selStatus = el('select', { class: 'lx-input' }, ...['rascunho', 'ativa', 'pausada', 'encerrada'].map(s => el('option', { value: s, ...(d.status === s ? { selected: true } : {}) }, ST[s][0])));
@@ -211,19 +229,53 @@ export async function montar(container) {
     const inNov = el('input', { class: 'lx-input', value: alvo.novatos_dias, placeholder: 'ex: 30', style: 'width:120px' });
     const listaCli = multiSelect(lojas || [], alvo.clientes, 'Buscar cliente…', l => l.nome);
     const listaMb = multiSelect(motoboys || [], alvo.motoboys, 'Buscar entregador…', m => (m.codigo != null ? '#' + m.codigo + ' ' : '') + m.nome);
-    const listaReg = (regioes || []).length
-      ? multiSelect(regioes || [], alvo.regioes, 'Buscar região…', r => r.nome)
-      : el('div', { class: 'lx-input', style: 'color:var(--lx-tinta-3)' }, 'Nenhuma região cadastrada. Crie em Regiões (menu lateral).');
+
+    // Editor de ÁREA (região) desenhada na própria campanha.
+    const mapaArea = el('div', { style: 'height:280px;border-radius:10px;overflow:hidden;border:1px solid var(--lx-linha)' });
+    const areaCnt = el('span', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-left:8px' }, '');
+    const btnAreaDesf = el('button', { type: 'button', class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => { areaPoligono.pop(); redesenharArea(); } }, 'Desfazer');
+    const btnAreaLimpar = el('button', { type: 'button', class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: () => { areaPoligono = []; redesenharArea(); } }, 'Limpar área');
+    let mapaA = null, camadaA = null, marcadoresA = [];
+    const iconePtA = () => window.L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#185FA5;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);cursor:move"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+    function desenharFormaA() {
+      if (camadaA) { mapaA.removeLayer(camadaA); camadaA = null; }
+      if (areaPoligono.length >= 3) camadaA = window.L.polygon(areaPoligono, { color: '#185FA5', weight: 2, fillOpacity: 0.15 }).addTo(mapaA);
+      else if (areaPoligono.length === 2) camadaA = window.L.polyline(areaPoligono, { color: '#185FA5', weight: 2, dashArray: '4' }).addTo(mapaA);
+      areaCnt.textContent = areaPoligono.length ? (areaPoligono.length + ' ponto(s)' + (areaPoligono.length < 3 ? ' — mínimo 3' : '')) : 'sem área (opcional)';
+    }
+    function reconstruirPinosA() {
+      marcadoresA.forEach(m => mapaA.removeLayer(m)); marcadoresA = [];
+      areaPoligono.forEach((p, i) => {
+        const mk = window.L.marker(p, { draggable: true, icon: iconePtA() }).addTo(mapaA);
+        mk.on('drag', () => { const ll = mk.getLatLng(); areaPoligono[i] = [ll.lat, ll.lng]; desenharFormaA(); });
+        mk.on('contextmenu', (e) => { window.L.DomEvent.stop(e); areaPoligono.splice(i, 1); redesenharArea(); });
+        marcadoresA.push(mk);
+      });
+    }
+    function redesenharArea() { if (!mapaA || !window.L) return; reconstruirPinosA(); desenharFormaA(); }
+    async function initMapaArea() {
+      await garantirLeaflet();
+      const centro = areaPoligono.length ? areaPoligono[0] : [-12.9718, -38.5011];
+      mapaA = window.L.map(mapaArea).setView(centro, areaPoligono.length ? 13 : 12);
+      window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, attribution: '© OpenStreetMap © CARTO' }).addTo(mapaA);
+      mapaA.on('click', (e) => { areaPoligono.push([e.latlng.lat, e.latlng.lng]); redesenharArea(); });
+      setTimeout(() => { mapaA.invalidateSize(); redesenharArea(); }, 80);
+    }
+    const blocoArea = el('div', {},
+      el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-bottom:6px;line-height:1.5' }, 'Desenhe no mapa (opcional): clique pra criar cantos, arraste as bolinhas, botão direito remove. Conta só quando a COLETA cai dentro da área.'),
+      el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px' }, btnAreaDesf, btnAreaLimpar, areaCnt),
+      mapaArea);
+
     inNov.addEventListener('input', () => alvo.novatos_dias = inNov.value);
     filtroBox.append(
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:4px' }, 'Novatos (cadastro há até X dias)'), inNov,
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Clientes (filtra as entregas que contam)'), listaCli,
-      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Regiões (coleta dentro da área)'), listaReg,
+      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Área no mapa (região da campanha)'), blocoArea,
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Entregadores específicos'), listaMb);
     rTodos.addEventListener('change', () => { alvo.todos = true; filtroBox.style.display = 'none'; });
     rFiltrar.addEventListener('change', () => { alvo.todos = false; filtroBox.style.display = ''; });
 
-    const montarAlvo = () => ({ todos: alvo.todos, novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null, clientes: [...alvo.clientes], motoboys: [...alvo.motoboys], regioes: [...alvo.regioes] });
+    const montarAlvo = () => ({ todos: alvo.todos, novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null, clientes: [...alvo.clientes], motoboys: [...alvo.motoboys], areas: areaPoligono.length >= 3 ? [areaPoligono] : [] });
     const btnPrevia = el('button', { class: 'lx-btn lx-btn-secundario', style: 'font-size:12px', onClick: async () => { try { const r = await post('/score/campanhas/previa', { alvo: montarAlvo() }); previaTxt.textContent = 'Atinge ' + r.total + ' entregador(es)'; } catch (e) { toast(e.message, 'erro'); } } }, 'Ver quantos atinge');
 
     const campo = (rot, node) => el('div', { style: 'margin-bottom:12px' }, el('label', { style: 'display:block;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:5px' }, rot), node);
@@ -242,6 +294,8 @@ export async function montar(container) {
     const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario' }, existente ? 'Salvar' : 'Criar campanha');
     const ov = modal(existente ? 'Editar campanha' : 'Nova campanha', corpo, [
       el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btnSalvar], '820px');
+    if (!alvo.todos) initMapaArea();
+    rFiltrar.addEventListener('change', () => { if (!mapaA) initMapaArea(); });
     btnSalvar.onclick = async () => {
       const dados = { nome: inNome.value, status: selStatus.value, alvo: montarAlvo(), meta: { qtd: parseInt(inQtd.value, 10) || 1, sucesso_min: parseInt(inSuc.value, 10) || 0 }, premio: { valor_cent: centDe(inPremio.value) }, inicio: inIni.value || null, fim: inFim.value || null, exclusivo: chkExcl.checked };
       try { btnSalvar.disabled = true; if (existente) await put('/score/campanhas/' + existente.id, dados); else await post('/score/campanhas', dados); toast('Campanha salva'); ov.remove(); render(); }

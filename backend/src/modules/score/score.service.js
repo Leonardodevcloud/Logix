@@ -156,6 +156,19 @@ const financeiro = require('../financeiro/financeiro.service');
 
 const HOJE = "(now() AT TIME ZONE 'America/Bahia')::date";
 
+// Ponto dentro de polígono (ray casting). poligono = [[lat,lng], ...].
+function _dentroDoPoligono(lat, lng, poligono) {
+  if (!Array.isArray(poligono) || poligono.length < 3 || lat == null || lng == null) return false;
+  let dentro = false;
+  for (let i = 0, j = poligono.length - 1; i < poligono.length; j = i++) {
+    const yi = poligono[i][0], xi = poligono[i][1];
+    const yj = poligono[j][0], xj = poligono[j][1];
+    const inter = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (inter) dentro = !dentro;
+  }
+  return dentro;
+}
+
 // Resolve QUEM participa (motoboys) a partir do alvo. Alvo vazio (sem filtro e
 // sem 'todos') → ninguém, de propósito (evita atingir a base toda por engano).
 async function resolverCandidatos(empresaId, alvo = {}) {
@@ -176,7 +189,7 @@ async function resolverCandidatos(empresaId, alvo = {}) {
 // (e de região, quando a campanha tem alvo por região — coleta dentro do polígono).
 async function contarEntregues(empresaId, ids, campanha) {
   if (!ids.length) return {};
-  const regioesIds = campanha.alvo && Array.isArray(campanha.alvo.regioes) ? campanha.alvo.regioes.filter(Boolean) : [];
+  const areas = campanha.alvo && Array.isArray(campanha.alvo.areas) ? campanha.alvo.areas.filter(a => Array.isArray(a) && a.length >= 3) : [];
   const cond = ['empresa_id = $1', "status = 'entregue'", 'motoboy_id = ANY($2::uuid[])'];
   const params = [empresaId, ids];
   if (campanha.inicio) { params.push(campanha.inicio); cond.push(`concluida_em >= $${params.length}::date`); }
@@ -184,26 +197,22 @@ async function contarEntregues(empresaId, ids, campanha) {
   const clientes = campanha.alvo && campanha.alvo.clientes;
   if (Array.isArray(clientes) && clientes.length) { params.push(clientes); cond.push(`loja_id = ANY($${params.length}::uuid[])`); }
 
-  // Caminho rápido: sem região, conta direto no banco.
-  if (!regioesIds.length) {
+  // Sem área: conta direto no banco.
+  if (!areas.length) {
     const { rows } = await query(`SELECT motoboy_id, count(*)::int AS n FROM entregas WHERE ${cond.join(' AND ')} GROUP BY motoboy_id`, params);
     const mapa = {};
     for (const r of rows) mapa[r.motoboy_id] = r.n;
     return mapa;
   }
 
-  // Com região: puxa as entregas (com coleta) e filtra em JS (ponto no polígono).
-  let regioesSvc = null;
-  try { regioesSvc = require('../regioes/regioes.service'); } catch {}
-  let polys = [];
-  if (regioesSvc) { try { polys = await regioesSvc.poligonosDe({ empresaId, ids: regioesIds }); } catch {} }
+  // Com área desenhada: puxa as entregas (com coleta) e filtra em JS (ponto no polígono).
   const { rows } = await query(`SELECT motoboy_id, coleta_lat, coleta_lng FROM entregas WHERE ${cond.join(' AND ')}`, params);
   const mapa = {};
   for (const r of rows) {
     const la = r.coleta_lat != null ? Number(r.coleta_lat) : null;
     const ln = r.coleta_lng != null ? Number(r.coleta_lng) : null;
     if (la == null || ln == null) continue;
-    if (regioesSvc && polys.some(p => regioesSvc.dentroDoPoligono(la, ln, p))) mapa[r.motoboy_id] = (mapa[r.motoboy_id] || 0) + 1;
+    if (areas.some(pol => _dentroDoPoligono(la, ln, pol))) mapa[r.motoboy_id] = (mapa[r.motoboy_id] || 0) + 1;
   }
   return mapa;
 }
@@ -231,7 +240,11 @@ function sanitizarCampanha(d = {}) {
       todos: !!alvo.todos,
       motoboys: Array.isArray(alvo.motoboys) ? alvo.motoboys.filter(Boolean) : [],
       clientes: Array.isArray(alvo.clientes) ? alvo.clientes.filter(Boolean) : [],
-      regioes: Array.isArray(alvo.regioes) ? alvo.regioes.filter(Boolean) : [],
+      areas: Array.isArray(alvo.areas)
+        ? alvo.areas
+            .map(pol => Array.isArray(pol) ? pol.filter(p => Array.isArray(p) && p.length === 2 && isFinite(+p[0]) && isFinite(+p[1])).map(p => [Number(p[0]), Number(p[1])]) : [])
+            .filter(pol => pol.length >= 3)
+        : [],
       novatos_dias: alvo.novatos_dias ? parseInt(alvo.novatos_dias, 10) : null,
     },
     meta: { qtd: Math.max(1, parseInt(meta.qtd, 10) || 1), sucesso_min: Math.min(100, Math.max(0, parseInt(meta.sucesso_min, 10) || 0)) },
