@@ -14,6 +14,9 @@ function initScoreRoutes() {
   router.get('/app/missoes', verificarTokenMotoboy, async (req, res, next) => {
     try { res.json(await service.missoesDoMotoboy({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
   });
+  router.get('/app/ranking', verificarTokenMotoboy, async (req, res, next) => {
+    try { res.json(await service.rankingSemana({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id })); } catch (e) { next(e); }
+  });
 
   // ── Central (admin) ──
   router.use(verificarToken, resolverTenant, exigirTenant);

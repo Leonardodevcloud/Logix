@@ -277,8 +277,39 @@ async function missoesDoMotoboy({ empresaId, motoboyId }) {
   return { missoes };
 }
 
+// ── Fase 3: ranking da semana (read-only; "reset" é automático pela data) ──
+async function rankingSemana({ empresaId, motoboyId }) {
+  const cfg = await obterConfig(empresaId);
+  const met = cfg.metricas.entrega_concluida;
+  const ptE = met && met.ativo !== false ? Number(met.pontos || 0) : 0;
+  const { rows } = await query(
+    `SELECT m.id, m.nome_completo, m.codigo, COALESCE(e.n, 0)::int AS entregues
+       FROM motoboys m
+       LEFT JOIN (
+         SELECT motoboy_id, count(*) AS n FROM entregas
+          WHERE empresa_id = $1 AND status = 'entregue'
+            AND concluida_em >= date_trunc('week', now() AT TIME ZONE 'America/Bahia')
+          GROUP BY motoboy_id
+       ) e ON e.motoboy_id = m.id
+      WHERE m.empresa_id = $1 AND m.status = 'ativo' AND m.situacao_cadastro = 'aprovado'`,
+    [empresaId]
+  );
+  const lista = rows
+    .map(r => ({ id: r.id, nome: r.nome_completo, codigo: r.codigo, entregues: r.entregues, pontos: r.entregues * ptE }))
+    .sort((a, b) => b.pontos - a.pontos || b.entregues - a.entregues);
+  lista.forEach((r, i) => { r.posicao = i + 1; });
+  const primeiroNome = (n) => { const p = String(n || '').trim().split(/\s+/); return p[0] + (p[1] ? ' ' + p[1][0] + '.' : ''); };
+  const eu = lista.find(r => r.id === motoboyId) || null;
+  return {
+    janela: 'semana',
+    total: lista.length,
+    top: lista.slice(0, 10).map(r => ({ posicao: r.posicao, nome: primeiroNome(r.nome), pontos: r.pontos, entregues: r.entregues, eu: r.id === motoboyId })),
+    eu: eu ? { posicao: eu.posicao, pontos: eu.pontos, entregues: eu.entregues } : null,
+  };
+}
+
 module.exports = {
   obterConfig, salvarConfig, meuScore, nivelDe,
   previaAlvo, listarCampanhas, obterCampanha, criarCampanha, atualizarCampanha, excluirCampanha,
-  avaliarMissao, liberarPremio, missoesDoMotoboy,
+  avaliarMissao, liberarPremio, missoesDoMotoboy, rankingSemana,
 };
