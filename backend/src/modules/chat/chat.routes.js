@@ -56,6 +56,21 @@ function initChatRoutes() {
     } catch (e) { next(e); }
   });
 
+  // ── Config do "chat direto com a loja" — só a CENTRAL (empresa admin) ──
+  const soCentral = (req, res, next) => { if (req.lojaId) return next(require('../../shared/AppError').proibido('Apenas a central configura módulos')); next(); };
+  router.get('/config/lojas', exigirPermissao('chat.ver'), soCentral, async (req, res, next) => {
+    try { res.json(await service.lojasChatConfig({ empresaId: req.empresaId })); } catch (e) { next(e); }
+  });
+  router.get('/config/lojas/:lojaId/centros', exigirPermissao('chat.ver'), soCentral, async (req, res, next) => {
+    try { res.json(await service.centrosChatConfig({ empresaId: req.empresaId, lojaId: req.params.lojaId })); } catch (e) { next(e); }
+  });
+  router.put('/config/lojas/:lojaId', exigirPermissao('chat.responder'), soCentral, async (req, res, next) => {
+    try { res.json(await service.definirChatLoja({ empresaId: req.empresaId, lojaId: req.params.lojaId, ativo: req.body.ativo })); } catch (e) { next(e); }
+  });
+  router.put('/config/centros/:centroId', exigirPermissao('chat.responder'), soCentral, async (req, res, next) => {
+    try { res.json(await service.definirChatCentro({ empresaId: req.empresaId, centroId: req.params.centroId, estado: req.body.estado })); } catch (e) { next(e); }
+  });
+
   return router;
 }
 module.exports = { initChatRoutes };

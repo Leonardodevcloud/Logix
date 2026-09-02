@@ -43,5 +43,20 @@ async function initChatTables() {
       lido_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (conversa_id, lado)
     )`);
+
+  // ── Config do "chat direto com a loja" (opt-in por loja; override por centro) ──
+  await query(`
+    CREATE TABLE IF NOT EXISTS chat_loja (
+      loja_id    UUID PRIMARY KEY REFERENCES lojas(id) ON DELETE CASCADE,
+      empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      ativo      BOOLEAN NOT NULL DEFAULT FALSE
+    )`);
+  // centro: só existe linha quando o admin FORÇA (ausência = herda a loja).
+  await query(`
+    CREATE TABLE IF NOT EXISTS chat_centro (
+      centro_id  UUID PRIMARY KEY REFERENCES cliente_centros_custo(id) ON DELETE CASCADE,
+      empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+      ativo      BOOLEAN NOT NULL
+    )`);
 }
 module.exports = { initChatTables };

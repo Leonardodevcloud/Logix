@@ -8,6 +8,60 @@ try { empresaTemModulo = require('../permissoes/permissoes.service').empresaTemM
 
 async function chatAtivo(empresaId) { try { return await empresaTemModulo(empresaId, 'chat'); } catch { return false; } }
 
+// Chat DIRETO com a loja está ativo para (loja, centro)? empresa tem chat E loja
+// ligada E o centro resolve (override do centro, senão herda a loja).
+async function chatDaLojaAtivo({ empresaId, lojaId, centroId }) {
+  if (!lojaId) return false;
+  if (!(await chatAtivo(empresaId))) return false;
+  const { rows: rl } = await query(`SELECT ativo FROM chat_loja WHERE loja_id = $1 AND empresa_id = $2`, [lojaId, empresaId]);
+  const lojaOn = rl[0] ? !!rl[0].ativo : false; // opt-in: sem linha = desligada
+  if (!lojaOn) return false;
+  if (centroId) {
+    const { rows: rc } = await query(`SELECT ativo FROM chat_centro WHERE centro_id = $1 AND empresa_id = $2`, [centroId, empresaId]);
+    if (rc[0]) return !!rc[0].ativo; // override do centro
+  }
+  return true; // herda a loja (ligada)
+}
+
+// ── Config (central): lojas e centros do "chat direto" ──
+async function lojasChatConfig({ empresaId }) {
+  const { rows } = await query(
+    `SELECT l.id, l.nome_fantasia AS nome, COALESCE(cl.ativo, false) AS ativo,
+            (SELECT count(*)::int FROM cliente_centros_custo c WHERE c.loja_id = l.id) AS centros,
+            (SELECT count(*)::int FROM chat_centro cc JOIN cliente_centros_custo c ON c.id = cc.centro_id WHERE c.loja_id = l.id) AS forcados
+       FROM lojas l LEFT JOIN chat_loja cl ON cl.loja_id = l.id
+      WHERE l.empresa_id = $1 ORDER BY l.nome_fantasia`,
+    [empresaId]
+  );
+  return { lojas: rows };
+}
+async function centrosChatConfig({ empresaId, lojaId }) {
+  const { rows } = await query(
+    `SELECT c.id, c.nome, cc.ativo AS forcado   -- null = herda a loja
+       FROM cliente_centros_custo c LEFT JOIN chat_centro cc ON cc.centro_id = c.id
+      WHERE c.loja_id = $1 ORDER BY c.nome`,
+    [lojaId]
+  );
+  return { centros: rows.map(r => ({ id: r.id, nome: r.nome, estado: r.forcado == null ? 'herda' : (r.forcado ? 'ligado' : 'desligado') })) };
+}
+async function definirChatLoja({ empresaId, lojaId, ativo }) {
+  await query(
+    `INSERT INTO chat_loja (loja_id, empresa_id, ativo) VALUES ($1,$2,$3)
+     ON CONFLICT (loja_id) DO UPDATE SET ativo = $3`,
+    [lojaId, empresaId, !!ativo]
+  );
+  return { ok: true };
+}
+async function definirChatCentro({ empresaId, centroId, estado }) {
+  if (estado === 'herda') { await query(`DELETE FROM chat_centro WHERE centro_id = $1 AND empresa_id = $2`, [centroId, empresaId]); return { ok: true }; }
+  await query(
+    `INSERT INTO chat_centro (centro_id, empresa_id, ativo) VALUES ($1,$2,$3)
+     ON CONFLICT (centro_id) DO UPDATE SET ativo = $3`,
+    [centroId, empresaId, estado === 'ligado']
+  );
+  return { ok: true };
+}
+
 function previa(tipo, texto) {
   if (tipo === 'foto') return 'Foto';
   if (tipo === 'local') return 'Localização';
@@ -32,13 +86,18 @@ async function marcarLida({ conversaId, lado }) {
 async function abrirConversaApp({ empresaId, motoboyId, entregaId, tipo }) {
   if (!['suporte', 'solicitante'].includes(tipo)) throw AppError.validacao('Tipo inválido');
   const { rows: e } = await query(
-    `SELECT id, protocolo, motoboy_id, loja_id FROM entregas WHERE id = $1 AND empresa_id = $2`,
+    `SELECT id, protocolo, motoboy_id, loja_id, centro_custo_id FROM entregas WHERE id = $1 AND empresa_id = $2`,
     [entregaId, empresaId]
   );
   if (!e[0]) throw AppError.naoEncontrado('Corrida não encontrada');
   if (e[0].motoboy_id && String(e[0].motoboy_id) !== String(motoboyId)) throw AppError.proibido('Esta corrida não é sua');
   const lojaId = tipo === 'solicitante' ? (e[0].loja_id || null) : null;
-  if (tipo === 'solicitante' && !lojaId) throw AppError.validacao('Esta corrida não tem loja solicitante.');
+  if (tipo === 'solicitante') {
+    if (!lojaId) throw AppError.validacao('Esta corrida não tem loja solicitante.');
+    if (!(await chatDaLojaAtivo({ empresaId, lojaId, centroId: e[0].centro_custo_id }))) {
+      throw AppError.proibido('A loja desta corrida não tem chat direto habilitado.');
+    }
+  }
 
   const { rows } = await query(
     `INSERT INTO chat_conversas (empresa_id, entrega_id, tipo, motoboy_id, loja_id, protocolo)
@@ -174,4 +233,5 @@ async function naoLidasCentral({ empresaId, lojaId }) {
 module.exports = {
   chatAtivo, abrirConversaApp, abrirConversaLoja, enviar, mensagens,
   conversasApp, conversasCentral, naoLidasApp, naoLidasCentral,
+  chatDaLojaAtivo, lojasChatConfig, centrosChatConfig, definirChatLoja, definirChatCentro,
 };

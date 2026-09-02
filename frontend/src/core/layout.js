@@ -70,6 +70,7 @@ function gruposNav() {
     operacao.push({ rota: '/chat', rotulo: 'Mensagens', icone: 'chat' });
 
   const config = [];
+  if (central) config.push({ rota: '/modulos', rotulo: 'Módulos', icone: 'config' });
   if (auth.pode('usuarios.gerenciar'))
     config.push({ rota: '/equipe', rotulo: 'Equipe', icone: 'equipe' });
   // Integrações (API): ferramenta da central — aparece por permissão.
