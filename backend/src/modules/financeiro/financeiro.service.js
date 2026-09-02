@@ -209,7 +209,7 @@ async function criarLancamento({ empresaId, motoboyId, categoriaId, tipo, valorC
   if (!v || v <= 0) throw AppError.validacao('Informe um valor maior que zero');
   const { rows } = await query(
     `INSERT INTO financeiro_lancamentos (empresa_id, motoboy_id, categoria_id, tipo, valor_cent, descricao, competencia, criado_por)
-     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8) RETURNING id`,
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, (now() AT TIME ZONE 'America/Bahia')::date),$8) RETURNING id`,
     [empresaId, motoboyId, categoriaId || null, tipo, v, descricao ? descricao.trim() : null, competencia || null, usuarioId || null]);
   return { id: rows[0].id };
 }

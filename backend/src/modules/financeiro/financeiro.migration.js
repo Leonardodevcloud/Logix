@@ -85,6 +85,18 @@ async function initFinanceiroTables() {
       ultimo_run_em TIMESTAMPTZ,
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+
+  // Correção pontual (bug de fuso UTC no criarLancamento): bônus/créditos que
+  // ficaram datados NO FUTURO em relação a hoje (America/Bahia) e ainda em aberto
+  // são puxados para a data de hoje, para aparecerem no extrato e no fechamento.
+  try {
+    await query(
+      `UPDATE financeiro_lancamentos
+          SET competencia = (now() AT TIME ZONE 'America/Bahia')::date
+        WHERE fechamento_id IS NULL
+          AND competencia > (now() AT TIME ZONE 'America/Bahia')::date`
+    );
+  } catch {}
 }
 
 module.exports = { initFinanceiroTables };
