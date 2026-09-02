@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el, icones } from '../core/ui.js';
 import { get, post, put, del } from '../core/api.js';
+import { aplicarBasemap } from '../core/mapa-tiles.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;max-width:380px;background:${tipo === 'erro' ? 'var(--lx-erro-bg)' : 'var(--lx-ok-bg)'};color:${tipo === 'erro' ? 'var(--lx-erro)' : 'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -257,7 +258,9 @@ export async function montar(container) {
       await garantirLeaflet();
       const centro = areaPoligono.length ? areaPoligono[0] : [-12.9718, -38.5011];
       mapaA = window.L.map(mapaArea).setView(centro, areaPoligono.length ? 13 : 12);
-      window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, attribution: '© OpenStreetMap © CARTO' }).addTo(mapaA);
+      try { await aplicarBasemap(mapaA); } catch (e) {
+        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, attribution: '© OpenStreetMap © CARTO' }).addTo(mapaA);
+      }
       mapaA.on('click', (e) => { areaPoligono.push([e.latlng.lat, e.latlng.lng]); redesenharArea(); });
       setTimeout(() => { mapaA.invalidateSize(); redesenharArea(); }, 80);
     }
