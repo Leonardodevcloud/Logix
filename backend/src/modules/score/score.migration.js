@@ -5,13 +5,13 @@ const { query } = require('../../shared/db');
 // Fase 1 (as demais entram com as campanhas na Fase 2).
 const METRICAS_PADRAO = {
   entrega_concluida:     { rotulo: 'Entrega concluída',        pontos: 10, ativo: true,  grupo: 'ganha', icone: 'sc_check',  emVigor: true },
-  no_prazo:              { rotulo: 'No prazo (dentro do SLA)',  pontos: 5,  ativo: true,  grupo: 'ganha', icone: 'sc_clock',  emVigor: false },
-  foto_ok:               { rotulo: 'Foto/protocolo ok',        pontos: 2,  ativo: true,  grupo: 'ganha', icone: 'sc_cam',    emVigor: false },
-  aceitar_oferta:        { rotulo: 'Aceitar oferta',           pontos: 3,  ativo: true,  grupo: 'ganha', icone: 'sc_thumb',  emVigor: false },
+  no_prazo:              { rotulo: 'No prazo (dentro do SLA)',  pontos: 5,  ativo: true,  grupo: 'ganha', icone: 'sc_clock',  emVigor: true },
+  foto_ok:               { rotulo: 'Foto/protocolo ok',        pontos: 2,  ativo: true,  grupo: 'ganha', icone: 'sc_cam',    emVigor: true },
+  aceitar_oferta:        { rotulo: 'Aceitar oferta',           pontos: 3,  ativo: true,  grupo: 'ganha', icone: 'sc_thumb',  emVigor: true },
   hora_online_pico:      { rotulo: 'Hora online no pico',      pontos: 1,  ativo: false, grupo: 'ganha', icone: 'sc_power',  emVigor: false },
-  dia_ativo:             { rotulo: 'Dia ativo',                pontos: 5,  ativo: false, grupo: 'ganha', icone: 'sc_cal',    emVigor: false },
+  dia_ativo:             { rotulo: 'Dia ativo',                pontos: 5,  ativo: false, grupo: 'ganha', icone: 'sc_cal',    emVigor: true },
   insucesso_culpa:       { rotulo: 'Insucesso por culpa',      pontos: -8, ativo: true,  grupo: 'perde', icone: 'sc_x',      emVigor: true },
-  recusar_oferta:        { rotulo: 'Recusar/expirar oferta',   pontos: -3, ativo: false, grupo: 'perde', icone: 'sc_minus',  emVigor: false },
+  recusar_oferta:        { rotulo: 'Recusar/expirar oferta',   pontos: -3, ativo: false, grupo: 'perde', icone: 'sc_minus',  emVigor: true },
   cancelar_apos_aceitar: { rotulo: 'Cancelar após aceitar',    pontos: -15,ativo: true,  grupo: 'perde', icone: 'sc_undo',   emVigor: false },
 };
 

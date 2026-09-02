@@ -9,8 +9,18 @@ const CONFIG_GLOBAL_PADRAO = { janela_dias: 30, ranking_ativo: true, gamificacao
 async function obterConfig(empresaId) {
   const { rows } = await query(`SELECT metricas, niveis, config FROM score_config WHERE empresa_id = $1`, [empresaId]);
   if (!rows[0]) return { metricas: METRICAS_PADRAO, niveis: NIVEIS_PADRAO, config: CONFIG_GLOBAL_PADRAO };
-  const metricas = { ...METRICAS_PADRAO };
-  for (const [k, v] of Object.entries(rows[0].metricas || {})) metricas[k] = { ...(metricas[k] || {}), ...v };
+  const salvas = rows[0].metricas || {};
+  const metricas = {};
+  // Campos canônicos (rótulo/ícone/grupo/emVigor) vêm SEMPRE do código; só
+  // 'pontos' e 'ativo' vêm do que o admin salvou. Assim o selo "em vigor" e os
+  // rótulos ficam sempre atualizados, mesmo em configs antigas.
+  for (const k of Object.keys(METRICAS_PADRAO)) {
+    const base = METRICAS_PADRAO[k];
+    const sv = salvas[k] || {};
+    metricas[k] = { ...base, pontos: sv.pontos != null ? sv.pontos : base.pontos, ativo: sv.ativo != null ? sv.ativo : base.ativo };
+  }
+  // Métricas personalizadas criadas pelo admin (fora do padrão) — mantém como salvo.
+  for (const [k, v] of Object.entries(salvas)) if (!METRICAS_PADRAO[k]) metricas[k] = v;
   const niveis = Array.isArray(rows[0].niveis) && rows[0].niveis.length ? rows[0].niveis : NIVEIS_PADRAO;
   const config = { ...CONFIG_GLOBAL_PADRAO, ...(rows[0].config || {}) };
   return { metricas, niveis, config };
@@ -51,6 +61,9 @@ function nivelDe(pontos, niveis) {
 // por tipo e monta o detalhe com o rótulo de cada métrica.
 async function meuScore({ empresaId, motoboyId }) {
   const cfg = await obterConfig(empresaId);
+  if (cfg.config && cfg.config.gamificacao_ativa === false) {
+    return { desativado: true, pontos: 0, nivel: { nome: '—', progresso: 0, faltam: 0, proximo: null }, niveis: [], detalhe: [], janela: '' };
+  }
   const janela = String(Number(cfg.config && cfg.config.janela_dias) || 30);
   let linhas = [];
   try {
@@ -303,6 +316,8 @@ async function liberarPremio({ empresaId, campanhaId, motoboyId, usuarioId }) {
 
 // Missões ATIVAS que valem para um motoboy (com o progresso dele).
 async function missoesDoMotoboy({ empresaId, motoboyId }) {
+  const cfgG = await obterConfig(empresaId);
+  if (cfgG.config && cfgG.config.gamificacao_ativa === false) return { missoes: [] };
   const { rows: campanhas } = await query(
     `SELECT * FROM score_campanhas
       WHERE empresa_id = $1 AND tipo = 'missao' AND status = 'ativa'
@@ -346,7 +361,7 @@ async function missoesDoMotoboy({ empresaId, motoboyId }) {
 // ── Fase 3: ranking da semana (read-only; "reset" é automático pela data) ──
 async function rankingSemana({ empresaId, motoboyId }) {
   const cfg = await obterConfig(empresaId);
-  if (cfg.config && cfg.config.ranking_ativo === false) return { janela: 'semana', total: 0, top: [], eu: null, desativado: true };
+  if (cfg.config && (cfg.config.gamificacao_ativa === false || cfg.config.ranking_ativo === false)) return { janela: 'semana', total: 0, top: [], eu: null, desativado: true };
   const { rows } = await query(
     `SELECT m.id, m.nome_completo, m.codigo, COALESCE(e.pts, 0)::int AS pontos
        FROM motoboys m

@@ -33,6 +33,32 @@ const ABAS = [
   { id: 'config', rotulo: 'Config' },
 ];
 
+// Seletor múltiplo com busca + contador (escala para muitas lojas/motoboys).
+function multiSelect(itens, sel, placeholder, rotulo) {
+  const cont = el('div', {});
+  const busca = el('input', { class: 'lx-input', placeholder: placeholder || 'Buscar…', style: 'margin-bottom:6px' });
+  const cnt = el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:800;margin-bottom:4px;min-height:14px' });
+  const box = el('div', { style: 'max-height:150px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
+  const txt = (it) => rotulo ? rotulo(it) : (it.nome || '');
+  function atualizarCnt() { cnt.textContent = sel.size ? sel.size + ' selecionado(s)' : ''; }
+  function render(filtro) {
+    box.innerHTML = '';
+    const f = String(filtro || '').toLowerCase().trim();
+    const vis = itens.filter(it => !f || txt(it).toLowerCase().includes(f));
+    if (!itens.length) { box.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:4px' }, 'Nenhum item.')); return; }
+    if (!vis.length) { box.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:4px' }, 'Nada encontrado.')); return; }
+    vis.forEach(it => {
+      const cb = el('input', { type: 'checkbox', ...(sel.has(it.id) ? { checked: true } : {}) });
+      cb.addEventListener('change', () => { if (cb.checked) sel.add(it.id); else sel.delete(it.id); atualizarCnt(); });
+      box.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, txt(it)));
+    });
+  }
+  busca.addEventListener('input', () => render(busca.value));
+  render(''); atualizarCnt();
+  cont.append(busca, cnt, box);
+  return cont;
+}
+
 export async function montar(container) {
   let cfg = { metricas: {}, niveis: [] };
   try { cfg = await get('/score/config'); } catch (e) { toast(e.message || 'Erro ao carregar', 'erro'); }
@@ -183,19 +209,17 @@ export async function montar(container) {
     const rFiltrar = el('input', { type: 'radio', name: 'alvo', ...(!alvo.todos ? { checked: true } : {}) });
     const filtroBox = el('div', { style: 'border:1px dashed var(--lx-linha);border-radius:12px;padding:12px;margin-top:8px;' + (alvo.todos ? 'display:none' : '') });
     const inNov = el('input', { class: 'lx-input', value: alvo.novatos_dias, placeholder: 'ex: 30', style: 'width:120px' });
-    const listaCli = el('div', { style: 'max-height:120px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
-    (lojas || []).forEach(l => { const cb = el('input', { type: 'checkbox', ...(alvo.clientes.has(l.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.clientes.add(l.id) : alvo.clientes.delete(l.id)); listaCli.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, l.nome)); });
-    const listaMb = el('div', { style: 'max-height:120px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
-    (motoboys || []).forEach(m => { const cb = el('input', { type: 'checkbox', ...(alvo.motoboys.has(m.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.motoboys.add(m.id) : alvo.motoboys.delete(m.id)); listaMb.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, (m.codigo != null ? '#' + m.codigo + ' ' : '') + m.nome)); });
-    const listaReg = el('div', { style: 'max-height:120px;overflow:auto;border:1px solid var(--lx-linha);border-radius:8px;padding:6px' });
-    if (!(regioes || []).length) listaReg.append(el('div', { style: 'font-size:12px;color:var(--lx-tinta-3);padding:4px' }, 'Nenhuma região cadastrada. Crie em Regiões.'));
-    (regioes || []).forEach(rg => { const cb = el('input', { type: 'checkbox', ...(alvo.regioes.has(rg.id) ? { checked: true } : {}) }); cb.addEventListener('change', () => cb.checked ? alvo.regioes.add(rg.id) : alvo.regioes.delete(rg.id)); listaReg.append(el('label', { style: 'display:flex;gap:8px;align-items:center;font-size:12.5px;padding:4px' }, cb, el('span', { style: `width:9px;height:9px;border-radius:2px;background:${rg.cor || '#185FA5'}` }), rg.nome)); });
+    const listaCli = multiSelect(lojas || [], alvo.clientes, 'Buscar cliente…', l => l.nome);
+    const listaMb = multiSelect(motoboys || [], alvo.motoboys, 'Buscar entregador…', m => (m.codigo != null ? '#' + m.codigo + ' ' : '') + m.nome);
+    const listaReg = (regioes || []).length
+      ? multiSelect(regioes || [], alvo.regioes, 'Buscar região…', r => r.nome)
+      : el('div', { class: 'lx-input', style: 'color:var(--lx-tinta-3)' }, 'Nenhuma região cadastrada. Crie em Regiões (menu lateral).');
     inNov.addEventListener('input', () => alvo.novatos_dias = inNov.value);
     filtroBox.append(
       el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:4px' }, 'Novatos (cadastro há até X dias)'), inNov,
-      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Clientes (filtra as entregas que contam)'), listaCli,
-      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Regiões (coleta dentro da área)'), listaReg,
-      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:10px 0 4px' }, 'Entregadores específicos'), listaMb);
+      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Clientes (filtra as entregas que contam)'), listaCli,
+      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Regiões (coleta dentro da área)'), listaReg,
+      el('div', { style: 'font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin:12px 0 4px' }, 'Entregadores específicos'), listaMb);
     rTodos.addEventListener('change', () => { alvo.todos = true; filtroBox.style.display = 'none'; });
     rFiltrar.addEventListener('change', () => { alvo.todos = false; filtroBox.style.display = ''; });
 
@@ -217,7 +241,7 @@ export async function montar(container) {
 
     const btnSalvar = el('button', { class: 'lx-btn lx-btn-primario' }, existente ? 'Salvar' : 'Criar campanha');
     const ov = modal(existente ? 'Editar campanha' : 'Nova campanha', corpo, [
-      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btnSalvar]);
+      el('button', { class: 'lx-btn lx-btn-secundario', onClick: () => ov.remove() }, 'Cancelar'), btnSalvar], '820px');
     btnSalvar.onclick = async () => {
       const dados = { nome: inNome.value, status: selStatus.value, alvo: montarAlvo(), meta: { qtd: parseInt(inQtd.value, 10) || 1, sucesso_min: parseInt(inSuc.value, 10) || 0 }, premio: { valor_cent: centDe(inPremio.value) }, inicio: inIni.value || null, fim: inFim.value || null, exclusivo: chkExcl.checked };
       try { btnSalvar.disabled = true; if (existente) await put('/score/campanhas/' + existente.id, dados); else await post('/score/campanhas', dados); toast('Campanha salva'); ov.remove(); render(); }
@@ -282,7 +306,7 @@ export async function montar(container) {
       campo('Nome do programa (opcional)', inNome, 'Aparece pro entregador. Deixe vazio para "Score e metas".'),
       campo('Janela do score (dias)', inJanela, 'Período que conta para o nível e os pontos (padrão 30 dias).'),
       el('label', { style: 'display:flex;gap:9px;align-items:center;font-size:13px;margin-bottom:12px' }, chkRank, 'Mostrar o ranking semanal para o entregador'),
-      el('label', { style: 'display:flex;gap:9px;align-items:center;font-size:13px;margin-bottom:18px' }, chkAtivo, 'Gamificação ativa nesta empresa'));
+      el('label', { style: 'display:flex;gap:9px;align-items:center;font-size:13px;margin-bottom:18px' }, chkAtivo, 'Ativar gamificação (para toda a sua operação)'));
     const btn = el('button', { class: 'lx-btn lx-btn-primario', onClick: async () => {
       const config = { nome_programa: inNome.value.trim(), janela_dias: parseInt(inJanela.value, 10) || 30, ranking_ativo: chkRank.checked, gamificacao_ativa: chkAtivo.checked };
       try { btn.disabled = true; await put('/score/config', { metricas: cfg.metricas, niveis: cfg.niveis, config }); cfg.config = config; toast('Config salva'); }
