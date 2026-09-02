@@ -30,6 +30,7 @@ async function initScoreTables() {
       niveis        JSONB NOT NULL DEFAULT '[]'::jsonb,
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+  await query(`ALTER TABLE score_config ADD COLUMN IF NOT EXISTS config JSONB NOT NULL DEFAULT '{}'::jsonb`);
   // Semeia o padrão para empresas que ainda não têm config.
   await query(
     `INSERT INTO score_config (empresa_id, metricas, niveis)

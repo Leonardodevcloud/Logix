@@ -30,7 +30,7 @@ const ABAS = [
   { id: 'niveis', rotulo: 'Níveis' },
   { id: 'campanhas', rotulo: 'Campanhas' },
   { id: 'premios', rotulo: 'Prêmios' },
-  { id: 'config', rotulo: 'Config', breve: true },
+  { id: 'config', rotulo: 'Config' },
 ];
 
 export async function montar(container) {
@@ -262,6 +262,30 @@ export async function montar(container) {
     return wrap;
   }
 
+  function abaConfig() {
+    const c = cfg.config || {};
+    const wrap = el('div', {});
+    const inNome = el('input', { class: 'lx-input', value: c.nome_programa || '', placeholder: 'Ex.: Clube do Entregador' });
+    const inJanela = el('input', { class: 'lx-input', value: (c.janela_dias != null ? c.janela_dias : 30), style: 'width:120px;text-align:center' });
+    const chkRank = el('input', { type: 'checkbox', ...(c.ranking_ativo !== false ? { checked: true } : {}) });
+    const chkAtivo = el('input', { type: 'checkbox', ...(c.gamificacao_ativa !== false ? { checked: true } : {}) });
+    const campo = (rot, node, dica) => el('div', { style: 'margin-bottom:16px' },
+      el('label', { style: 'display:block;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);margin-bottom:5px' }, rot),
+      node, dica ? el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:4px' }, dica) : '');
+    wrap.append(
+      campo('Nome do programa (opcional)', inNome, 'Aparece pro entregador. Deixe vazio para "Score e metas".'),
+      campo('Janela do score (dias)', inJanela, 'Período que conta para o nível e os pontos (padrão 30 dias).'),
+      el('label', { style: 'display:flex;gap:9px;align-items:center;font-size:13px;margin-bottom:12px' }, chkRank, 'Mostrar o ranking semanal para o entregador'),
+      el('label', { style: 'display:flex;gap:9px;align-items:center;font-size:13px;margin-bottom:18px' }, chkAtivo, 'Gamificação ativa nesta empresa'));
+    const btn = el('button', { class: 'lx-btn lx-btn-primario', onClick: async () => {
+      const config = { nome_programa: inNome.value.trim(), janela_dias: parseInt(inJanela.value, 10) || 30, ranking_ativo: chkRank.checked, gamificacao_ativa: chkAtivo.checked };
+      try { btn.disabled = true; await put('/score/config', { metricas: cfg.metricas, niveis: cfg.niveis, config }); cfg.config = config; toast('Config salva'); }
+      catch (e) { toast(e.message || 'Erro ao salvar', 'erro'); } finally { btn.disabled = false; }
+    } }, 'Salvar config');
+    wrap.append(btn);
+    return wrap;
+  }
+
   function abaBreve(nome) {
     return el('div', { style: 'text-align:center;padding:48px 20px;color:var(--lx-tinta-3)' },
       el('div', { style: 'display:inline-flex;color:var(--lx-tinta-3);margin-bottom:10px', html: icones.gamificacao }),
@@ -276,7 +300,7 @@ export async function montar(container) {
     else if (aba === 'niveis') painel.append(abaNiveis());
     else if (aba === 'campanhas') painel.append(await abaCampanhas());
     else if (aba === 'premios') painel.append(await abaPremios());
-    else painel.append(abaBreve('Config'));
+    else painel.append(abaConfig());
   }
   await render();
 

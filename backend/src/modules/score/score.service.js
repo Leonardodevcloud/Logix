@@ -1,24 +1,30 @@
 const { query } = require('../../shared/db');
 const { METRICAS_PADRAO, NIVEIS_PADRAO } = require('./score.migration');
 
+// Config global (ajustes gerais da gamificação da empresa).
+const CONFIG_GLOBAL_PADRAO = { janela_dias: 30, ranking_ativo: true, gamificacao_ativa: true, nome_programa: '' };
+
 // Config da empresa (mescla o padrão para trazer métricas novas que ainda não
 // estejam salvas no JSON antigo).
 async function obterConfig(empresaId) {
-  const { rows } = await query(`SELECT metricas, niveis FROM score_config WHERE empresa_id = $1`, [empresaId]);
-  if (!rows[0]) return { metricas: METRICAS_PADRAO, niveis: NIVEIS_PADRAO };
+  const { rows } = await query(`SELECT metricas, niveis, config FROM score_config WHERE empresa_id = $1`, [empresaId]);
+  if (!rows[0]) return { metricas: METRICAS_PADRAO, niveis: NIVEIS_PADRAO, config: CONFIG_GLOBAL_PADRAO };
   const metricas = { ...METRICAS_PADRAO };
   for (const [k, v] of Object.entries(rows[0].metricas || {})) metricas[k] = { ...(metricas[k] || {}), ...v };
   const niveis = Array.isArray(rows[0].niveis) && rows[0].niveis.length ? rows[0].niveis : NIVEIS_PADRAO;
-  return { metricas, niveis };
+  const config = { ...CONFIG_GLOBAL_PADRAO, ...(rows[0].config || {}) };
+  return { metricas, niveis, config };
 }
 
-async function salvarConfig({ empresaId, metricas, niveis }) {
-  await query(
-    `INSERT INTO score_config (empresa_id, metricas, niveis, atualizado_em)
-     VALUES ($1, $2::jsonb, $3::jsonb, now())
-     ON CONFLICT (empresa_id) DO UPDATE SET metricas = $2::jsonb, niveis = $3::jsonb, atualizado_em = now()`,
-    [empresaId, JSON.stringify(metricas || {}), JSON.stringify(niveis || [])]
-  );
+// Salva SÓ os campos enviados (não apaga os outros).
+async function salvarConfig({ empresaId, metricas, niveis, config }) {
+  await query(`INSERT INTO score_config (empresa_id) VALUES ($1) ON CONFLICT (empresa_id) DO NOTHING`, [empresaId]);
+  const sets = [];
+  const params = [empresaId];
+  if (metricas !== undefined) { params.push(JSON.stringify(metricas || {})); sets.push(`metricas = $${params.length}::jsonb`); }
+  if (niveis !== undefined) { params.push(JSON.stringify(niveis || [])); sets.push(`niveis = $${params.length}::jsonb`); }
+  if (config !== undefined) { params.push(JSON.stringify(config || {})); sets.push(`config = $${params.length}::jsonb`); }
+  if (sets.length) { sets.push('atualizado_em = now()'); await query(`UPDATE score_config SET ${sets.join(', ')} WHERE empresa_id = $1`, params); }
   return { ok: true };
 }
 
@@ -53,12 +59,13 @@ async function meuScore({ empresaId, motoboyId }) {
   };
 
   let entregues = 0, insucessos = 0;
+  const janela = String(Number(cfg.config && cfg.config.janela_dias) || 30);
   try {
     const { rows } = await query(
       `SELECT count(*)::int AS n FROM entregas
         WHERE empresa_id = $1 AND motoboy_id = $2 AND status = 'entregue'
-          AND concluida_em >= now() - interval '30 days'`,
-      [empresaId, motoboyId]
+          AND concluida_em >= now() - (($3)::text || ' days')::interval`,
+      [empresaId, motoboyId, janela]
     );
     entregues = rows[0] ? rows[0].n : 0;
   } catch {}
@@ -67,8 +74,8 @@ async function meuScore({ empresaId, motoboyId }) {
       `SELECT count(*)::int AS n
          FROM entregas_pontos p JOIN entregas en ON en.id = p.entrega_id
         WHERE en.empresa_id = $1 AND en.motoboy_id = $2 AND p.status = 'insucesso'
-          AND COALESCE(en.concluida_em, en.criado_em) >= now() - interval '30 days'`,
-      [empresaId, motoboyId]
+          AND COALESCE(en.concluida_em, en.criado_em) >= now() - (($3)::text || ' days')::interval`,
+      [empresaId, motoboyId, janela]
     );
     insucessos = rows[0] ? rows[0].n : 0;
   } catch {}
@@ -280,6 +287,7 @@ async function missoesDoMotoboy({ empresaId, motoboyId }) {
 // ── Fase 3: ranking da semana (read-only; "reset" é automático pela data) ──
 async function rankingSemana({ empresaId, motoboyId }) {
   const cfg = await obterConfig(empresaId);
+  if (cfg.config && cfg.config.ranking_ativo === false) return { janela: 'semana', total: 0, top: [], eu: null, desativado: true };
   const met = cfg.metricas.entrega_concluida;
   const ptE = met && met.ativo !== false ? Number(met.pontos || 0) : 0;
   const { rows } = await query(
