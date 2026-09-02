@@ -108,6 +108,11 @@ function initClienteHubRoutes() {
           pode_escolher_profissional: req.body.pode_escolher_profissional,
           somente_online: req.body.somente_online,
         },
+        prioridade: {
+          ativa: req.body.prioridade_nivel_ativa,
+          onda_seg: req.body.prioridade_onda_seg,
+          ondas: req.body.prioridade_ondas,
+        },
       }));
     } catch (e) { next(e); }
   });

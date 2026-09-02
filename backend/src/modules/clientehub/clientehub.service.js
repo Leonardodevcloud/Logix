@@ -259,7 +259,8 @@ async function obterRegras({ empresaId, lojaId }) {
   const { rows } = await query(
     `SELECT max_corridas_motoboy, raio_km, pode_cancelar_associada, pode_alterar_profissional,
             pode_editar_servico, pode_escolher_profissional, somente_online,
-            marcacao_raio_livre, marcacao_raio_km, marcacao_modalidade_ids
+            marcacao_raio_livre, marcacao_raio_km, marcacao_modalidade_ids,
+            prioridade_nivel_ativa, prioridade_onda_seg, prioridade_ondas
        FROM cliente_regras_acionamento WHERE loja_id = $1`,
     [lojaId]
   );
@@ -270,10 +271,12 @@ async function obterRegras({ empresaId, lojaId }) {
     pode_cancelar_associada: true, pode_alterar_profissional: true,
     pode_editar_servico: true, pode_escolher_profissional: true, somente_online: true,
     marcacao_raio_livre: true, marcacao_raio_km: 0.3, marcacao_modalidade_ids: [],
+    prioridade_nivel_ativa: false, prioridade_onda_seg: 15,
+    prioridade_ondas: [['Diamante', 'Ouro'], ['Prata'], ['Bronze']],
   };
 }
 
-async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos = {}, marcacaoRaioLivre, marcacaoRaioKm, marcacaoModalidadeIds, usuarioId, ip }) {
+async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos = {}, marcacaoRaioLivre, marcacaoRaioKm, marcacaoModalidadeIds, prioridade = {}, usuarioId, ip }) {
   await exigirLoja(empresaId, lojaId);
   const max = Number.isFinite(+maxCorridas) ? Math.max(1, Math.round(+maxCorridas)) : 3;
   const raio = Number.isFinite(+raioKm) ? Math.max(0.5, +raioKm) : 5;
@@ -290,22 +293,31 @@ async function salvarRegras({ empresaId, lojaId, maxCorridas, raioKm, booleanos 
   const marcRaio = Number.isFinite(+marcacaoRaioKm) ? Math.max(0.05, +marcacaoRaioKm) : 0.3;
   // Modalidades alvo (array de ids). Vazio/ inválido = todas.
   const marcMods = Array.isArray(marcacaoModalidadeIds) ? marcacaoModalidadeIds.filter(x => typeof x === 'string') : [];
+  // Prioridade por nível (opt-in, default off).
+  const prioAtiva = prioridade.ativa === true;
+  const prioSeg = Number.isFinite(+prioridade.onda_seg) ? Math.max(3, Math.round(+prioridade.onda_seg)) : 15;
+  const prioOndas = Array.isArray(prioridade.ondas) && prioridade.ondas.length
+    ? prioridade.ondas.map(g => (Array.isArray(g) ? g.filter(x => typeof x === 'string' && x.trim()) : [])).filter(g => g.length)
+    : [['Diamante', 'Ouro'], ['Prata'], ['Bronze']];
   await query(
     `INSERT INTO cliente_regras_acionamento
        (loja_id, empresa_id, max_corridas_motoboy, raio_km,
         pode_cancelar_associada, pode_alterar_profissional, pode_editar_servico,
-        pode_escolher_profissional, somente_online, marcacao_raio_livre, marcacao_raio_km, marcacao_modalidade_ids, atualizado_em)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())
+        pode_escolher_profissional, somente_online, marcacao_raio_livre, marcacao_raio_km, marcacao_modalidade_ids,
+        prioridade_nivel_ativa, prioridade_onda_seg, prioridade_ondas, atualizado_em)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb, now())
      ON CONFLICT (loja_id) DO UPDATE SET
        max_corridas_motoboy = $3, raio_km = $4,
        pode_cancelar_associada = $5, pode_alterar_profissional = $6, pode_editar_servico = $7,
        pode_escolher_profissional = $8, somente_online = $9,
-       marcacao_raio_livre = $10, marcacao_raio_km = $11, marcacao_modalidade_ids = $12, atualizado_em = now()`,
+       marcacao_raio_livre = $10, marcacao_raio_km = $11, marcacao_modalidade_ids = $12,
+       prioridade_nivel_ativa = $13, prioridade_onda_seg = $14, prioridade_ondas = $15::jsonb, atualizado_em = now()`,
     [lojaId, empresaId, max, raio, b.pode_cancelar_associada, b.pode_alterar_profissional,
-     b.pode_editar_servico, b.pode_escolher_profissional, b.somente_online, marcLivre, marcRaio, JSON.stringify(marcMods)]
+     b.pode_editar_servico, b.pode_escolher_profissional, b.somente_online, marcLivre, marcRaio, JSON.stringify(marcMods),
+     prioAtiva, prioSeg, JSON.stringify(prioOndas)]
   );
-  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'salvar_regras_acionamento', detalhe: { lojaId, max, raio, ...b, marcLivre, marcRaio, marcMods }, ip }).catch(() => {});
-  return { ok: true, max_corridas_motoboy: max, raio_km: raio, ...b, marcacao_raio_livre: marcLivre, marcacao_raio_km: marcRaio, marcacao_modalidade_ids: marcMods };
+  registrarAuditoria({ empresaId, usuarioId, categoria: 'loja', acao: 'salvar_regras_acionamento', detalhe: { lojaId, max, raio, ...b, marcLivre, marcRaio, marcMods, prioAtiva, prioSeg }, ip }).catch(() => {});
+  return { ok: true, max_corridas_motoboy: max, raio_km: raio, ...b, marcacao_raio_livre: marcLivre, marcacao_raio_km: marcRaio, marcacao_modalidade_ids: marcMods, prioridade_nivel_ativa: prioAtiva, prioridade_onda_seg: prioSeg, prioridade_ondas: prioOndas };
 }
 
 // ── 6) Motoboys exclusivos do cliente (por modalidade) ────────────

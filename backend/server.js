@@ -125,6 +125,11 @@ async function iniciar() {
   server.headersTimeout = 66000; // deve ser > keepAliveTimeout
   iniciarWebSocket(server);
 
+  // Promotor de ondas da prioridade por nível: abre as próximas ondas das
+  // ofertas escalonadas. Roda AQUI (processo com WebSocket), a cada 5s. É leve:
+  // só toca ofertas 'ofertada' com proxima_onda_em vencida. Blindado por try/catch.
+  setInterval(() => { filas.promoverOndasPendentes().catch(() => {}); }, 5000);
+
   // Modo econômico (padrão): roda os cron jobs no MESMO processo da API — 1 container só.
   // Ao escalar para múltiplas instâncias, rode o worker separado e defina WORKER_EMBUTIDO=false.
   if (process.env.WORKER_EMBUTIDO !== 'false') iniciarCron('api');

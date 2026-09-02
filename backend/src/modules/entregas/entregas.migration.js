@@ -166,6 +166,13 @@ async function initOfertasTable() {
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_ofertas_entrega ON entregas_ofertas(entrega_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_ofertas_status ON entregas_ofertas(empresa_id, status)`);
+  // Prioridade por nível (ondas escalonadas). ondas = [[{m,d}...],[...]] em ordem;
+  // onda_atual = última onda já liberada; proxima_onda_em = quando abrir a próxima.
+  await query(`ALTER TABLE entregas_ofertas ADD COLUMN IF NOT EXISTS ondas JSONB`);
+  await query(`ALTER TABLE entregas_ofertas ADD COLUMN IF NOT EXISTS onda_atual INTEGER NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE entregas_ofertas ADD COLUMN IF NOT EXISTS onda_intervalo_seg INTEGER`);
+  await query(`ALTER TABLE entregas_ofertas ADD COLUMN IF NOT EXISTS proxima_onda_em TIMESTAMPTZ`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_ofertas_prox_onda ON entregas_ofertas(status, proxima_onda_em) WHERE proxima_onda_em IS NOT NULL`);
   // candidatos da oferta (quais motoboys estavam no raio quando disparou)
   await query(`
     CREATE TABLE IF NOT EXISTS entregas_ofertas_candidatos (

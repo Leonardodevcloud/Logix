@@ -493,7 +493,43 @@ function abaRegras(loja) {
     });
   }
 
-  form.append(blocoNum, blocoPerm, blocoMarcacao, btn);
+  // ── Prioridade por nível (opt-in, desligado por padrão) ──
+  const inpPrioSeg = el('input', { class: 'lx-input', type: 'number', min: '3', step: '1', style: 'max-width:160px', placeholder: '15' });
+  const ondasBox = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+  function linhaOnda(valor) {
+    const inp = el('input', { class: 'lx-input', value: (valor || []).join(', '), placeholder: 'Ex.: Diamante, Ouro' });
+    const row = el('div', { style: 'display:flex;gap:8px;align-items:center' }, inp,
+      el('button', { class: 'lx-btn lx-btn-secundario', style: 'color:var(--lx-erro);padding:8px 12px', onClick: () => row.remove() }, '×'));
+    row._inp = inp;
+    return row;
+  }
+  function renderOndas(ondas) {
+    ondasBox.innerHTML = '';
+    (ondas && ondas.length ? ondas : [['Diamante', 'Ouro'], ['Prata'], ['Bronze']]).forEach(g => ondasBox.append(linhaOnda(g)));
+  }
+  function lerOndas() {
+    return [...ondasBox.children].map(row => row._inp.value.split(',').map(s => s.trim()).filter(Boolean)).filter(g => g.length);
+  }
+  const addOnda = el('button', { class: 'lx-btn lx-btn-secundario', style: 'align-self:flex-start;font-size:12.5px', onClick: () => ondasBox.append(linhaOnda([])) }, '+ Adicionar onda');
+  const prioCfg = el('div', { style: 'display:flex;flex-direction:column;gap:14px;padding:14px 16px;border:1px solid var(--lx-linha);border-radius:var(--lx-raio)' },
+    el('div', { class: 'lx-field' }, el('label', {}, 'Intervalo entre ondas (segundos)'), inpPrioSeg,
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-top:4px' }, 'Tempo que cada onda espera antes de abrir a próxima, se ninguém aceitar.')),
+    el('div', {},
+      el('label', { style: 'display:block;font-size:13px;font-weight:700;margin-bottom:6px' }, 'Ondas (ordem de liberação)'),
+      el('div', { style: 'font-size:11.5px;color:var(--lx-tinta-3);margin-bottom:8px' }, 'Cada linha é uma onda; separe os níveis por vírgula. Cumulativo: quem já viu continua podendo aceitar. Nível fora da lista cai na última onda.'),
+      ondasBox, el('div', { style: 'margin-top:8px' }, addOnda)));
+  function syncPrio() {
+    const on = !!toggles.prioridade_nivel_ativa?.checked;
+    prioCfg.style.opacity = on ? '1' : '0.5';
+    prioCfg.style.pointerEvents = on ? 'auto' : 'none';
+  }
+  const blocoPrio = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+    el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px' }, 'Prioridade por nível'),
+    linhaToggle('prioridade_nivel_ativa', 'Dar prioridade ao nível mais alto', 'A corrida abre primeiro para os níveis mais altos e vai incluindo os demais a cada intervalo. Desligado, todos no raio recebem juntos (padrão).'),
+    prioCfg);
+  toggles.prioridade_nivel_ativa.addEventListener('change', syncPrio);
+
+  form.append(blocoNum, blocoPerm, blocoMarcacao, blocoPrio, btn);
 
   async function carregar() {
     try {
@@ -507,6 +543,10 @@ function abaRegras(loja) {
       toggles.somente_online.checked = r.somente_online !== false;
       toggles.marcacao_raio_livre.checked = r.marcacao_raio_livre !== false;
       inpMarcRaio.value = Math.round((r.marcacao_raio_km ?? 0.3) * 1000);
+      toggles.prioridade_nivel_ativa.checked = !!r.prioridade_nivel_ativa;
+      inpPrioSeg.value = r.prioridade_onda_seg ?? 15;
+      renderOndas(r.prioridade_ondas || [['Diamante', 'Ouro'], ['Prata'], ['Bronze']]);
+      syncPrio();
       // Modalidades da loja + marca as que o geofence usa.
       try {
         const mods = await get(`/clientes/${loja.id}/modalidades`);
@@ -528,6 +568,9 @@ function abaRegras(loja) {
         marcacao_raio_livre: toggles.marcacao_raio_livre.checked,
         marcacao_raio_km: Math.max(0.05, (Number(inpMarcRaio.value) || 300) / 1000),
         marcacao_modalidade_ids: [..._modsSel],
+        prioridade_nivel_ativa: toggles.prioridade_nivel_ativa.checked,
+        prioridade_onda_seg: Number(inpPrioSeg.value) || 15,
+        prioridade_ondas: lerOndas(),
       });
       toast('Regras salvas');
     } catch (e) { toast(e.message || 'Erro', 'erro'); } finally { btn.disabled = false; }

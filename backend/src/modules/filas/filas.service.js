@@ -4,6 +4,8 @@ const { AUDIT_CATEGORIES, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { emitirParaEmpresa, emitirParaMotoboy } = require('../../realtime/ws');
 const { notificarMotoboy } = require('../../shared/push');
+let scoreService = null;
+try { scoreService = require('../score/score.service'); } catch {}
 
 const STATUS_ATIVOS = [STATUS_ENTREGA.AGUARDANDO_COLETA, STATUS_ENTREGA.EM_COLETA, STATUS_ENTREGA.EM_ROTA];
 
@@ -50,13 +52,22 @@ async function regrasDaEntrega(empresaId, entrega) {
 
   // Regras gerais do cliente.
   let regras = { max_corridas_motoboy: 3, raio_km: 5, somente_online: true };
+  let prioridade = { ativa: false, ondaSeg: 15, ondas: [['Diamante', 'Ouro'], ['Prata'], ['Bronze']] };
   if (lojaId) {
     const r = await query(
-      `SELECT max_corridas_motoboy, raio_km, somente_online
+      `SELECT max_corridas_motoboy, raio_km, somente_online,
+              prioridade_nivel_ativa, prioridade_onda_seg, prioridade_ondas
          FROM cliente_regras_acionamento WHERE loja_id = $1`,
       [lojaId]
     );
-    if (r.rows[0]) regras = r.rows[0];
+    if (r.rows[0]) {
+      regras = r.rows[0];
+      prioridade = {
+        ativa: !!r.rows[0].prioridade_nivel_ativa,
+        ondaSeg: Number(r.rows[0].prioridade_onda_seg) || 15,
+        ondas: Array.isArray(r.rows[0].prioridade_ondas) && r.rows[0].prioridade_ondas.length ? r.rows[0].prioridade_ondas : [['Diamante', 'Ouro'], ['Prata'], ['Bronze']],
+      };
+    }
   }
 
   // Modalidade da corrida: é exclusiva?
@@ -84,6 +95,7 @@ async function regrasDaEntrega(empresaId, entrega) {
     somenteOnline: regras.somente_online !== false,
     soExclusivos,
     exclusivosSet, // Set de motoboy_id, ou null se não exclusiva
+    prioridade,    // { ativa, ondaSeg, ondas:[[nomes...]] }
   };
 }
 
@@ -290,31 +302,97 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
     throw AppError.validacao(mensagemFunil({ onlineTotal, regras, descartes, etapa: 'raio', raioKm, semPosicao, foraDoRaio }));
   }
 
+  // ── Prioridade por nível (opt-in da loja): monta as ONDAS cumulativas ──
+  // ondas = [[{m,d}...], ...] em ordem de liberação. A 1ª onda sai agora; as
+  // demais entram pelo promotor (server). Onda nova SOMA (ninguém perde a chance).
+  let ondas = null;
+  try {
+    const prio = regras.prioridade;
+    if (prio && prio.ativa && candidatos.length > 1 && scoreService && scoreService.niveisDeMotoboys) {
+      const niveis = await scoreService.niveisDeMotoboys({ empresaId, motoboyIds: candidatos.map(c => c.motoboy_id) });
+      const grupos = prio.ondas || [];
+      const idxNivel = {};
+      grupos.forEach((grp, i) => (grp || []).forEach(nome => { idxNivel[String(nome).toLowerCase()] = i; }));
+      const fallback = Math.max(0, grupos.length - 1); // nível não listado cai na última onda
+      const baldes = grupos.map(() => []);
+      candidatos.forEach(c => {
+        const nome = String(niveis[c.motoboy_id] || '').toLowerCase();
+        const w = idxNivel[nome] != null ? idxNivel[nome] : fallback;
+        (baldes[w] || baldes[fallback]).push({ m: c.motoboy_id, d: c.distancia_km });
+      });
+      const naoVazias = baldes.filter(b => b.length); // colapsa ondas sem ninguém
+      if (naoVazias.length > 1) ondas = naoVazias; // só faz sentido escalonar se há +de 1 onda
+    }
+  } catch (e) { ondas = null; /* qualquer erro: cai no comportamento normal (todos juntos) */ }
+
+  const escalonado = !!ondas;
+  const intervalo = escalonado ? (regras.prioridade.ondaSeg || 15) : null;
+  const proximaOndaEm = escalonado ? new Date(Date.now() + intervalo * 1000).toISOString() : null;
+
   // Cria a oferta + candidatos.
   const ofe = await query(
-    `INSERT INTO entregas_ofertas (entrega_id, empresa_id, status, raio_km, expira_em)
-     VALUES ($1, $2, 'ofertada', $3, $4) RETURNING id`,
-    [entregaId, empresaId, raioKm, expiraEm]
+    `INSERT INTO entregas_ofertas (entrega_id, empresa_id, status, raio_km, expira_em, ondas, onda_atual, onda_intervalo_seg, proxima_onda_em)
+     VALUES ($1, $2, 'ofertada', $3, $4, $5::jsonb, 0, $6, $7) RETURNING id`,
+    [entregaId, empresaId, raioKm, expiraEm, escalonado ? JSON.stringify(ondas) : null, intervalo, proximaOndaEm]
   );
   const ofertaId = ofe.rows[0].id;
-  for (const c of candidatos) {
+
+  // Quem entra AGORA: 1ª onda (escalonado) ou todos (normal).
+  const agora = escalonado ? ondas[0].map(x => ({ motoboy_id: x.m, distancia_km: x.d })) : candidatos;
+  for (const c of agora) {
     await query(`INSERT INTO entregas_ofertas_candidatos (oferta_id, motoboy_id, distancia_km) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [ofertaId, c.motoboy_id, c.distancia_km]);
   }
 
   // Marca a entrega como "ofertada" via campo distribuicao (mantém status na fila).
-  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm, automatico }, ip });
-  // Notifica os candidatos (app escuta esse evento por motoboy).
-  // Notifica cada candidato individualmente (na sala do próprio motoboy) e a central.
-  candidatos.forEach(c => emitirParaMotoboy(c.motoboy_id, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, distanciaKm: c.distancia_km, expiraEm }));
-  // Push com app fechado: avisa cada candidato que há uma corrida disponível.
-  candidatos.forEach(c => notificarMotoboy(c.motoboy_id, {
+  await registrarAuditoria({ empresaId, usuarioId, categoria: AUDIT_CATEGORIES.ENTREGA, acao: 'disparar-oferta', detalhe: { entregaId, ofertaId, candidatos: candidatos.length, raioKm, automatico, escalonado, ondas: escalonado ? ondas.length : 1 }, ip });
+  // Notifica só quem entrou agora (WS por motoboy + push).
+  agora.forEach(c => emitirParaMotoboy(c.motoboy_id, 'oferta.nova', { ofertaId, entregaId, protocolo: e.protocolo, distanciaKm: c.distancia_km, expiraEm }));
+  agora.forEach(c => notificarMotoboy(c.motoboy_id, {
     titulo: '🛵 Nova corrida disponível!',
     corpo: `Corrida ${e.protocolo} a ${c.distancia_km} km de você. Toque para ver.`,
     dados: { tipo: 'oferta', ofertaId, entregaId },
   }).catch(() => {}));
-  emitirParaEmpresa(empresaId, 'oferta.disparada', { ofertaId, entregaId, protocolo: e.protocolo, candidatos: candidatos.length });
+  emitirParaEmpresa(empresaId, 'oferta.disparada', { ofertaId, entregaId, protocolo: e.protocolo, candidatos: agora.length });
 
-  return { ofertaId, candidatos: candidatos.length, raioKm, expiraEm };
+  return { ofertaId, candidatos: agora.length, raioKm, expiraEm, escalonado, ondas: escalonado ? ondas.length : 1 };
+}
+
+// ── Promotor de ondas: abre a próxima onda das ofertas escalonadas cujo tempo
+// chegou. Roda no PROCESSO PRINCIPAL (precisa do WebSocket). Cumulativo: só
+// ADICIONA candidatos — quem já estava continua podendo aceitar.
+async function promoverOndasPendentes() {
+  let ofertas = [];
+  try {
+    const r = await query(
+      `SELECT o.id, o.entrega_id, o.empresa_id, o.ondas, o.onda_atual, o.onda_intervalo_seg, e.protocolo
+         FROM entregas_ofertas o JOIN entregas e ON e.id = o.entrega_id
+        WHERE o.status = 'ofertada' AND o.ondas IS NOT NULL
+          AND o.proxima_onda_em IS NOT NULL AND o.proxima_onda_em <= now()
+        LIMIT 50`
+    );
+    ofertas = r.rows;
+  } catch { return; }
+
+  for (const o of ofertas) {
+    try {
+      const ondas = Array.isArray(o.ondas) ? o.ondas : [];
+      const prox = Number(o.onda_atual) + 1;
+      if (prox >= ondas.length) { await query(`UPDATE entregas_ofertas SET proxima_onda_em = NULL WHERE id = $1`, [o.id]); continue; }
+      const nova = ondas[prox] || [];
+      for (const c of nova) {
+        await query(`INSERT INTO entregas_ofertas_candidatos (oferta_id, motoboy_id, distancia_km) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [o.id, c.m, c.d]);
+        emitirParaMotoboy(c.m, 'oferta.nova', { ofertaId: o.id, entregaId: o.entrega_id, protocolo: o.protocolo, distanciaKm: c.d });
+        notificarMotoboy(c.m, {
+          titulo: '🛵 Nova corrida disponível!',
+          corpo: `Corrida ${o.protocolo} a ${c.d} km de você. Toque para ver.`,
+          dados: { tipo: 'oferta', ofertaId: o.id, entregaId: o.entrega_id },
+        }).catch(() => {});
+      }
+      const temMais = prox + 1 < ondas.length;
+      const proxEm = temMais ? new Date(Date.now() + (Number(o.onda_intervalo_seg) || 15) * 1000).toISOString() : null;
+      await query(`UPDATE entregas_ofertas SET onda_atual = $2, proxima_onda_em = $3 WHERE id = $1 AND status = 'ofertada'`, [o.id, prox, proxEm]);
+    } catch { /* segue para a próxima oferta */ }
+  }
 }
 
 // Motoboy aceita a oferta. Primeiro a aceitar leva (trava por UPDATE condicional).
@@ -596,4 +674,4 @@ async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
   return { ...rows[0], motoboy_nome: null };
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, desatribuir, listarTodosAtivos };
+module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, desatribuir, listarTodosAtivos, promoverOndasPendentes };

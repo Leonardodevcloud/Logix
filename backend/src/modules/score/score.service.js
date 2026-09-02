@@ -316,8 +316,35 @@ async function rankingSemana({ empresaId, motoboyId }) {
   };
 }
 
+// Nível (nome) de VÁRIOS motoboys de uma vez — usado pela prioridade por nível
+// na fila de ofertas. Read-only, mesma janela/pontos do score.
+async function niveisDeMotoboys({ empresaId, motoboyIds }) {
+  const out = {};
+  if (!motoboyIds || !motoboyIds.length) return out;
+  const cfg = await obterConfig(empresaId);
+  const met = cfg.metricas.entrega_concluida;
+  const ptE = met && met.ativo !== false ? Number(met.pontos || 0) : 0;
+  const janela = String(Number(cfg.config && cfg.config.janela_dias) || 30);
+  let mapaN = {};
+  try {
+    const { rows } = await query(
+      `SELECT motoboy_id, count(*)::int AS n FROM entregas
+        WHERE empresa_id = $1 AND status = 'entregue' AND motoboy_id = ANY($2::uuid[])
+          AND concluida_em >= now() - (($3)::text || ' days')::interval
+        GROUP BY motoboy_id`,
+      [empresaId, motoboyIds, janela]
+    );
+    for (const r of rows) mapaN[r.motoboy_id] = r.n;
+  } catch {}
+  for (const id of motoboyIds) {
+    const pts = Math.max(0, (mapaN[id] || 0) * ptE);
+    out[id] = nivelDe(pts, cfg.niveis).nome;
+  }
+  return out;
+}
+
 module.exports = {
   obterConfig, salvarConfig, meuScore, nivelDe,
   previaAlvo, listarCampanhas, obterCampanha, criarCampanha, atualizarCampanha, excluirCampanha,
-  avaliarMissao, liberarPremio, missoesDoMotoboy, rankingSemana,
+  avaliarMissao, liberarPremio, missoesDoMotoboy, rankingSemana, niveisDeMotoboys,
 };

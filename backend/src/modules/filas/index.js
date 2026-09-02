@@ -1,3 +1,4 @@
 const { initFilasTables } = require('./filas.migration');
 const { initFilasRoutes } = require('./filas.routes');
-module.exports = { initFilasTables, initFilasRoutes };
+const { promoverOndasPendentes } = require('./filas.service');
+module.exports = { initFilasTables, initFilasRoutes, promoverOndasPendentes };

@@ -70,6 +70,14 @@ async function initClienteHubTables() {
   // Modalidades de frete às quais o geofence se aplica. Array vazio = todas.
   await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS marcacao_modalidade_ids JSONB NOT NULL DEFAULT '[]'::jsonb`);
 
+  // ── Prioridade por nível (ondas escalonadas) — OPT-IN, desligado por padrão ──
+  // Quando ativa, a oferta abre primeiro para os níveis mais altos e vai
+  // incluindo os demais a cada `prioridade_onda_seg` segundos (cumulativo).
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS prioridade_nivel_ativa BOOLEAN NOT NULL DEFAULT FALSE`);
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS prioridade_onda_seg INTEGER NOT NULL DEFAULT 15`);
+  // Ondas: array de grupos de NOMES de nível, em ordem. Padrão: [Diamante,Ouro] → [Prata] → [Bronze].
+  await query(`ALTER TABLE cliente_regras_acionamento ADD COLUMN IF NOT EXISTS prioridade_ondas JSONB NOT NULL DEFAULT '[["Diamante","Ouro"],["Prata"],["Bronze"]]'::jsonb`);
+
   // ── Motoboys exclusivos do cliente (por modalidade) ─────────────
   // Um motoboy pode ser atribuído ao cliente em uma ou mais modalidades.
   await query(`
