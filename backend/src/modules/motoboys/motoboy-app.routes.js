@@ -205,7 +205,7 @@ module.exports = function motoboyAppRoutes() {
     try {
       const { rows } = await query(
         `SELECT e.id, e.protocolo, e.status, e.criado_em, e.iniciada_em, e.chegada_coleta_em, e.valor_motoboy_cent,
-                e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km,
+                e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.distancia_km, e.loja_id,
                 l.nome_fantasia AS cliente_nome,
                 COALESCE(
                   json_agg(
@@ -229,6 +229,36 @@ module.exports = function motoboyAppRoutes() {
          ORDER BY e.criado_em`,
         [req.motoboy.id, req.motoboy.empresaId]
       );
+
+      // Prazo (SLA) por entrega: minutos por faixa de km (config por loja > global).
+      // prazo_em = criado_em + minutos. Estado colore o app (no_prazo/atencao/iminente/estourado).
+      try {
+        const { rows: cfgs } = await query(
+          `SELECT loja_id, faixas, minutos_atencao, minutos_iminente, sla_padrao_min FROM sla_config WHERE empresa_id = $1`,
+          [req.motoboy.empresaId]
+        );
+        const geral = cfgs.find(c => c.loja_id == null) || { faixas: [], minutos_atencao: 30, minutos_iminente: 15, sla_padrao_min: 90 };
+        const porLoja = new Map(cfgs.filter(c => c.loja_id != null).map(c => [String(c.loja_id), c]));
+        const agora = Date.now();
+        for (const e of rows) {
+          const cfg = (e.loja_id && porLoja.get(String(e.loja_id))) || geral;
+          let minutos = Number(cfg.sla_padrao_min) || 90;
+          const km = e.distancia_km != null ? Number(e.distancia_km) : null;
+          if (km != null && Array.isArray(cfg.faixas) && cfg.faixas.length) {
+            const f = [...cfg.faixas].map(x => ({ ate_km: Number(x.ate_km), minutos: Number(x.minutos) })).sort((a, b) => a.ate_km - b.ate_km).find(x => km <= x.ate_km);
+            if (f && f.minutos) minutos = f.minutos;
+          }
+          const prazo = new Date(e.criado_em).getTime() + minutos * 60000;
+          const restaMin = Math.round((prazo - agora) / 60000);
+          e.prazo_em = new Date(prazo).toISOString();
+          e.prazo_min = minutos;
+          e.prazo_resta_min = restaMin;
+          e.prazo_estado = restaMin < 0 ? 'estourado'
+            : restaMin <= (Number(cfg.minutos_iminente) || 15) ? 'iminente'
+            : restaMin <= (Number(cfg.minutos_atencao) || 30) ? 'atencao' : 'no_prazo';
+        }
+      } catch { /* sem SLA: segue sem prazo */ }
+
       res.json(rows);
     } catch (e) { next(e); }
   });
