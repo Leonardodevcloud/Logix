@@ -104,51 +104,51 @@ export async function montar(container) {
     const s = document.createElement('style'); s.id = 'lx-rastreio-style';
     s.textContent = `
       .lx-rast-shell{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 118px);overflow:hidden}
-      .lx-rast-side{background:#042C53;display:flex;flex-direction:column;overflow:hidden}
+      .lx-rast-side{background:var(--lx-azul-profundo);display:flex;flex-direction:column;overflow:hidden}
       .lx-rast-top{padding:14px;border-bottom:1px solid rgba(255,255,255,.08)}
       .lx-rast-kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px}
       .lx-rast-kpi{background:rgba(255,255,255,.06);border-radius:8px;padding:8px 10px;text-align:center;border:0.5px solid rgba(255,255,255,.08)}
       .lx-rast-kpi b{font-size:22px;font-weight:800;line-height:1;display:block}
       .lx-rast-kpi span{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.45);margin-top:3px;display:block}
       .lx-rast-scroll{overflow-y:auto;flex:1;padding:8px}
-      .lx-rast-sec{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5D8DB8;padding:7px 4px 4px}
+      .lx-rast-sec{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);padding:7px 4px 4px}
       .lx-mb-card{background:rgba(255,255,255,.05);border-radius:10px;padding:10px 11px;margin-bottom:5px;cursor:pointer;border:0.5px solid rgba(255,255,255,.07);border-left:3px solid transparent;transition:background .15s}
       .lx-mb-card:hover{background:rgba(255,255,255,.09)}
-      .lx-mb-card.sel{background:rgba(255,255,255,.12);border-left-color:#378ADD}
+      .lx-mb-card.sel{background:rgba(255,255,255,.12);border-left-color:var(--lx-azul-vivo)}
       .lx-mb-card.livre{border-left-color:#4ADE80}
       .lx-mb-card.em-rota{border-left-color:#FACC15}
       .lx-mb-card.offline{border-left-color:#64748B;opacity:.5}
       .lx-mb-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
       .lx-mb-av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none}
       .lx-mb-name{color:#fff;font-size:12.5px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .lx-mb-sub{font-size:10.5px;color:#5D8DB8}
+      .lx-mb-sub{font-size:10.5px;color:rgba(255,255,255,.5)}
       .lx-pill{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;flex:none}
       .lx-pill-livre{background:rgba(74,222,128,.15);color:#4ADE80}
       .lx-pill-rota{background:rgba(250,204,21,.15);color:#FACC15}
       .lx-pill-off{background:rgba(100,116,139,.15);color:#94A3B8}
-      .lx-mb-meta{display:flex;gap:10px;font-size:11px;color:#7BA4C7}
+      .lx-mb-meta{display:flex;gap:10px;font-size:11px;color:rgba(255,255,255,.55)}
       .lx-mb-meta span{display:flex;align-items:center;gap:3px}
       .lx-mb-entregas{background:rgba(250,204,21,.08);border-radius:6px;padding:4px 8px;margin-top:5px;font-size:11px;color:#FACC15;display:flex;align-items:center;gap:5px}
       .lx-rast-mapa{position:relative;overflow:hidden}
       .lx-rast-topbar{position:absolute;top:0;left:0;right:0;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;z-index:400;pointer-events:none}
       .lx-rast-topbar > *{pointer-events:auto}
-      .lx-rast-tit{background:rgba(4,44,83,.88);color:#fff;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+      .lx-rast-tit{background:var(--lx-azul-profundo);color:#fff;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
       .lx-rast-btns{display:flex;gap:6px}
-      .lx-rast-btn{background:rgba(255,255,255,.93);border:0.5px solid rgba(0,0,0,.12);border-radius:7px;padding:6px 11px;font-size:12px;font-weight:500;color:#042C53;cursor:pointer;display:flex;align-items:center;gap:5px}
-      .lx-rast-btn.on{background:#185FA5;color:#fff;border-color:#185FA5}
+      .lx-rast-btn{background:rgba(255,255,255,.93);border:0.5px solid rgba(0,0,0,.12);border-radius:7px;padding:6px 11px;font-size:12px;font-weight:500;color:var(--lx-azul-profundo);cursor:pointer;display:flex;align-items:center;gap:5px}
+      .lx-rast-btn.on{background:var(--lx-azul-primario);color:#fff;border-color:var(--lx-azul-primario)}
       .lx-legend{position:absolute;bottom:14px;left:14px;background:rgba(255,255,255,.95);border-radius:10px;padding:10px 13px;z-index:400;border:0.5px solid rgba(0,0,0,.1)}
       .lx-leg-row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#1e293b;padding:2px 0}
       .lx-leg-dot{width:11px;height:11px;border-radius:50%;flex:none}
       .lx-mb-detail{position:absolute;bottom:14px;right:14px;background:#fff;border-radius:12px;padding:14px 16px;z-index:400;width:230px;border:0.5px solid rgba(0,0,0,.1);display:none}
-      .lx-detail-name{font-size:13.5px;font-weight:700;color:#042C53}
+      .lx-detail-name{font-size:13.5px;font-weight:700;color:var(--lx-azul-profundo)}
       .lx-detail-sub{font-size:11.5px;color:#64748B;margin-top:2px;margin-bottom:10px}
       .lx-detail-row{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:4px 0;border-bottom:0.5px solid #f1f5f9}
       .lx-detail-row:last-of-type{border-bottom:none}
       .lx-detail-row span{color:#64748B}
-      .lx-detail-row b{color:#042C53;text-align:right}
-      .lx-detail-rota{width:100%;margin-top:10px;background:#185FA5;color:#fff;border:none;border-radius:7px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+      .lx-detail-row b{color:var(--lx-azul-profundo);text-align:right}
+      .lx-detail-rota{width:100%;margin-top:10px;background:var(--lx-azul-primario);color:#fff;border:none;border-radius:7px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
       .lx-detail-rota:disabled{opacity:.5;cursor:wait}
-      .lx-rota-info{margin-top:6px;padding:6px 8px;background:#E6F1FB;border-radius:6px;font-size:11.5px;color:#0C447C;display:none;gap:8px;text-align:center}
+      .lx-rota-info{margin-top:6px;padding:6px 8px;background:var(--lx-azul-claro);border-radius:6px;font-size:11.5px;color:var(--lx-azul-profundo);display:none;gap:8px;text-align:center}
       .lx-pulse{animation:lx-rast-pulse 2s ease-in-out infinite}
       @keyframes lx-rast-pulse{0%,100%{opacity:1}50%{opacity:.4}}
     `;
@@ -287,7 +287,7 @@ export async function montar(container) {
         detalheRotaInfo.textContent = '';
         detalheRotaInfo.append(
           el('b', {}, dados.distanciaKm + ' km'),
-          el('span', { style: 'color:#378ADD' }, '·'),
+          el('span', { style: 'color:var(--lx-azul-profundo)' }, '·'),
           el('b', {}, dados.duracaoMin + ' min restantes'));
       } else {
         detalheRotaInfo.style.display = 'flex';
@@ -327,7 +327,7 @@ export async function montar(container) {
     // Entregas
     if (m.entregas?.length) {
       m.entregas.forEach(e => {
-        detalheRows.append(el('div', { style: 'font-size:11px;color:#185FA5;padding:3px 0;display:flex;align-items:center;gap:4px' },
+        detalheRows.append(el('div', { style: 'font-size:11px;color:var(--lx-azul-primario);padding:3px 0;display:flex;align-items:center;gap:4px' },
           el('span', { innerHTML: SVG.pkg }), e.protocolo + ' → ' + (e.destino || '—')));
       });
     }
@@ -377,8 +377,8 @@ export async function montar(container) {
             el('span', { class: 'lx-mb-sub' }, m.telefone_principal || '—')),
           el('span', { class: `lx-pill ${pillClass}` }, pillLabel)),
         el('div', { class: 'lx-mb-meta' },
-          el('span', {}, ico(SVG.pin, '#7BA4C7'), (m.lat != null && m.lng != null) ? (dist != null ? dist.toFixed(1) + ' km da loja' : 'no mapa') : 'sem GPS'),
-          el('span', {}, ico(SVG.clock, '#7BA4C7'), fmtAgo(m.ultima_posicao_em))));
+          el('span', {}, ico(SVG.pin, 'rgba(255,255,255,.55)'), (m.lat != null && m.lng != null) ? (dist != null ? dist.toFixed(1) + ' km da loja' : 'no mapa') : 'sem GPS'),
+          el('span', {}, ico(SVG.clock, 'rgba(255,255,255,.55)'), fmtAgo(m.ultima_posicao_em))));
 
       if (m.entregas_ativas > 0) {
         const nomes = (m.entregas || []).map(e => e.protocolo).join(', ');
@@ -400,7 +400,7 @@ export async function montar(container) {
     }
     // Motoboys offline não são listados no rastreio (só entram na contagem do KPI).
     if (!_motoboys.length) {
-      listaScroll.append(el('div', { style: 'padding:24px;text-align:center;color:#5D8DB8;font-size:13px' }, 'Nenhum motoboy cadastrado.'));
+      listaScroll.append(el('div', { style: 'padding:24px;text-align:center;color:rgba(255,255,255,.5);font-size:13px' }, 'Nenhum motoboy cadastrado.'));
     }
   }
 
