@@ -25,6 +25,11 @@ export function aplicarTema(tema) {
   if (!tema) return;
   const raiz = document.documentElement;
   for (const [campo, varCss] of Object.entries(MAPA_CORES)) if (tema[campo]) raiz.style.setProperty(varCss, tema[campo]);
+  // Aliases curtos usados direto em vários módulos (financeiro, relatórios, dashboard,
+  // rotas, radar, integrações) via var(--lx-navy,...) / var(--lx-azul,...). Sem isto,
+  // essas telas caíam sempre no fallback azul fixo e não seguiam a marca do cliente.
+  if (tema.cor_secundaria) raiz.style.setProperty('--lx-navy', tema.cor_secundaria);
+  if (tema.cor_primaria) raiz.style.setProperty('--lx-azul', tema.cor_primaria);
   if (tema.cor_secundaria) { raiz.style.setProperty('--lx-navy-950', tema.cor_secundaria); raiz.style.setProperty('--lx-navy-900', tema.cor_secundaria); raiz.style.setProperty('--lx-navy-800', aclarar(tema.cor_secundaria, 0.16)); }
   if (tema.nome_exibicao) document.title = tema.nome_exibicao;
   if (tema.favicon_url) {
