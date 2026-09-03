@@ -37,7 +37,7 @@ function intervalo(preset, de, ate) {
 }
 
 async function precos() {
-  const { rows } = await query(`SELECT provedor, operacao, preco_por_mil, moeda FROM api_uso_preco ORDER BY provedor, operacao`);
+  const { rows } = await query(`SELECT provedor, operacao, preco_por_mil, franquia_gratis, moeda FROM api_uso_preco ORDER BY provedor, operacao`);
   return rows;
 }
 
@@ -48,11 +48,12 @@ async function definirPrecos(lista) {
     if (!p || !p.provedor || !p.operacao) continue;
     const valor = Number(p.preco_por_mil);
     if (Number.isNaN(valor) || valor < 0) continue;
+    const franquia = Math.max(0, Math.round(Number(p.franquia_gratis) || 0));
     await query(
-      `INSERT INTO api_uso_preco (provedor, operacao, preco_por_mil)
-       VALUES ($1,$2,$3) ON CONFLICT (provedor, operacao)
-       DO UPDATE SET preco_por_mil = EXCLUDED.preco_por_mil`,
-      [p.provedor, p.operacao, valor]
+      `INSERT INTO api_uso_preco (provedor, operacao, preco_por_mil, franquia_gratis)
+       VALUES ($1,$2,$3,$4) ON CONFLICT (provedor, operacao)
+       DO UPDATE SET preco_por_mil = EXCLUDED.preco_por_mil, franquia_gratis = EXCLUDED.franquia_gratis`,
+      [p.provedor, p.operacao, valor, franquia]
     );
     n++;
   }
@@ -82,7 +83,15 @@ async function resumo({ preset, de, ate } = {}) {
     [per.de, per.ate, SEM]
   )).rows;
 
-  return { periodo: per, precos: await precos(), porOperacao, porCliente };
+  // Uso do MÊS corrente por operação — base do custo (a fatura é mensal e a
+  // franquia grátis é por mês). Independe do período selecionado na tela.
+  const mesAtual = (await query(
+    `SELECT provedor, operacao, SUM(chamadas)::bigint AS chamadas, SUM(cache)::bigint AS cache
+       FROM api_uso WHERE dia >= date_trunc('month', CURRENT_DATE)::date
+      GROUP BY provedor, operacao`
+  )).rows;
+
+  return { periodo: per, precos: await precos(), porOperacao, porCliente, mesAtual };
 }
 
 module.exports = { registrar, contar, resumo, precos, definirPrecos };
