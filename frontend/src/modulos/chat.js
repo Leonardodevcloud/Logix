@@ -49,7 +49,13 @@ export async function montar(container) {
   }
 
   async function recarregarInbox() {
-    try { conversas = (await get('/chat/conversas')).conversas || []; renderInbox(); } catch (e) { /* mantém */ }
+    try {
+      conversas = (await get('/chat/conversas')).conversas || [];
+      const sig = conversas.map(c => c.id + ':' + c.nao_lidas + ':' + (c.ultima_previa || '') + ':' + (c.ultima_msg_em || '') + ':' + (c.status || '')).join('|');
+      if (sig === recarregarInbox._sig) return; // nada mudou → não redesenha (evita piscar)
+      recarregarInbox._sig = sig;
+      renderInbox();
+    } catch (e) { /* mantém */ }
   }
 
   const msgsDiv = el('div', { style: 'flex:1;overflow:auto;padding:14px;background:#e9eff6;display:flex;flex-direction:column;gap:8px' });
@@ -77,17 +83,17 @@ export async function montar(container) {
     if (!conversaSel) return;
     try {
       const r = await get('/chat/conversas/' + conversaSel.id + '/mensagens');
-      msgsDiv.innerHTML = '';
-      (r.mensagens || []).forEach(m => msgsDiv.append(bolha(m)));
-      msgsDiv.scrollTop = msgsDiv.scrollHeight;
-      // Conversa encerrada: trava o composer.
+      const lista = r.mensagens || [];
       const encerrada = r.conversa && r.conversa.status === 'encerrada';
       composer.style.display = (!podeResponder || encerrada) ? 'none' : 'flex';
-      if (encerrada && !msgsDiv.querySelector('[data-enc]')) {
-        thread.querySelector('[data-encbar]')?.remove();
-        const bar = el('div', { 'data-encbar': '1', style: 'padding:9px;text-align:center;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);background:#eef2f7;border-top:1px solid var(--lx-linha)' }, 'Conversa encerrada (corrida finalizada)');
-        thread.append(bar);
-      } else { thread.querySelector('[data-encbar]')?.remove(); }
+      const sig = lista.length + ':' + (lista.length ? lista[lista.length - 1].id : '') + ':' + (encerrada ? '1' : '0');
+      if (sig === carregarMensagens._sig) return; // sem mudança → não remonta (evita piscar)
+      carregarMensagens._sig = sig;
+      msgsDiv.innerHTML = '';
+      lista.forEach(m => msgsDiv.append(bolha(m)));
+      msgsDiv.scrollTop = msgsDiv.scrollHeight;
+      thread.querySelector('[data-encbar]')?.remove();
+      if (encerrada) thread.append(el('div', { 'data-encbar': '1', style: 'padding:9px;text-align:center;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);background:#eef2f7;border-top:1px solid var(--lx-linha)' }, 'Conversa encerrada (corrida finalizada)'));
     } catch (e) { /* mantém */ }
   }
 
@@ -96,6 +102,7 @@ export async function montar(container) {
     const nome = ehLoja ? ('Corrida ' + (c.protocolo || '')) : ((c.motoboy_codigo != null ? '#' + c.motoboy_codigo + ' ' : '') + (c.motoboy_nome || 'Entregador'));
     threadHd.textContent = nome + ' · Corrida ' + (c.protocolo || '');
     c.nao_lidas = 0; renderInbox();
+    carregarMensagens._sig = null;
     carregarMensagens();
     clearInterval(timerThread); timerThread = setInterval(carregarMensagens, 3500);
   }
