@@ -4,7 +4,7 @@ const { query } = require('../../shared/db');
 const { httpRequest } = require('../../shared/httpRequest');
 const storage = require('../../shared/storage');
 
-const BASE_ORS = 'https://api.openrouteservice.org';
+const BASE_ORS = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 
 module.exports = function rastreioRoutes() {
   const router = express.Router();

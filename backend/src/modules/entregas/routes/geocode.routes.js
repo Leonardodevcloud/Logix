@@ -6,7 +6,7 @@ const { httpRequest } = require('../../../shared/httpRequest');
 const { consultarCep } = require('../../../integracoes/cep');
 const { query } = require('../../../shared/db');
 
-const BASE_ORS = 'https://api.openrouteservice.org';
+const BASE_ORS = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 const BASE_GOOGLE = 'https://maps.googleapis.com/maps/api';
 
 // Endereços salvos são por centro de custo. Para um usuário de loja, resolve o

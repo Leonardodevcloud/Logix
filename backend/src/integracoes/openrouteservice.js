@@ -2,7 +2,7 @@ const { httpRequest } = require('../shared/httpRequest');
 const AppError = require('../shared/AppError');
 const NodeCache = require('node-cache');
 
-const BASE = 'https://api.openrouteservice.org';
+const BASE = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 // Cache curto da otimização: a ordem das paradas é estável para o mesmo conjunto
 // de pontos, então evita repetir a chamada (lenta) ao ORS a cada poll do app.
 const cacheRota = new NodeCache({ stdTTL: 120, checkperiod: 180 });
