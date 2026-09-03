@@ -77,6 +77,16 @@ const MAPTILER = (k) => ({
   attribution: '© MapTiler © OpenStreetMap contributors', maxZoom: 22,
 });
 
+// Beacon: registra 1 carregamento de mapa Google (custo de tiles) por cliente.
+// Fire-and-forget: nunca atrapalha o render do mapa.
+let _beaconPost = null;
+async function beaconMapa() {
+  try {
+    if (!_beaconPost) { _beaconPost = (await import('./api.js')).post; }
+    _beaconPost('/api-uso/beacon', { operacao: 'maptiles' }).catch(() => {});
+  } catch (_) {}
+}
+
 function tileFallback(mapa, L, key) {
   const cfg = key ? MAPTILER(key) : VOYAGER;
   L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: cfg.maxZoom, crossOrigin: true }).addTo(mapa);
@@ -93,6 +103,7 @@ export async function aplicarBasemap(mapa, L = window.L) {
     try {
       await Promise.all([carregarGoogle(cfg.googleMapsKey), carregarMutant()]);
       window.L.gridLayer.googleMutant({ type: 'roadmap', maxZoom: 22 }).addTo(mapa);
+      try { beaconMapa(); } catch (_) {}
       return;
     } catch (e) {
       // Google falhou (chave/rede) → cai pro tile normal abaixo.

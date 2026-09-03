@@ -40,6 +40,7 @@ async function initApiUsoTables() {
     ['ors', 'optimization', 0, 0],
     ['ors', 'directions', 0, 0],
     ['google', 'geocoding', 25.5, 10000],
+    ['google', 'maptiles', 35.7, 10000],
   ];
   for (const [prov, op, preco, franquia] of seed) {
     await query(

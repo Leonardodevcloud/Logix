@@ -6,15 +6,16 @@ import { el } from '../core/ui.js';
 import { get, put } from '../core/api.js';
 
 const PROV = { ors: 'ORS', google: 'Google' };
-const OPS = { geocoding: 'Geocoding', optimization: 'Otimização', directions: 'Direções' };
+const OPS = { geocoding: 'Geocoding', optimization: 'Otimização', directions: 'Direções', maptiles: 'Mapa (tiles)' };
 const PRESETS = [['hoje', 'Hoje'], ['7dias', '7 dias'], ['30dias', '30 dias'], ['mes', 'Este mês']];
 // Catálogo fixo: sempre mostra estas operações, mesmo com uso zero.
-const CATALOGO = [['ors', 'geocoding'], ['ors', 'optimization'], ['ors', 'directions'], ['google', 'geocoding']];
+const CATALOGO = [['ors', 'geocoding'], ['ors', 'optimization'], ['ors', 'directions'], ['google', 'geocoding'], ['google', 'maptiles']];
 const COLS = [
   ['ors', 'geocoding', 'ORS geocode'],
   ['ors', 'optimization', 'ORS otim.'],
   ['ors', 'directions', 'ORS direções'],
   ['google', 'geocoding', 'Google geo'],
+  ['google', 'maptiles', 'Google mapa'],
 ];
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -95,8 +96,8 @@ export async function montar(container) {
         <td style="text-align:left"><b>${PROV[p] || p}</b> · ${OPS[o] || o}</td>
         <td>${num(u.chamadas)}</td>
         <td style="color:var(--lx-ok,#1D9E75)">${num(u.cache)} <span style="color:var(--lx-tinta-3,#8AA2BE);font-size:11px">(${taxa}%)</span></td>
-        <td><input data-prov="${p}" data-op="${o}" data-campo="franq" value="${franquiaDe(p, o)}" style="${INP}"></td>
-        <td><input data-prov="${p}" data-op="${o}" data-campo="preco" value="${String(precoDe(p, o)).replace('.', ',')}" style="${INP}"></td>
+        <td><input data-prov="${p}" data-op="${o}" data-campo="franq" value="${franquiaDe(p, o)}" data-init="${franquiaDe(p, o)}" style="${INP}"></td>
+        <td><input data-prov="${p}" data-op="${o}" data-campo="preco" value="${String(precoDe(p, o)).replace('.', ',')}" data-init="${String(precoDe(p, o)).replace('.', ',')}" style="${INP}"></td>
         <td><b>${money(custoMes(p, o))}</b></td>
       </tr>`;
     }).join('');
@@ -140,7 +141,7 @@ export async function montar(container) {
         <div class="lx-card" style="overflow:hidden">
           <div style="padding:14px 18px;border-bottom:1px solid var(--lx-linha,#e6edf5);display:flex;align-items:center;justify-content:space-between">
             <b style="font-size:14px">Por provedor / operação</b>
-            <button id="lx-salvar-precos" style="border:0;background:var(--lx-azul-primario,#185FA5);color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer">Salvar preços</button>
+            <button id="lx-salvar-precos" style="display:none;border:0;background:var(--lx-azul-primario,#185FA5);color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer">Salvar preços</button>
           </div>
           <table style="text-align:right">
             <thead><tr>
@@ -178,6 +179,15 @@ export async function montar(container) {
       </div>`;
 
     wrap.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => { estado.preset = b.getAttribute('data-preset'); carregar(); }));
+
+    // Botão "Salvar preços" só aparece quando algum preço/franquia muda.
+    const btnSalvar = wrap.querySelector('#lx-salvar-precos');
+    const inputs = [...wrap.querySelectorAll('input[data-prov]')];
+    const checarDirty = () => {
+      const sujo = inputs.some((i) => String(i.value).trim() !== String(i.getAttribute('data-init')).trim());
+      if (btnSalvar) btnSalvar.style.display = sujo ? '' : 'none';
+    };
+    inputs.forEach((i) => i.addEventListener('input', checarDirty));
 
     const btn = wrap.querySelector('#lx-salvar-precos');
     if (btn) btn.addEventListener('click', async () => {
