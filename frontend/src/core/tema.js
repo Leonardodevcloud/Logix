@@ -8,13 +8,24 @@ const MAPA_CORES = {
 
 let _temaAtual = null;
 
+// Clareia um hex misturando com branco (0..1). Usado no topo do gradiente do login,
+// pra dar profundidade em qualquer cor de marca sem deixar o hero chapado.
+function aclarar(hex, f = 0.14) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.round(r + (255 - r) * f); g = Math.round(g + (255 - g) * f); b = Math.round(b + (255 - b) * f);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
 export function aplicarTema(tema) {
   if (tema) _temaAtual = tema;
   tema = tema || _temaAtual;
   if (!tema) return;
   const raiz = document.documentElement;
   for (const [campo, varCss] of Object.entries(MAPA_CORES)) if (tema[campo]) raiz.style.setProperty(varCss, tema[campo]);
-  if (tema.cor_secundaria) { raiz.style.setProperty('--lx-navy-900', tema.cor_secundaria); raiz.style.setProperty('--lx-navy-950', tema.cor_secundaria); }
+  if (tema.cor_secundaria) { raiz.style.setProperty('--lx-navy-950', tema.cor_secundaria); raiz.style.setProperty('--lx-navy-900', tema.cor_secundaria); raiz.style.setProperty('--lx-navy-800', aclarar(tema.cor_secundaria, 0.16)); }
   if (tema.nome_exibicao) document.title = tema.nome_exibicao;
   if (tema.favicon_url) {
     let link = document.querySelector('link[rel~="icon"]');
