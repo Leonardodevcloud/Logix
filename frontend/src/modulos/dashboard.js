@@ -142,14 +142,24 @@ async function dashAdmin(content) {
     center: [-14.235, -51.9253],
     zoom: 4,
     zoomControl: true,
-    scrollWheelZoom: false,
+    scrollWheelZoom: true,
   });
 
   aplicarBasemap(map);
 
   // Pins dos clientes
+  const pontos = [];
+  const usadosCoord = new Map();
   ativos.forEach((c, i) => {
-    const coords = coordsParaCliente(c);
+    const coordsBase = coordsParaCliente(c);
+    const chaveCoord = coordsBase.join(',');
+    const repetido = usadosCoord.get(chaveCoord) || 0;
+    usadosCoord.set(chaveCoord, repetido + 1);
+    // Clientes na mesma cidade cairiam no mesmo ponto — desloca levemente pra não empilhar.
+    const coords = repetido
+      ? [coordsBase[0] + repetido * 0.05 * (repetido % 2 ? 1 : -1), coordsBase[1] + repetido * 0.05]
+      : coordsBase;
+    pontos.push(coords);
     const mb = c.total_motoboys || 0;
     const corPin = mb > 10 ? '#1D9E75' : mb > 0 ? '#185FA5' : '#BA7517';
     const r = Math.min(14, Math.max(8, 8 + mb * 0.4));
@@ -184,6 +194,15 @@ async function dashAdmin(content) {
           </div>
         </div>`, { maxWidth: 200 });
   });
+
+  // Corrige "mapa cortado" (invalidateSize) e enquadra nos clientes (fitBounds).
+  const enquadrar = () => {
+    map.invalidateSize();
+    if (pontos.length === 1) map.setView(pontos[0], 11);
+    else if (pontos.length > 1) map.fitBounds(L.latLngBounds(pontos), { padding: [50, 50], maxZoom: 11 });
+  };
+  setTimeout(enquadrar, 80);
+  setTimeout(() => map.invalidateSize(), 400);
 
   // Animação do dot ao vivo
   if (!document.getElementById('lx-pulse-style')) {
