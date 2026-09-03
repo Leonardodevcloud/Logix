@@ -108,7 +108,10 @@ async function abrirConversaApp({ empresaId, motoboyId, entregaId, tipo }) {
      RETURNING id`,
     [empresaId, entregaId, tipo, motoboyId, lojaId, e[0].protocolo]
   );
-  return { conversa_id: rows[0].id, tipo, protocolo: e[0].protocolo };
+  // Loja disponível para chat direto nesta corrida? (para o app mostrar/ocultar o segmento "Loja")
+  let lojaDisponivel = false;
+  try { lojaDisponivel = e[0].loja_id ? await chatDaLojaAtivo({ empresaId, lojaId: e[0].loja_id, centroId: e[0].centro_custo_id }) : false; } catch {}
+  return { conversa_id: rows[0].id, tipo, protocolo: e[0].protocolo, loja_disponivel: lojaDisponivel };
 }
 
 // ── Loja: abre (ou cria) a conversa 'solicitante' de uma corrida dela ──
