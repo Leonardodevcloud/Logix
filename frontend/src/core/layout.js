@@ -17,12 +17,6 @@ function gruposNav() {
       ]},
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
-        { rotulo: 'Entregadores', icone: 'motoboys', filhos: [
-          { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
-          { rota: '/rotas', rotulo: 'Rotas traçadas' },
-          { rota: '/gamificacao', rotulo: 'Gamificação' },
-        ] },
-        { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
