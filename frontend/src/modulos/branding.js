@@ -51,8 +51,10 @@ export async function montar(container) {
 
     let dados = {};
     try {
-      const _res = await get('/branding/completo', { empresaId }).catch(() => null); dados = _res || {};
-    } catch { dados = {}; }
+      // empresa_id vai no header (X-Empresa-Id) E na query — se o proxy comer o header, a query salva.
+      const _res = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId), { empresaId });
+      dados = _res || {};
+    } catch (e) { dados = {}; console.warn('[branding] falha ao ler /completo:', e.status, e.message); }
 
     const valores = {
       cor_primaria:  dados.cor_primaria  || PADRAO.cor_primaria,
@@ -195,7 +197,7 @@ export async function montar(container) {
             diferenciais: difs.length ? difs : undefined,
           },
         };
-        await put('/branding/', {
+        await put('/branding/?empresa_id=' + encodeURIComponent(empresaId), {
           ...valores,
           empresa_id: empresaId,
           nome_exibicao: nomeInp.value.trim() || undefined,
@@ -205,8 +207,16 @@ export async function montar(container) {
           og_image_url: ogInp.value.trim() || undefined,
           extra,
         }, { empresaId });
-        msg.style.color = 'var(--lx-ok)';
-        msg.textContent = 'Marca salva. Vale no próximo acesso do cliente.';
+        // Confirmação: relê do servidor o que ficou gravado. Acaba com o "salvei e sumiu".
+        const conf = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId), { empresaId }).catch(() => null);
+        const persistiu = conf && (conf.cor_primaria || conf.logo_url || conf.nome_exibicao || conf.dominio || conf.subdominio);
+        if (persistiu) {
+          msg.style.color = 'var(--lx-ok)';
+          msg.textContent = 'Marca salva e confirmada no servidor. Vale no próximo acesso do cliente.';
+        } else {
+          msg.style.color = 'var(--lx-erro)';
+          msg.textContent = 'Servidor respondeu OK, mas ao reler a marca veio VAZIA — não persistiu. Veja o Network (PUT/GET) e os logs do Railway ([branding.definir]).';
+        }
       } catch (e) {
         msg.style.color = 'var(--lx-erro)';
         msg.textContent = e.message;

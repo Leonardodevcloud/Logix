@@ -101,6 +101,8 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
     await registrarAuditoria({
       empresaId, usuarioId, categoria: AUDIT_CATEGORIES.BRANDING, acao: 'definir', ip,
     });
+    console.log('[branding.definir] GRAVADO empresa=%s cor_primaria=%s logo=%s dominio=%s subdominio=%s',
+      empresaId, rows[0].cor_primaria, rows[0].logo_url ? 'sim' : 'nao', rows[0].dominio || '-', rows[0].subdominio || '-');
     return rows[0];
   } catch (e) {
     if (e.code === '23505') throw AppError.conflito('Domínio ou subdomínio já está em uso por outra empresa');

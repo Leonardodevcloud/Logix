@@ -22,7 +22,12 @@ function initBrandingRoutes() {
   // GET /branding/eu  (autenticado — tema do próprio tenant, usado pelo app após login)
   router.get('/eu', verificarToken, resolverTenant, async (req, res, next) => {
     try {
-      const empresaId = req.empresaId || (req.usuario && req.usuario.empresaId) || null;
+      const empresaId = req.empresaId
+        || (req.usuario && req.usuario.empresaId)
+        || req.headers['x-empresa-id']
+        || req.query.empresa_id
+        || null;
+      console.log('[branding.eu] empresaId=%s perfil=%s', empresaId, req.usuario && req.usuario.perfil);
       res.json(await service.obterPublico({ empresaId }));
     } catch (e) { next(e); }
   });
@@ -30,8 +35,14 @@ function initBrandingRoutes() {
   // GET /branding/completo  (dados completos para a tela de configuração)
   router.get('/completo', verificarToken, resolverTenant, async (req, res, next) => {
     try {
-      const empresaId = req.empresaId || (req.usuario && req.usuario.empresaId);
+      // Fallback robusto: header (X-Empresa-Id) OU query (?empresa_id=) OU tenant do usuário.
+      // Sem isto, se o proxy comer o header, o GET não acha a empresa e a tela vem vazia.
+      const empresaId = req.empresaId
+        || req.headers['x-empresa-id']
+        || req.query.empresa_id
+        || (req.usuario && req.usuario.empresaId);
       if (!empresaId) throw AppError.validacao('Empresa não informada');
+      console.log('[branding.completo] empresaId=%s (header=%s query=%s)', empresaId, req.headers['x-empresa-id'] || '-', req.query.empresa_id || '-');
       res.json(await service.obterCompleto(empresaId));
     } catch (e) { next(e); }
   });
@@ -43,6 +54,7 @@ function initBrandingRoutes() {
         ? (req.headers['x-empresa-id'] || req.empresaId || req.body.empresa_id || null)
         : req.usuario.empresaId;
       if (!empresaId) throw AppError.validacao('Empresa não informada');
+      console.log('[branding.put] empresaId=%s (header=%s body=%s) perfil=%s', empresaId, req.headers['x-empresa-id'] || '-', req.body.empresa_id || '-', req.usuario.perfil);
       res.json(await service.definir({ empresaId, dados: req.body, usuarioId: req.usuario.id, ip: req.ip }));
     } catch (e) { next(e); }
   });
