@@ -93,7 +93,9 @@ async function atualizar(id, dados, { adminId, ip }) {
 async function atualizarCredenciais(empresaId, dados, { adminId, ip }) {
   await obter(empresaId);
   const { rows: users } = await query(
-    `SELECT id FROM usuarios WHERE empresa_id = $1 AND perfil = 'cliente' ORDER BY criado_em LIMIT 1`,
+    `SELECT id FROM usuarios
+       WHERE empresa_id = $1 AND perfil IN ('central_admin','cliente')
+       ORDER BY (perfil = 'central_admin') DESC, criado_em LIMIT 1`,
     [empresaId]
   );
   if (!users[0]) throw AppError.naoEncontrado('Usuário responsável não encontrado');
@@ -144,8 +146,8 @@ async function impersonarResponsavel(empresaId, { adminId, ip }) {
     `SELECT u.id, u.nome, u.email, u.perfil, u.empresa_id, e.razao_social AS empresa_nome
      FROM usuarios u
      JOIN empresas e ON e.id = u.empresa_id
-     WHERE u.empresa_id = $1 AND u.perfil = 'cliente' AND u.ativo = true
-     ORDER BY u.criado_em LIMIT 1`,
+     WHERE u.empresa_id = $1 AND u.perfil IN ('central_admin','cliente') AND u.ativo = true
+     ORDER BY (u.perfil = 'central_admin') DESC, u.criado_em LIMIT 1`,
     [empresaId]
   );
   if (!rows[0]) throw AppError.naoEncontrado('Nenhum usuário ativo neste cliente');
