@@ -26,6 +26,7 @@ function gruposNav() {
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
+        { rota: '/custos-api', rotulo: 'Custos de API', icone: '__api__' },
       ]},
     ];
   }

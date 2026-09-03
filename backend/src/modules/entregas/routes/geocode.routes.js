@@ -5,6 +5,10 @@ const AppError = require('../../../shared/AppError');
 const { httpRequest } = require('../../../shared/httpRequest');
 const { consultarCep } = require('../../../integracoes/cep');
 const { query } = require('../../../shared/db');
+// Contador de uso de API (fire-and-forget).
+let contar = () => {};
+try { contar = require('../../apiuso/apiuso.service').contar; } catch (_) {}
+const PROV_GEO = () => (process.env.GOOGLE_MAPS_API_KEY ? 'google' : 'ors');
 
 const BASE_ORS = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 const BASE_GOOGLE = 'https://maps.googleapis.com/maps/api';
@@ -36,6 +40,7 @@ async function geocodeComCache(chave, fn) {
     if (rows[0]) {
       // Incrementar hit_count em background sem bloquear
       query(`UPDATE geocode_cache SET hit_count = hit_count + 1, ultimo_acesso = now() WHERE chave = $1`, [chaveNorm]).catch(() => {});
+      contar(PROV_GEO(), 'geocoding', true);
       return rows[0].resultado;
     }
   } catch {}
@@ -129,8 +134,10 @@ function orsFeatureToResult(f) {
 
 async function geocodificarComFallback(q) {
   if (process.env.GOOGLE_MAPS_API_KEY) {
+    contar('google', 'geocoding', false);
     return chamarGoogleGeocode(q);
   }
+  contar('ors', 'geocoding', false);
   // Fallback ORS
   const url = `${BASE_ORS}/geocode/autocomplete?api_key=${process.env.ORS_API_KEY}&text=${encodeURIComponent(q)}&boundary.country=BR&size=6&lang=pt`;
   const { ok, dados } = await httpRequest(url);
@@ -140,8 +147,10 @@ async function geocodificarComFallback(q) {
 
 async function geocodificarReversoComFallback(lat, lng) {
   if (process.env.GOOGLE_MAPS_API_KEY) {
+    contar('google', 'geocoding', false);
     return chamarGoogleReverso(lat, lng);
   }
+  contar('ors', 'geocoding', false);
   const url = `${BASE_ORS}/geocode/reverse?api_key=${process.env.ORS_API_KEY}&point.lat=${lat}&point.lon=${lng}&size=1&lang=pt`;
   const { ok, dados } = await httpRequest(url);
   if (!ok || !dados?.features?.length) return [];
@@ -254,6 +263,7 @@ module.exports = function geocodeRoutes() {
       const coords = [[e.coleta_lng, e.coleta_lat]];
       (e.pontos || []).forEach(p => { if (p.lat && p.lng) coords.push([p.lng, p.lat]); });
       if (coords.length < 2) return res.json({ coords: [], distanciaKm: 0, duracaoMin: 0, coleta: { lat: e.coleta_lat, lng: e.coleta_lng, endereco: e.coleta_endereco }, pontos: e.pontos, motivo_cancelamento: e.motivo_cancelamento || null });
+      contar('ors', 'directions', false);
       const { ok, dados } = await httpRequest(`${BASE_ORS}/v2/directions/driving-car/geojson`, {
         metodo: 'POST', headers: { Authorization: process.env.ORS_API_KEY }, corpo: { coordinates: coords },
       });
@@ -272,6 +282,7 @@ module.exports = function geocodeRoutes() {
       const { pontos } = req.body;
       if (!pontos || pontos.length < 2) return res.json({ geom: [], distanciaKm: 0, duracaoMin: 0 });
       const coords = pontos.map(p => [p.lng, p.lat]);
+      contar('ors', 'directions', false);
       const { ok, dados } = await httpRequest(`${BASE_ORS}/v2/directions/driving-car/geojson`, {
         metodo: 'POST', headers: { Authorization: process.env.ORS_API_KEY }, corpo: { coordinates: coords },
       });

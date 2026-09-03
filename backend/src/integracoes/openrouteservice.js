@@ -1,6 +1,9 @@
 const { httpRequest } = require('../shared/httpRequest');
 const AppError = require('../shared/AppError');
 const NodeCache = require('node-cache');
+// Contador de uso de API (fire-and-forget). require tolerante p/ não afetar boot/ordem.
+let contar = () => {};
+try { contar = require('../modules/apiuso/apiuso.service').contar; } catch (_) {}
 
 const BASE = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 // Cache curto da otimização: a ordem das paradas é estável para o mesmo conjunto
@@ -11,6 +14,7 @@ const cacheRota = new NodeCache({ stdTTL: 120, checkperiod: 180 });
 async function geocodificar(endereco) {
   const url = `${BASE}/geocode/search?api_key=${process.env.ORS_API_KEY}`
     + `&text=${encodeURIComponent(endereco)}&boundary.country=BR&size=1`;
+  contar('ors', 'geocoding', false);
   const { ok, dados } = await httpRequest(url);
   if (!ok || !dados || !dados.features || !dados.features.length) {
     throw AppError.validacao(`Não foi possível localizar o endereço: ${endereco}`);
@@ -31,7 +35,8 @@ async function otimizarRota({ coleta, pontos, retornar = false }) {
     r: !!retornar,
   });
   const emCache = cacheRota.get(chave);
-  if (emCache) return emCache;
+  if (emCache) { contar('ors', 'optimization', true); return emCache; }
+  contar('ors', 'optimization', false);
   const vehicle = { id: 1, profile: 'driving-car', start: [coleta.lng, coleta.lat] };
   if (retornar) vehicle.end = [coleta.lng, coleta.lat];
   const corpo = {
@@ -62,6 +67,7 @@ async function otimizarRota({ coleta, pontos, retornar = false }) {
 async function tracarRota(pontos) {
   if (!Array.isArray(pontos) || pontos.length < 2) return { coordenadas: [], distanciaKm: 0, duracaoMin: 0 };
   const corpo = { coordinates: pontos.map((p) => [p.lng, p.lat]) };
+  contar('ors', 'directions', false);
   const { ok, dados } = await httpRequest(`${BASE}/v2/directions/driving-car/geojson`, {
     metodo: 'POST',
     headers: { Authorization: process.env.ORS_API_KEY, 'Content-Type': 'application/json' },

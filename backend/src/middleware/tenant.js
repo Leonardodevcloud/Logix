@@ -1,5 +1,6 @@
 const AppError = require('../shared/AppError');
 const { PERFIS } = require('../shared/constants');
+const { setEmpresa } = require('../shared/contexto');
 
 // Perfis que operam a empresa inteira (não ficam presos a uma loja).
 const PERFIS_CENTRAL = [PERFIS.SUPER_ADMIN, PERFIS.CENTRAL_ADMIN];
@@ -29,6 +30,7 @@ function resolverTenant(req, res, next) {
     req.empresaId = u.empresaId;
     req.lojaId = u.lojaId || null;
   }
+  setEmpresa(req.empresaId);
   next();
 }
 
@@ -60,6 +62,7 @@ async function resolverTenantPorHost(req, res, next) {
     const { resolverEmpresaPorHost } = require('../modules/branding/branding.service');
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     req.empresaId = await resolverEmpresaPorHost(host);
+    setEmpresa(req.empresaId);
     next();
   } catch (e) { next(e); }
 }

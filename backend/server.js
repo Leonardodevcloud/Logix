@@ -33,6 +33,7 @@ const precos = require('./src/modules/precos');
 const integracoes = require('./src/modules/integracoes');
 const relatorios = require('./src/modules/relatorios');
 const score = require('./src/modules/score');
+const apiuso = require('./src/modules/apiuso');
 const regioes = require('./src/modules/regioes');
 const chat = require('./src/modules/chat');
 
@@ -57,6 +58,7 @@ async function migrar() {
   await score.initScoreTables();             // gamificação: score_config por empresa (só depende de empresas)
   await regioes.initRegioesTables();         // regiões (polígonos) por empresa
   await chat.initChatTables();               // chat interno (conversas/mensagens) — depois de entregas/lojas/motoboys
+  await apiuso.initApiUsoTables();            // monitor de uso/custo das APIs externas (ORS/Google) por cliente
   console.log('[migrations] tabelas verificadas/criadas');
 }
 
@@ -93,6 +95,9 @@ function montarApp() {
   });
 
   const api = express.Router();
+  // Contexto por requisição (carrega empresa_id até as integrações externas p/ métricas de API).
+  const { als } = require('./src/shared/contexto');
+  api.use((req, res, next) => als.run({ empresaId: null }, () => next()));
   api.use('/auth', auth.initAuthRoutes());
   api.use('/empresas', empresas.initEmpresasRoutes());
   api.use('/motoboys', motoboys.initMotoboysRoutes());
@@ -112,6 +117,7 @@ function montarApp() {
   api.use('/integracoes', integracoes.initIntegracoesRoutes());
   api.use('/relatorios', relatorios.initRelatoriosRoutes());
   api.use('/score', score.initScoreRoutes());
+  api.use('/api-uso', apiuso.initApiUsoRoutes());
   api.use('/regioes', regioes.initRegioesRoutes());
   api.use('/chat', chat.initChatRoutes());
   app.use('/api/v1', api);
