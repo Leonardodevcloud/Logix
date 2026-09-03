@@ -52,7 +52,7 @@ export async function montar(container) {
     let dados = {};
     try {
       // empresa_id vai no header (X-Empresa-Id) E na query — se o proxy comer o header, a query salva.
-      const _res = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId), { empresaId });
+      const _res = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId) + '&_=' + Date.now(), { empresaId });
       dados = _res || {};
     } catch (e) { dados = {}; console.warn('[branding] falha ao ler /completo:', e.status, e.message); }
 
@@ -208,7 +208,7 @@ export async function montar(container) {
           extra,
         }, { empresaId });
         // Confirmação: relê do servidor o que ficou gravado. Acaba com o "salvei e sumiu".
-        const conf = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId), { empresaId }).catch(() => null);
+        const conf = await get('/branding/completo?empresa_id=' + encodeURIComponent(empresaId) + '&_=' + Date.now(), { empresaId }).catch(() => null);
         const persistiu = conf && (conf.cor_primaria || conf.logo_url || conf.nome_exibicao || conf.dominio || conf.subdominio);
         if (persistiu) {
           msg.style.color = 'var(--lx-ok)';

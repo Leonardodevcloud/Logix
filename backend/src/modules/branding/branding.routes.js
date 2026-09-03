@@ -9,6 +9,14 @@ const service = require('./branding.service');
 function initBrandingRoutes() {
   const router = express.Router();
 
+  // Branding NUNCA pode ser cacheado: a leitura depende do empresa_id (header/query),
+  // e cache de borda/navegador chaveado só pela URL devolvia sempre a mesma marca (vazia).
+  router.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    next();
+  });
+
   // GET /branding?host=...|?empresa_id=...  (PÚBLICO)
   // O portal/app de qualquer cliente carrega o tema ANTES do login, de domínios diversos,
   // então este endpoint usa CORS permissivo (só expõe dados de marca, não sensíveis).

@@ -1,6 +1,6 @@
 // Service worker network-first: sempre busca a versão mais nova da rede e cai no
 // cache apenas quando offline. Evita servir HTML/CSS/JS velhos após um deploy.
-const CACHE = 'logix-v2';
+const CACHE = 'logix-v3';
 const SHELL = ['/', '/index.html', '/assets/tokens.css', '/assets/componentes.css', '/src/main.js'];
 
 self.addEventListener('install', (e) => {
@@ -17,7 +17,9 @@ self.addEventListener('activate', (e) => e.waitUntil(
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const u = new URL(e.request.url);
-  if (u.pathname.startsWith('/api/')) return; // nunca cacheia API
+  // Nunca cacheia API. A API real é servida por /bff (proxy -> Railway); /api são as
+  // funções serverless da Vercel. Cachear /bff fazia a leitura de branding voltar valor velho.
+  if (u.pathname.startsWith('/api/') || u.pathname.startsWith('/bff/')) return;
 
   // network-first: rede primeiro, atualiza o cache, e usa o cache só se a rede falhar.
   e.respondWith(
