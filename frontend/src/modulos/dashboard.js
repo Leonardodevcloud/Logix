@@ -73,22 +73,22 @@ async function dashAdmin(content) {
     el('span', { id: 'lx-live-dot', style: 'width:7px;height:7px;border-radius:50%;background:var(--lx-ok);display:inline-block' }),
     'Ao vivo');
 
-  const mapDiv = el('div', { id: 'lx-mapa-brasil', style: 'width:100%;height:420px' });
+  const mapDiv = el('div', { id: 'lx-mapa-brasil', style: 'width:100%;flex:1;min-height:0' });
 
-  const mapaCard = el('div', { class: 'lx-card', style: 'flex:1;overflow:hidden;min-width:0' },
+  const mapaCard = el('div', { class: 'lx-card', style: 'flex:1;overflow:hidden;min-width:0;display:flex;flex-direction:column' },
     el('div', { style: 'padding:12px 16px;border-bottom:1px solid var(--lx-linha);display:flex;align-items:center;justify-content:space-between' },
       el('div', { style: 'display:flex;align-items:baseline;gap:10px' }, countEl, lblEl),
       pill),
     mapDiv);
 
-  const listaWrap = el('div', { style: 'display:flex;flex-direction:column;overflow-y:auto;max-height:420px' });
+  const listaWrap = el('div', { style: 'display:flex;flex-direction:column;overflow-y:auto;flex:1;min-height:0' });
 
   const lateralCard = el('div', { class: 'lx-card', style: 'width:240px;flex:none;display:flex;flex-direction:column;overflow:hidden' },
     el('div', { style: 'padding:12px 14px;border-bottom:1px solid var(--lx-linha);font-size:13px;font-weight:800;color:var(--lx-tinta)' }, 'Clientes ativos'),
     listaWrap);
 
   content.append(
-    el('div', { style: 'display:flex;gap:14px;align-items:stretch' }, mapaCard, lateralCard)
+    el('div', { style: 'display:flex;gap:14px;align-items:stretch;height:calc(100vh - 200px);min-height:460px' }, mapaCard, lateralCard)
   );
 
   // Injetar CSS do Leaflet
@@ -115,20 +115,41 @@ async function dashAdmin(content) {
   const ativos = empresas.filter(e => e.ativo !== false);
   countEl.textContent = ativos.length;
 
+  // Coordenadas por cliente (leve deslocamento p/ mesma cidade não empilhar).
+  const coordsList = [];
+  const usadosCoord = new Map();
+  ativos.forEach((c) => {
+    const base = coordsParaCliente(c);
+    const chave = base.join(',');
+    const rep = usadosCoord.get(chave) || 0;
+    usadosCoord.set(chave, rep + 1);
+    coordsList.push(rep ? [base[0] + rep * 0.05 * (rep % 2 ? 1 : -1), base[1] + rep * 0.05] : base);
+  });
+  const markers = [];
+  let map; // definido mais abaixo; usado no clique da lista
+
   // Montar lista lateral
   listaWrap.innerHTML = '';
   ativos.forEach((c, i) => {
     const { bg, cor } = CORES_AV[i % CORES_AV.length];
-    listaWrap.append(el('div', { style: `
+    const item = el('div', { style: `
       display:flex;align-items:center;gap:10px;padding:10px 14px;
-      border-bottom:1px solid var(--lx-linha);cursor:pointer
+      border-bottom:1px solid var(--lx-linha);cursor:pointer;transition:background .15s
     ` },
       el('div', { style: `width:28px;height:28px;border-radius:7px;background:${bg};color:${cor};display:grid;place-items:center;font-size:11px;font-weight:800;flex:none` },
         iniciais(c.razao_social || c.nome_fantasia)),
       el('div', { style: 'flex:1;min-width:0' },
         el('div', { style: 'font-size:12px;font-weight:700;color:var(--lx-tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
           c.razao_social || c.nome_fantasia || '—'),
-        el('div', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${c.total_motoboys || 0} motoboys`))));
+        el('div', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, `${c.total_motoboys || 0} motoboys`)));
+    item.addEventListener('mouseenter', () => { item.style.background = 'var(--lx-superficie-2, #F4F8FD)'; });
+    item.addEventListener('mouseleave', () => { item.style.background = ''; });
+    item.addEventListener('click', () => {
+      if (!map || !coordsList[i]) return;
+      map.flyTo(coordsList[i], 12, { duration: 0.8 });
+      if (markers[i]) setTimeout(() => markers[i].openPopup(), 450);
+    });
+    listaWrap.append(item);
   });
 
   if (!ativos.length) {
@@ -138,7 +159,7 @@ async function dashAdmin(content) {
 
   // Inicializar mapa Leaflet
   const L = window.L;
-  const map = L.map('lx-mapa-brasil', {
+  map = L.map('lx-mapa-brasil', {
     center: [-14.235, -51.9253],
     zoom: 4,
     zoomControl: true,
@@ -147,19 +168,10 @@ async function dashAdmin(content) {
 
   aplicarBasemap(map);
 
-  // Pins dos clientes
-  const pontos = [];
-  const usadosCoord = new Map();
+  // Pins dos clientes (mesmas coordenadas da lista)
+  const pontos = coordsList.slice();
   ativos.forEach((c, i) => {
-    const coordsBase = coordsParaCliente(c);
-    const chaveCoord = coordsBase.join(',');
-    const repetido = usadosCoord.get(chaveCoord) || 0;
-    usadosCoord.set(chaveCoord, repetido + 1);
-    // Clientes na mesma cidade cairiam no mesmo ponto — desloca levemente pra não empilhar.
-    const coords = repetido
-      ? [coordsBase[0] + repetido * 0.05 * (repetido % 2 ? 1 : -1), coordsBase[1] + repetido * 0.05]
-      : coordsBase;
-    pontos.push(coords);
+    const coords = coordsList[i];
     const mb = c.total_motoboys || 0;
     const corPin = mb > 10 ? '#1D9E75' : mb > 0 ? '#185FA5' : '#BA7517';
     const r = Math.min(14, Math.max(8, 8 + mb * 0.4));
@@ -180,7 +192,7 @@ async function dashAdmin(content) {
     const nome = c.razao_social || c.nome_fantasia || '—';
     const cidade = c.cidade || '';
 
-    L.marker(coords, { icon })
+    markers[i] = L.marker(coords, { icon })
       .addTo(map)
       .bindPopup(`
         <div style="font-family:Inter,sans-serif;min-width:140px">
@@ -203,6 +215,7 @@ async function dashAdmin(content) {
   };
   setTimeout(enquadrar, 80);
   setTimeout(() => map.invalidateSize(), 400);
+  if (window.ResizeObserver) { const ro = new ResizeObserver(() => map && map.invalidateSize()); ro.observe(mapDiv); }
 
   // Animação do dot ao vivo
   if (!document.getElementById('lx-pulse-style')) {
