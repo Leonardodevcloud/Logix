@@ -197,7 +197,7 @@ export async function montar(container) {
             diferenciais: difs.length ? difs : undefined,
           },
         };
-        await put('/branding/?empresa_id=' + encodeURIComponent(empresaId), {
+        await put('/branding?empresa_id=' + encodeURIComponent(empresaId), {
           ...valores,
           empresa_id: empresaId,
           nome_exibicao: nomeInp.value.trim() || undefined,
