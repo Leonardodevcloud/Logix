@@ -263,12 +263,19 @@ module.exports = function motoboyAppRoutes() {
     } catch (e) { next(e); }
   });
 
-  // GET /motoboys/app/historico?periodo=hoje|semana|mes  — corridas entregues do motoboy
+  // GET /motoboys/app/historico?periodo=hoje|semana|mes  OU  ?de=YYYY-MM-DD&ate=YYYY-MM-DD
   router.get('/app/historico', verificarTokenMotoboy, async (req, res, next) => {
     try {
       const periodo = req.query.periodo || 'mes';
+      const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : null;
+      const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : null;
       let filtroData = '';
-      if (periodo === 'hoje') filtroData = `AND e.concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date`;
+      const params = [req.motoboy.id, req.motoboy.empresaId];
+      if (de && ate) {
+        // Intervalo personalizado (inclusive), no fuso America/Bahia.
+        params.push(de, ate);
+        filtroData = `AND (e.concluida_em AT TIME ZONE 'America/Bahia')::date BETWEEN $3::date AND $4::date`;
+      } else if (periodo === 'hoje') filtroData = `AND e.concluida_em::date = (now() AT TIME ZONE 'America/Bahia')::date`;
       else if (periodo === 'semana') filtroData = `AND e.concluida_em >= (now() AT TIME ZONE 'America/Bahia') - interval '7 days'`;
       else if (periodo === 'mes') filtroData = `AND date_trunc('month', e.concluida_em AT TIME ZONE 'America/Bahia') = date_trunc('month', now() AT TIME ZONE 'America/Bahia')`;
 
@@ -281,8 +288,8 @@ module.exports = function motoboyAppRoutes() {
            LEFT JOIN lojas l ON l.id = e.loja_id
           WHERE e.motoboy_id = $1 AND e.empresa_id = $2 AND e.status = 'entregue' ${filtroData}
           ORDER BY e.concluida_em DESC
-          LIMIT 100`,
-        [req.motoboy.id, req.motoboy.empresaId]
+          LIMIT 300`,
+        params
       );
       const totalCent = rows.reduce((s, r) => s + (Number(r.valor_motoboy_cent) || 0), 0);
       res.json({ corridas: rows, total_cent: totalCent, quantidade: rows.length });
