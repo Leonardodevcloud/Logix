@@ -47,6 +47,9 @@ function initChatRoutes() {
   router.get('/conversas/:id/mensagens', exigirPermissao('chat.ver'), async (req, res, next) => {
     try { res.json(await service.mensagens({ empresaId: req.empresaId, conversaId: req.params.id, lado: lado(req) })); } catch (e) { next(e); }
   });
+  router.post('/conversas/:id/assumir', exigirPermissao('chat.responder'), async (req, res, next) => {
+    try { res.json(await service.assumirConversa({ empresaId: req.empresaId, conversaId: req.params.id, usuarioId: req.usuario.id, usuarioNome: req.usuario.nome || (req.lojaId ? 'Loja' : 'Atendente') })); } catch (e) { next(e); }
+  });
   router.post('/conversas/:id/mensagens', exigirPermissao('chat.responder'), limiteChat, async (req, res, next) => {
     try {
       res.json(await service.enviar({

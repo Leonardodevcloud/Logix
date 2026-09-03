@@ -24,34 +24,44 @@ export async function montar(container) {
   const titulo = ehLoja ? 'Mensagens' : 'Suporte';
   const podeResponder = auth.pode('chat.responder') || ehLoja;
 
+  const meuId = (auth.usuarioAtual() || {}).id;
   let conversas = [], conversaSel = null, timerThread = null, timerInbox = null;
 
-  const inbox = el('div', { style: 'width:230px;border-right:1px solid var(--lx-linha);overflow:auto;flex:none' });
+  const inbox = el('div', { style: 'width:250px;border-right:1px solid var(--lx-linha);overflow:auto;flex:none' });
   const thread = el('div', { style: 'flex:1;display:flex;flex-direction:column;min-width:0' });
   const wrap = el('div', { class: 'lx-card', style: 'padding:0;overflow:hidden;height:calc(100vh - 190px);display:flex' }, inbox, thread);
+
+  const proto = (p) => el('span', { style: 'font-weight:800;color:var(--lx-azul-profundo,#042C53);background:#eaf1f9;border:1px solid #d4e2f2;border-radius:7px;padding:1px 7px;font-size:11.5px' }, '#' + (p || '—'));
+  function seloEstado(c) {
+    if (c.status === 'encerrada') return el('span', { style: 'font-size:9px;font-weight:800;border-radius:99px;padding:3px 8px;background:#eef2f7;color:var(--lx-tinta-3)' }, 'Encerrada');
+    if (!c.atendente_id) return el('span', { style: 'font-size:9px;font-weight:800;border-radius:99px;padding:3px 8px;background:var(--lx-atencao-bg);color:#8a5a00' }, 'Aguardando');
+    const meu = String(c.atendente_id) === String(meuId);
+    return el('span', { style: `font-size:9px;font-weight:800;border-radius:99px;padding:3px 8px;background:${meu ? 'var(--lx-ok-bg)' : '#e4eef9'};color:${meu ? '#0f6e56' : 'var(--lx-azul-primario)'}` }, meu ? 'Você' : (c.atendente_nome || 'Em atendimento'));
+  }
 
   function renderInbox() {
     inbox.innerHTML = '';
     if (!conversas.length) { inbox.append(el('div', { style: 'padding:24px;text-align:center;color:var(--lx-tinta-3);font-size:12.5px' }, 'Nenhuma conversa ainda.')); return; }
     conversas.forEach(c => {
       const on = conversaSel && conversaSel.id === c.id;
-      const nome = ehLoja ? ('Corrida ' + (c.protocolo || '')) : ((c.motoboy_codigo != null ? '#' + c.motoboy_codigo + ' ' : '') + (c.motoboy_nome || 'Entregador'));
+      const nome = ehLoja ? 'Corrida' : ((c.motoboy_codigo != null ? '#' + c.motoboy_codigo + ' ' : '') + (c.motoboy_nome || 'Entregador'));
       inbox.append(el('div', {
         style: `padding:11px 13px;border-bottom:1px solid var(--lx-linha);cursor:pointer;${on ? 'background:#eaf3fc' : ''}`,
         onClick: () => abrir(c),
       },
-        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px' },
-          el('span', { style: 'font-size:12.5px;font-weight:800' }, nome),
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px' },
+          proto(c.protocolo), seloEstado(c)),
+        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:6px' },
+          el('span', { style: 'font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, nome),
           c.nao_lidas ? el('span', { style: 'background:var(--lx-erro);color:#fff;font-size:9px;font-weight:800;border-radius:99px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 4px' }, String(c.nao_lidas)) : el('span', {})),
-        el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' },
-          (ehLoja ? '' : 'Corrida ' + (c.protocolo || '') + ' · ') + (c.ultima_previa || 'sem mensagens'))));
+        el('div', { style: 'font-size:11px;color:var(--lx-tinta-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.ultima_previa || 'sem mensagens')));
     });
   }
 
   async function recarregarInbox() {
     try {
       conversas = (await get('/chat/conversas')).conversas || [];
-      const sig = conversas.map(c => c.id + ':' + c.nao_lidas + ':' + (c.ultima_previa || '') + ':' + (c.ultima_msg_em || '') + ':' + (c.status || '')).join('|');
+      const sig = conversas.map(c => c.id + ':' + c.nao_lidas + ':' + (c.ultima_previa || '') + ':' + (c.ultima_msg_em || '') + ':' + (c.status || '') + ':' + (c.atendente_id || '')).join('|');
       if (sig === recarregarInbox._sig) return; // nada mudou → não redesenha (evita piscar)
       recarregarInbox._sig = sig;
       renderInbox();
@@ -79,28 +89,57 @@ export async function montar(container) {
     return b;
   }
 
+  // Barra de estado do atendimento (aguardando / outro atendente). data-atendbar.
+  function montarRodape(conv) {
+    thread.querySelector('[data-encbar]')?.remove();
+    thread.querySelector('[data-atendbar]')?.remove();
+    const encerrada = conv.status === 'encerrada';
+    if (encerrada) {
+      composer.style.display = 'none';
+      thread.append(el('div', { 'data-encbar': '1', style: 'padding:9px;text-align:center;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);background:#eef2f7;border-top:1px solid var(--lx-linha)' }, 'Conversa encerrada (corrida finalizada)'));
+      return;
+    }
+    const souDono = conv.atendente_id && String(conv.atendente_id) === String(meuId);
+    if (souDono && podeResponder) { composer.style.display = 'flex'; return; }
+    // Não sou o dono → esconde composer e mostra barra com ação.
+    composer.style.display = 'none';
+    if (!podeResponder) return;
+    const semDono = !conv.atendente_id;
+    const bar = el('div', { 'data-atendbar': '1', style: `display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-top:1px solid var(--lx-linha);background:${semDono ? 'var(--lx-atencao-bg)' : '#eef4fb'}` },
+      el('span', { style: `font-size:12px;font-weight:700;color:${semDono ? '#7a5300' : 'var(--lx-tinta-2)'}` }, semDono ? 'Aguardando atendimento — assuma para responder.' : ('Em atendimento por ' + (conv.atendente_nome || 'outro atendente'))),
+      el('button', { class: 'lx-btn lx-btn-primario', style: 'font-size:12.5px;padding:8px 14px', onClick: () => assumir() }, semDono ? 'Assumir' : 'Puxar atendimento'));
+    thread.append(bar);
+  }
+
+  async function assumir() {
+    if (!conversaSel) return;
+    try { await post('/chat/conversas/' + conversaSel.id + '/assumir', {}); carregarMensagens._sig = null; await carregarMensagens(); recarregarInbox(); }
+    catch (e) { toast(e.message || 'Erro ao assumir', 'erro'); }
+  }
+
   async function carregarMensagens() {
     if (!conversaSel) return;
     try {
       const r = await get('/chat/conversas/' + conversaSel.id + '/mensagens');
       const lista = r.mensagens || [];
-      const encerrada = r.conversa && r.conversa.status === 'encerrada';
-      composer.style.display = (!podeResponder || encerrada) ? 'none' : 'flex';
-      const sig = lista.length + ':' + (lista.length ? lista[lista.length - 1].id : '') + ':' + (encerrada ? '1' : '0');
+      const conv = r.conversa || {};
+      // Cabeçalho: protocolo em destaque + selo de estado.
+      threadHd.innerHTML = '';
+      const nome = ehLoja ? '' : ((conversaSel.motoboy_codigo != null ? '#' + conversaSel.motoboy_codigo + ' ' : '') + (conversaSel.motoboy_nome || 'Entregador') + ' · ');
+      threadHd.append(el('span', {}, nome), proto(conv.protocolo), el('span', { style: 'margin-left:8px' }, seloEstado({ status: conv.status, atendente_id: conv.atendente_id, atendente_nome: conv.atendente_nome })));
+      montarRodape(conv);
+      const sig = lista.length + ':' + (lista.length ? lista[lista.length - 1].id : '') + ':' + (conv.status || '') + ':' + (conv.atendente_id || '');
       if (sig === carregarMensagens._sig) return; // sem mudança → não remonta (evita piscar)
       carregarMensagens._sig = sig;
       msgsDiv.innerHTML = '';
       lista.forEach(m => msgsDiv.append(bolha(m)));
       msgsDiv.scrollTop = msgsDiv.scrollHeight;
-      thread.querySelector('[data-encbar]')?.remove();
-      if (encerrada) thread.append(el('div', { 'data-encbar': '1', style: 'padding:9px;text-align:center;font-size:11.5px;font-weight:700;color:var(--lx-tinta-2);background:#eef2f7;border-top:1px solid var(--lx-linha)' }, 'Conversa encerrada (corrida finalizada)'));
     } catch (e) { /* mantém */ }
   }
 
   function abrir(c) {
     conversaSel = c;
-    const nome = ehLoja ? ('Corrida ' + (c.protocolo || '')) : ((c.motoboy_codigo != null ? '#' + c.motoboy_codigo + ' ' : '') + (c.motoboy_nome || 'Entregador'));
-    threadHd.textContent = nome + ' · Corrida ' + (c.protocolo || '');
+    threadHd.textContent = 'Carregando…';
     c.nao_lidas = 0; renderInbox();
     carregarMensagens._sig = null;
     carregarMensagens();

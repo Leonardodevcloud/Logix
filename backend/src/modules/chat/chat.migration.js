@@ -24,6 +24,10 @@ async function initChatTables() {
   await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'aberta'`);
   await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS encerrada_em TIMESTAMPTZ`);
   await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS encerrada_motivo TEXT`);
+  // Multi-atendente: quem está atendendo (dono). Nulo = "aguardando atendimento".
+  await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS atendente_id UUID`);
+  await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS atendente_nome TEXT`);
+  await query(`ALTER TABLE chat_conversas ADD COLUMN IF NOT EXISTS atendido_em TIMESTAMPTZ`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS chat_mensagens (

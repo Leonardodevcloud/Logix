@@ -139,6 +139,11 @@ async function _conversa(empresaId, conversaId) {
 async function enviar({ empresaId, conversaId, autorTipo, autorId, autorNome, tipo = 'texto', texto, arquivo, lat, lng }) {
   const conv = await _conversa(empresaId, conversaId);
   if (conv.status === 'encerrada' && tipo !== 'sistema') throw AppError.validacao('Esta conversa foi encerrada.');
+  // Atendente (central/loja): só o DONO responde. O motoboy sempre pode escrever.
+  if ((autorTipo === 'central' || autorTipo === 'loja')) {
+    if (!conv.atendente_id) throw AppError.validacao('Assuma o atendimento para responder.');
+    if (String(conv.atendente_id) !== String(autorId)) throw AppError.proibido('Este atendimento está com ' + (conv.atendente_nome || 'outro atendente') + '. Puxe o atendimento para responder.');
+  }
   let midiaKey = null;
   if (tipo === 'foto') {
     if (!arquivo) throw AppError.validacao('Envie a foto');
@@ -193,6 +198,19 @@ async function encerrarPorCorrida({ empresaId, entregaId }) {
   return { ok: true, encerradas: rows.length };
 }
 
+// Assume (ou puxa) o atendimento para o usuário atual. Vale para central e loja.
+async function assumirConversa({ empresaId, conversaId, usuarioId, usuarioNome }) {
+  const conv = await _conversa(empresaId, conversaId);
+  if (conv.status === 'encerrada') throw AppError.validacao('Esta conversa foi encerrada.');
+  const jaEra = conv.atendente_id && String(conv.atendente_id) === String(usuarioId);
+  await query(`UPDATE chat_conversas SET atendente_id = $2, atendente_nome = $3, atendido_em = now() WHERE id = $1`, [conversaId, usuarioId, usuarioNome || 'Atendente']);
+  if (!jaEra) {
+    const nota = conv.atendente_id ? `${usuarioNome || 'Atendente'} assumiu o atendimento.` : `${usuarioNome || 'Atendente'} iniciou o atendimento.`;
+    try { await enviar({ empresaId, conversaId, autorTipo: 'sistema', tipo: 'sistema', texto: nota }); } catch {}
+  }
+  return { ok: true, atendente_id: usuarioId, atendente_nome: usuarioNome };
+}
+
 // ── Lista mensagens de uma conversa + marca lida para o lado ──
 async function mensagens({ empresaId, conversaId, lado }) {
   const conv = await _conversa(empresaId, conversaId);
@@ -206,7 +224,8 @@ async function mensagens({ empresaId, conversaId, lado }) {
     delete m.midia_key;
   }
   if (lado) await marcarLida({ conversaId, lado });
-  return { conversa: { id: conv.id, tipo: conv.tipo, protocolo: conv.protocolo, entrega_id: conv.entrega_id, status: conv.status }, mensagens: rows };
+  const estado = conv.status === 'encerrada' ? 'encerrada' : (conv.atendente_id ? 'em_atendimento' : 'aguardando');
+  return { conversa: { id: conv.id, tipo: conv.tipo, protocolo: conv.protocolo, entrega_id: conv.entrega_id, status: conv.status, estado, atendente_id: conv.atendente_id, atendente_nome: conv.atendente_nome }, mensagens: rows };
 }
 
 // ── App: lista as conversas do motoboy ──
@@ -230,7 +249,7 @@ async function conversasCentral({ empresaId, lojaId }) {
   const cond = lojaId ? "c.tipo = 'solicitante' AND c.loja_id = $2" : "c.tipo = 'suporte'";
   const params = lojaId ? [empresaId, lojaId] : [empresaId];
   const { rows } = await query(
-    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.status, c.ultima_previa, c.ultima_msg_em,
+    `SELECT c.id, c.tipo, c.protocolo, c.entrega_id, c.status, c.atendente_id, c.atendente_nome, c.ultima_previa, c.ultima_msg_em,
             ${SQL_NAO_LIDAS('c', lado)} AS nao_lidas,
             m.nome_completo AS motoboy_nome, m.codigo AS motoboy_codigo
        FROM chat_conversas c LEFT JOIN motoboys m ON m.id = c.motoboy_id
@@ -265,5 +284,5 @@ module.exports = {
   chatAtivo, abrirConversaApp, abrirConversaLoja, enviar, mensagens,
   conversasApp, conversasCentral, naoLidasApp, naoLidasCentral,
   chatDaLojaAtivo, lojasChatConfig, centrosChatConfig, definirChatLoja, definirChatCentro,
-  encerrarPorCorrida,
+  encerrarPorCorrida, assumirConversa,
 };
