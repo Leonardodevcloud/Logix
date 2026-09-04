@@ -974,10 +974,10 @@ export async function montar(container) {
 
   function linha(c) {
     // Colunas por aba. Todas têm Categoria, Valor e Direção (após Trajeto).
-    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 300px'
-      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 300px'
-      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 160px'
-      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 160px'; // canceladas
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 320px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 320px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 170px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 170px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -1016,10 +1016,10 @@ export async function montar(container) {
     return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1470px;${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 300px'
-      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 300px'
-      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 160px'
-      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 160px';
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 320px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 320px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 170px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 170px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Solicitação', 'Status', 'Ações']
       : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Status', 'Ações']
       : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
