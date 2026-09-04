@@ -258,10 +258,20 @@ export async function montar(container) {
     return nome.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   }
 
-  function focarPonto(lat, lng, pin) {
+  function focarPonto(lat, lng, proto, endereco) {
     if (lat == null || lng == null) return;
-    _mapa.flyTo([Number(lat), Number(lng)], 15, { duration: 0.7 });
-    if (pin) setTimeout(() => pin.openPopup(), 520);
+    lat = Number(lat); lng = Number(lng);
+    _mapa.flyTo([lat, lng], 15, { duration: 0.7 });
+    if (_pinFoco) { _pinFoco.remove(); _pinFoco = null; }
+    _pinFoco = window.L.marker([lat, lng], {
+      zIndexOffset: 2000,
+      icon: window.L.divIcon({
+        className: '',
+        html: '<div style="filter:drop-shadow(0 3px 5px rgba(0,0,0,.4))"><svg width="42" height="42" viewBox="0 0 24 24" fill="#E11D48" stroke="#fff" stroke-width="1.4"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3.2" fill="#fff" stroke="none"/></svg></div>',
+        iconSize: [42, 42], iconAnchor: [21, 38],
+      }),
+    }).addTo(_mapa).bindPopup('<b>' + (proto || 'Parada') + '</b><br>' + (endereco || '—'));
+    setTimeout(() => { try { _pinFoco.openPopup(); } catch (e) {} }, 520);
   }
   function stopEl(num, proto, dest, prox, onClick) {
     const d = el('div', { class: 'lx-stop' + (prox ? ' prox' : '') },
@@ -273,8 +283,10 @@ export async function montar(container) {
     return d;
   }
 
+  let _pinFoco = null;
   function limparRota() {
     if (_polyRota) { _polyRota.forEach(p => p.remove()); _polyRota = null; }
+    if (_pinFoco) { _pinFoco.remove(); _pinFoco = null; }
     detalheRotaInfo.style.display = 'none';
   }
 
@@ -321,7 +333,7 @@ export async function montar(container) {
         detalheRoteiro.innerHTML = '';
         detalheRoteiro.append(el('div', { class: 'lx-roteiro-tit' }, 'Roteiro otimizado · ' + (dados.pontos || []).length + ' parada' + ((dados.pontos || []).length > 1 ? 's' : '')));
         (dados.pontos || []).forEach((p, i) => detalheRoteiro.append(stopEl(i + 1, p.protocolo, p.endereco, i === 0,
-          (p.lat && p.lng) ? () => focarPonto(p.lat, p.lng, pins[i]) : null)));
+          (p.lat && p.lng) ? () => focarPonto(p.lat, p.lng, p.protocolo, p.endereco) : null)));
       } else {
         detalheRotaInfo.style.display = 'flex';
         detalheRotaInfo.textContent = 'Posição indisponível para este motoboy.';
@@ -362,7 +374,7 @@ export async function montar(container) {
     if (m.entregas?.length) {
       detalheRoteiro.append(el('div', { class: 'lx-roteiro-tit' }, 'Roteiro · ' + m.entregas.length + ' parada' + (m.entregas.length > 1 ? 's' : '')));
       m.entregas.forEach((e, i) => detalheRoteiro.append(stopEl(i + 1, e.protocolo, e.destino, false,
-        (e.destino_lat && e.destino_lng) ? () => focarPonto(e.destino_lat, e.destino_lng) : null)));
+        (e.destino_lat && e.destino_lng) ? () => focarPonto(e.destino_lat, e.destino_lng, e.protocolo, e.destino) : null)));
       detalheRoteiro.append(el('div', { style: 'font-size:10.5px;color:#8AA2BE;padding:8px 6px 2px' }, 'Toque em "Ver rota otimizada" para reordenar pela melhor rota.'));
     }
 
