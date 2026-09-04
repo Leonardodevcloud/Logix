@@ -2,6 +2,7 @@ const express = require('express');
 const { exigirTenant } = require('../../middleware/tenant');
 const { query } = require('../../shared/db');
 const { httpRequest } = require('../../shared/httpRequest');
+const ors = require('../../integracoes/openrouteservice');
 const storage = require('../../shared/storage');
 
 const BASE_ORS = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
@@ -132,6 +133,47 @@ module.exports = function rastreioRoutes() {
       res.json({ geom: geomReta, pontos, distanciaKm: 0, duracaoMin: 0, posicao: pos[0] });
     } catch (e) { next(e); }
   });
+
+  // GET /motoboys/:id/rota-otimizada — rota OTIMIZADA (VROOM): reordena os pontos
+  // pendentes a partir da posição atual e devolve ordem + traçado + km/min.
+  router.get('/:id/rota-otimizada', exigirTenant, async (req, res, next) => {
+    try {
+      const motoboyId = req.params.id;
+      const { rows: pos } = await query(
+        `SELECT lat, lng FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`, [motoboyId]);
+      if (!pos[0]) return res.json({ geom: [], pontos: [], distanciaKm: 0, duracaoMin: 0 });
+      const { rows: pontos } = await query(
+        `SELECT ep.lat, ep.lng, ep.endereco, ep.ordem, e.protocolo
+           FROM entregas_pontos ep JOIN entregas e ON e.id = ep.entrega_id
+          WHERE e.motoboy_id = $1 AND e.empresa_id = $2
+            AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
+          ORDER BY e.criado_em, ep.ordem`, [motoboyId, req.empresaId]);
+      const validos = pontos.filter(p => p.lat && p.lng);
+      const posLL = { lat: pos[0].lat, lng: pos[0].lng };
+      if (!validos.length) return res.json({ geom: [], pontos, distanciaKm: 0, duracaoMin: 0, posicao: pos[0], otimizada: true });
+
+      let ordenados = validos, dist = 0, dur = 0;
+      if (validos.length > 1) {
+        try {
+          const otim = await ors.otimizarRota({ coleta: posLL, pontos: validos });
+          if (otim && Array.isArray(otim.ordem) && otim.ordem.length) {
+            ordenados = otim.ordem.map(i => validos[i]).filter(Boolean);
+            dist = otim.distanciaKm || 0; dur = otim.duracaoMin || 0;
+          }
+        } catch (_) {}
+      }
+      let geom = [];
+      try {
+        const rota = await ors.tracarRota([posLL, ...ordenados]);
+        geom = (rota && rota.coordenadas) || [];
+        if (!dist) dist = (rota && rota.distanciaKm) || 0;
+        if (!dur) dur = (rota && rota.duracaoMin) || 0;
+      } catch (_) {}
+      if (!geom.length) geom = [[posLL.lat, posLL.lng], ...ordenados.map(p => [p.lat, p.lng])];
+      res.json({ geom, pontos: ordenados, distanciaKm: dist, duracaoMin: dur, posicao: pos[0], otimizada: true });
+    } catch (e) { next(e); }
+  });
+
 
   return router;
 };
