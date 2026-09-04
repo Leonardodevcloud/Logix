@@ -113,7 +113,7 @@ const fmtHaQuanto = iso => {
   return `${h}h${min % 60 ? ' ' + (min % 60) + 'm' : ''}`;
 };
 function svgIcone(p, size = 15) { const s = el('span', { style: `display:inline-flex;vertical-align:-3px` }); s.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; return s; }
-// [acoes-linha v6] trava o layout das ações em uma linha só, vencendo qualquer
+// [acoes-linha v7] trava o layout das ações em uma linha só, vencendo qualquer
 // estilo/JS antigo que tente empilhar (grid). Injetado uma vez por carga.
 if (typeof document !== 'undefined' && !document.getElementById('lx-acomp-css')) {
   const _st = document.createElement('style');
@@ -121,7 +121,7 @@ if (typeof document !== 'undefined' && !document.getElementById('lx-acomp-css'))
   _st.textContent = '.lx-acoes-row{display:flex !important;flex-wrap:nowrap !important;justify-content:flex-end;align-items:center;gap:5px;margin-left:auto}';
   document.head.appendChild(_st);
 }
-try { console.log('[acompanhamento] acoes-linha v6 ativo'); } catch (_) {}
+try { console.log('[acompanhamento] acoes-linha v7 ativo'); } catch (_) {}
 
 const P = {
   lista: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
@@ -357,7 +357,7 @@ export async function montar(container) {
   const toggleVista = el('div', { style: 'display:inline-flex;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:10px;padding:4px;gap:3px' }, btnVLista, btnVKanban);
   function aplicarToggle() { btnVLista.style.cssText = estiloVistaBtn(_vista === 'lista'); btnVKanban.style.cssText = estiloVistaBtn(_vista === 'kanban'); }
   aplicarToggle();
-  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, selCampo, buscaWrap, btnFiltros, el('div', { style: 'flex:1' }), toggleVista, el('span', { title: 'build acoes-linha', style: 'font-size:10px;color:var(--lx-tinta-3);align-self:center;margin-left:2px' }, 'v6'));
+  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, selCampo, buscaWrap, btnFiltros, el('div', { style: 'flex:1' }), toggleVista, el('span', { title: 'build acoes-linha', style: 'font-size:10px;color:var(--lx-tinta-3);align-self:center;margin-left:2px' }, 'v7'));
 
   // Aviso de busca ativa (override)
   const avisoEl = el('div', { style: 'display:none;font-size:12px;color:var(--lx-azul-primario);background:var(--lx-superficie-2);border-radius:8px;padding:8px 12px;margin-bottom:12px;align-items:center;gap:8px' });
@@ -765,7 +765,7 @@ export async function montar(container) {
     const fase = faseArg || _aba;
     const w = el('div', compacto
       ? { style: 'display:flex;flex-wrap:wrap;gap:5px;align-items:center' }
-      : { class: 'lx-acoes-row' });
+      : { style: 'display:flex !important;flex-wrap:nowrap !important;gap:5px;justify-content:flex-end;align-items:center;margin-left:auto' });
     if (fase === 'sem') {
       if (podeGerenciar) {
         const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px' + (compacto ? ';flex:1 0 100%;width:100%' : ''), onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
