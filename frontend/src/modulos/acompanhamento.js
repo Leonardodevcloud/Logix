@@ -114,6 +114,8 @@ const fmtHaQuanto = iso => {
 };
 function svgIcone(p, size = 15) { const s = el('span', { style: `display:inline-flex;vertical-align:-3px` }); s.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; return s; }
 const P = {
+  lista: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  kanban: '<rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="6" height="9" rx="1"/>',
   filtro: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
   busca: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   alerta: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
@@ -201,6 +203,7 @@ export async function montar(container) {
   let _dados = { semAssociacao: [], emAndamento: [], concluidas: [], canceladas: [], totais: {}, buscando: false };
   let _lojas = [], _cidades = [], _categorias = [], _motoboys = [];
   let _aba = 'sem';
+  let _vista = (typeof localStorage !== 'undefined' && localStorage.getItem('lx_acomp_vista') === 'kanban') ? 'kanban' : 'lista';
   let _busca = '';
   let _sel = new Set(); // IDs das corridas selecionadas (lote)
   const filtros = carregarFiltros();
@@ -338,7 +341,13 @@ export async function montar(container) {
     badgeAtivos.style.display = n ? 'inline' : 'none';
   }
 
-  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, selCampo, buscaWrap, btnFiltros);
+  const estiloVistaBtn = (ativo) => `border:0;background:${ativo ? 'var(--lx-azul-primario)' : 'transparent'};color:${ativo ? '#fff' : 'var(--lx-tinta-2)'};font:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px`;
+  const btnVLista = el('button', { onClick: () => setVista('lista') }, svgIcone(P.lista, 15), el('span', {}, 'Lista'));
+  const btnVKanban = el('button', { onClick: () => setVista('kanban') }, svgIcone(P.kanban, 15), el('span', {}, 'Kanban'));
+  const toggleVista = el('div', { style: 'display:inline-flex;background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:10px;padding:4px;gap:3px' }, btnVLista, btnVKanban);
+  function aplicarToggle() { btnVLista.style.cssText = estiloVistaBtn(_vista === 'lista'); btnVKanban.style.cssText = estiloVistaBtn(_vista === 'kanban'); }
+  aplicarToggle();
+  const barraTopo = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' }, selCampo, buscaWrap, btnFiltros, el('div', { style: 'flex:1' }), toggleVista);
 
   // Aviso de busca ativa (override)
   const avisoEl = el('div', { style: 'display:none;font-size:12px;color:var(--lx-azul-primario);background:var(--lx-superficie-2);border-radius:8px;padding:8px 12px;margin-bottom:12px;align-items:center;gap:8px' });
@@ -371,8 +380,65 @@ export async function montar(container) {
     filtros.aba = id; salvarFiltros(filtros);
     _sel.clear(); // troca de aba zera a seleção em lote
     [abaSem, abaAnd, abaCon, abaCan].forEach(a => { const at = a._id === id; a.style.color = at ? a._cor : 'var(--lx-tinta-2)'; a.style.borderBottomColor = at ? a._cor : 'transparent'; });
-    renderTabela();
-    atualizarBarraSel();
+    if (_vista === 'kanban') {
+      abas.style.display = 'none'; barraSel.style.display = 'none'; tabelaWrap.style.display = 'none';
+      kanbanWrap.style.display = '';
+      renderKanban();
+    } else {
+      abas.style.display = ''; tabelaWrap.style.display = '';
+      kanbanWrap.style.display = 'none';
+      renderTabela();
+      atualizarBarraSel();
+    }
+  }
+  function setVista(v) { _vista = v; try { localStorage.setItem('lx_acomp_vista', v); } catch (_) {} aplicarToggle(); render(); }
+  function faseDaCorrida(c) {
+    if (c.status === 'aguardando_atribuicao') return 'sem';
+    if (c.status === 'entregue') return 'con';
+    if (c.status === 'cancelada') return 'canceladas';
+    return 'and';
+  }
+  function cardKanban(c) {
+    const fase = faseDaCorrida(c);
+    const topo = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px' },
+      el('span', { style: 'font-size:14px;font-weight:800;color:var(--lx-azul-primario)' }, c.protocolo),
+      c.sla ? slaBadge(c.sla) : el('span', {}));
+    const footItens = [celulaCategoria(c)];
+    if (c.valor_cliente_cent != null || c.valor_motoboy_cent != null) footItens.push(celulaValor(c));
+    if (c.motoboy_nome) footItens.push(celulaMotoboy(c));
+    const foot = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--lx-linha)' }, ...footItens);
+    const actWrap = el('div', { style: 'border-top:1px solid var(--lx-linha);margin-top:9px;padding-top:9px' }, acoes(c, fase));
+    return el('div', { style: 'background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:11px;padding:11px;box-shadow:0 1px 2px rgba(15,39,64,.05)' },
+      topo, enderecoEmpilhado(c), foot, actWrap);
+  }
+  function colunaKanban(titulo, cor, itens) {
+    const LIM = 50;
+    const body = el('div', { style: 'padding:9px;display:flex;flex-direction:column;gap:9px;overflow-y:auto' });
+    if (!itens.length) body.append(el('div', { style: 'padding:22px;text-align:center;color:var(--lx-tinta-3);font-size:12px' }, 'Nenhuma corrida.'));
+    else {
+      itens.slice(0, LIM).forEach(c => body.append(cardKanban(c)));
+      if (itens.length > LIM) body.append(el('div', { style: 'padding:8px;text-align:center;color:var(--lx-tinta-2);font-size:12px;font-weight:600' }, '+' + (itens.length - LIM) + ' corridas'));
+    }
+    const hd = el('div', { style: 'padding:11px 13px;border-bottom:1px solid var(--lx-linha);display:flex;align-items:center;gap:8px' },
+      el('span', { style: 'width:9px;height:9px;border-radius:3px;background:' + cor + ';flex:none' }),
+      el('b', { style: 'font-size:12.5px;flex:1' }, titulo),
+      el('span', { style: 'font-size:11px;font-weight:800;color:var(--lx-tinta-2);background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:999px;padding:1px 8px' }, String(itens.length)));
+    return el('div', { style: 'flex:0 0 296px;background:var(--lx-superficie-2);border:1px solid var(--lx-linha);border-top:3px solid ' + cor + ';border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px)' }, hd, body);
+  }
+  function renderKanban() {
+    const em = _dados.emAndamento || [];
+    const retorno = em.filter(c => c.tem_retorno);
+    const resto = em.filter(c => !c.tem_retorno);
+    const aguardando = resto.filter(c => c.status === 'aguardando_coleta' || c.status === 'em_coleta');
+    const emRota = resto.filter(c => !(c.status === 'aguardando_coleta' || c.status === 'em_coleta'));
+    kanbanWrap.innerHTML = '';
+    kanbanWrap.append(el('div', { style: 'display:flex;gap:13px;overflow-x:auto;padding-bottom:8px;align-items:flex-start' },
+      colunaKanban('Sem associação', 'var(--lx-erro)', _dados.semAssociacao || []),
+      colunaKanban('Aguardando coleta', '#BA7517', aguardando),
+      colunaKanban('Em rota', 'var(--lx-azul-primario)', emRota),
+      colunaKanban('Retorno / Devolução', '#C2410C', retorno),
+      colunaKanban('Concluídas', 'var(--lx-ok)', _dados.concluidas || []),
+      colunaKanban('Canceladas', 'var(--lx-tinta-3)', _dados.canceladas || [])));
   }
   const tabelaWrap = el('div', { style: 'border:0.5px solid var(--lx-linha);border-top:none;border-radius:0 0 var(--lx-raio-lg) var(--lx-raio-lg);overflow-x:auto;overflow-y:hidden' });
 
@@ -742,9 +808,10 @@ export async function montar(container) {
     const b = el('button', { class: 'lx-btn lx-btn-secundario', style: `padding:5px 7px;${cor ? 'color:' + cor : ''}`, title: titulo, 'aria-label': titulo, onClick });
     b.append(svgIcone(pIcon)); return b;
   }
-  function acoes(c) {
+  function acoes(c, faseArg) {
+    const fase = faseArg || _aba;
     const w = el('div', { style: 'display:grid;grid-template-columns:repeat(4, max-content);gap:5px;justify-content:end;align-items:center;margin-left:auto;width:max-content' });
-    if (_aba === 'sem') {
+    if (fase === 'sem') {
       if (podeGerenciar) {
         const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px;grid-column:1 / -1;width:100%', onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
         w.append(bAtr); if (podeDisparar) w.append(botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
@@ -754,7 +821,7 @@ export async function montar(container) {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       if (podeCancelar) w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
-    } else if (_aba === 'and') {
+    } else if (fase === 'and') {
       w.append(botaoIcone(P.rota, 'Ver rota no mapa', () => abrirRota(c)));
       w.append(botaoIcone(P.mapa, 'Abrir rastreio do cliente (nova guia)', () => copiarLinkRastreio(c)));
       if (podeGerenciar) w.append(botaoIcone(P.troca, 'Trocar motoboy', () => abrirAtribuir(c, true)));
@@ -762,7 +829,7 @@ export async function montar(container) {
       if (podeLiberar) w.append(botaoIcone(P.liberar, c.liberacao_pendente ? 'Aprovar liberação de ponto' : 'Liberar ponto', () => abrirPontos(c), c.liberacao_pendente ? '#ea580c' : undefined));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
       if (podeCancelar) w.append(botaoIcone(P.x, 'Cancelar', () => abrirCancelar(c), 'var(--lx-erro)'));
-    } else if (_aba === 'con') {
+    } else if (fase === 'con') {
       w.append(botaoIcone(P.rota, 'Ver rota do GPS', () => abrirRota(c)));
       w.append(botaoIcone(P.file, 'Ver protocolo', () => abrirProtocolo(c)));
       w.append(botaoIcone(P.logs, 'Histórico da corrida', () => abrirLogs(c)));
@@ -1240,7 +1307,8 @@ export async function montar(container) {
   }
 
   // Monta a casca IMEDIATAMENTE (transição suave, sem esperar a API).
-  const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, barraSel, tabelaWrap);
+  const kanbanWrap = el('div', { style: 'display:none' });
+  const conteudo = el('div', {}, barraTopo, painel, avisoEl, abas, barraSel, tabelaWrap, kanbanWrap);
   container.append(casca('Acompanhamento', conteudo, 'Todas as corridas, todas as lojas'));
   setAba('sem');
   carregar();
