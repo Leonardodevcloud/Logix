@@ -751,12 +751,14 @@ export async function montar(container) {
     const b = el('button', { class: 'lx-btn lx-btn-secundario', style: `padding:5px 7px;${cor ? 'color:' + cor : ''}`, title: titulo, 'aria-label': titulo, onClick });
     b.append(svgIcone(pIcon)); return b;
   }
-  function acoes(c, faseArg) {
+  function acoes(c, faseArg, compacto) {
     const fase = faseArg || _aba;
-    const w = el('div', { style: 'display:grid;grid-template-columns:repeat(4, max-content);gap:5px;justify-content:end;align-items:center;margin-left:auto;width:max-content' });
+    const w = el('div', { style: compacto
+      ? 'display:flex;flex-wrap:wrap;gap:5px;align-items:center'
+      : 'display:flex;flex-wrap:nowrap;gap:5px;justify-content:flex-end;align-items:center;margin-left:auto' });
     if (fase === 'sem') {
       if (podeGerenciar) {
-        const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px;grid-column:1 / -1;width:100%', onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
+        const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px' + (compacto ? ';flex:1 0 100%;width:100%' : ''), onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
         w.append(bAtr); if (podeDisparar) w.append(botaoIcone(P.bolt, 'Disparar oferta (raio)', () => dispararOferta(c)));
       }
       if (podeEditar) w.append(botaoIcone(P.edit, 'Editar endereços', () => abrirEditar(c)));
@@ -941,9 +943,9 @@ export async function montar(container) {
   // Célula de motoboy (código + nome) para as abas que não são 'sem'.
   function celulaMotoboy(c) {
     if (!c.motoboy_nome) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, 'sem motoboy');
-    return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3;min-width:0' },
-      el('span', { style: 'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome),
-      c.motoboy_codigo ? el('span', { style: 'font-size:11px;color:var(--lx-azul-primario);font-weight:700' }, String(c.motoboy_codigo)) : el('span', {}));
+    return el('div', { style: 'display:flex;align-items:center;gap:6px;min-width:0' },
+      c.motoboy_codigo ? el('span', { style: 'font-size:11px;font-weight:800;color:var(--lx-azul-primario);background:var(--lx-info-bg);border-radius:5px;padding:1px 6px;flex:none' }, String(c.motoboy_codigo)) : el('span', {}),
+      el('span', { style: 'font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, c.motoboy_nome));
   }
 
   // Badge da categoria de frete (modalidade) da corrida.
@@ -972,10 +974,10 @@ export async function montar(container) {
 
   function linha(c) {
     // Colunas por aba. Todas têm Categoria, Valor e Direção (após Trajeto).
-    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 230px'
-      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 200px'
-      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 150px'
-      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px'; // canceladas
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 300px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 300px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 160px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 160px'; // canceladas
     const dataHora = iso => { if (!iso) return el('div', { style: 'font-size:12px;color:var(--lx-tinta-3)' }, '—'); const d = new Date(iso); return el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' }, el('span', { style: 'font-size:12px;color:var(--lx-tinta);font-weight:600' }, d.toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', year: '2-digit' })), el('span', { style: 'font-size:11px;color:var(--lx-tinta-2)' }, d.toLocaleTimeString('pt-BR', { timeZone: 'America/Bahia', hour: '2-digit', minute: '2-digit' }))); };
 
     const celulas = [];
@@ -1011,13 +1013,13 @@ export async function montar(container) {
     celulas.push(acoes(c));
 
     const destaque = _aba === 'sem' && _sel.has(c.id) ? 'background:var(--lx-info-bg)' : 'background:var(--lx-superficie)';
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1360px;${destaque}` }, ...celulas);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:11px 16px;align-items:center;border-bottom:0.5px solid var(--lx-linha);min-width:1470px;${destaque}` }, ...celulas);
   }
   function cabecalho() {
-    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 230px'
-      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 200px'
-      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 150px'
-      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px';
+    const cols = _aba === 'sem' ? '40px 90px minmax(240px,1.6fr) 130px 120px 90px 140px 150px 300px'
+      : _aba === 'and' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 150px 300px'
+      : _aba === 'con' ? '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 150px 160px'
+      : '90px minmax(240px,1.6fr) 130px 120px 90px 150px 140px 140px 160px';
     const labels = _aba === 'sem' ? ['', 'Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Solicitação', 'Status', 'Ações']
       : _aba === 'and' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Status', 'Ações']
       : _aba === 'con' ? ['Protocolo', 'Trajeto', 'Categoria', 'Valor', 'Direção', 'Motoboy', 'Solicitação', 'Concluída', 'Status', 'Ações']
@@ -1030,7 +1032,7 @@ export async function montar(container) {
       todas.onchange = () => { if (todas.checked) lista.forEach(c => _sel.add(c.id)); else _sel.clear(); renderTabela(); atualizarBarraSel(); };
       cels[0] = el('div', { style: 'display:flex;justify-content:center' }, todas);
     }
-    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha);min-width:1360px` }, ...cels);
+    return el('div', { style: `display:grid;grid-template-columns:${cols};gap:12px;padding:8px 16px;font-size:11px;font-weight:700;color:var(--lx-tinta-2);text-transform:uppercase;background:var(--lx-superficie-2);border-bottom:0.5px solid var(--lx-linha);min-width:1470px` }, ...cels);
   }
   function listaDaAba() { return _aba === 'sem' ? _dados.semAssociacao : _aba === 'and' ? _dados.emAndamento : _aba === 'con' ? _dados.concluidas : _dados.canceladas; }
 
@@ -1253,7 +1255,7 @@ export async function montar(container) {
     if (c.valor_cliente_cent != null || c.valor_motoboy_cent != null) footItens.push(celulaValor(c));
     if (c.motoboy_nome) footItens.push(celulaMotoboy(c));
     const foot = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--lx-linha)' }, ...footItens);
-    const actWrap = el('div', { style: 'border-top:1px solid var(--lx-linha);margin-top:9px;padding-top:9px' }, acoes(c, fase));
+    const actWrap = el('div', { style: 'border-top:1px solid var(--lx-linha);margin-top:9px;padding-top:9px' }, acoes(c, fase, true));
     return el('div', { style: 'background:var(--lx-superficie);border:1px solid var(--lx-linha);border-radius:11px;padding:11px;box-shadow:0 1px 2px rgba(15,39,64,.05)' },
       topo, enderecoEmpilhado(c), linhaData, foot, actWrap);
   }
