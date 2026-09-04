@@ -17,25 +17,22 @@ function gruposNav() {
       ]},
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
-        { rotulo: 'Entregadores', icone: 'motoboys', filhos: [
-          { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
-          { rota: '/rotas', rotulo: 'Rotas traçadas' },
-          { rota: '/gamificacao', rotulo: 'Gamificação' },
-        ] },
-        { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
+        { rota: '/custos-api', rotulo: 'Custos de API', icone: '__api__' },
       ]},
     ];
   }
 
   const central = a.perfil === 'central_admin';
   const operacao = [{ rota: '/', rotulo: 'Dashboard', icone: 'painel' }];
+  // Solicitar corrida (lançar entrega) logo abaixo do Dashboard.
+  if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
+    operacao.push({ rota: '/entregas', rotulo: 'Solicitar corrida', icone: 'entregas' });
   // Central tem a tela de Acompanhamento (visão de todas as lojas).
   if (central && auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
-  // Loja tem o Acompanhamento em Kanban, só das próprias corridas (somente leitura).
   else if (a.perfil === 'loja' && auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/acompanhamento-loja', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
   // Rastreio logo abaixo de Acompanhamento.
@@ -48,11 +45,9 @@ function gruposNav() {
   // Central vê tudo (+ configura); loja vê só os alertas das entregas dela.
   if ((central || a.perfil === 'loja') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/radar', rotulo: 'Radar', icone: 'acompanhamento' });
-  if (auth.temModulo('entregas') && auth.pode('entregas.ver'))
-    operacao.push({ rota: '/entregas', rotulo: 'Entregas', icone: 'entregas' });
   // Relatórios: central e loja (loja vê só a própria). Gate por entregas.ver.
   if (auth.pode('entregas.ver'))
-    operacao.push({ rota: '/relatorios', rotulo: 'Relatórios', icone: 'entregas' });
+    operacao.push({ rota: '/relatorios', rotulo: 'Relatórios', icone: 'relatorios' });
   // Lojas (clientes): gestão da central, quem tem permissão de lojas.
   if (central && auth.temModulo('lojas') && auth.pode('lojas.ver'))
     operacao.push({ rota: '/lojas', rotulo: 'Lojas', icone: 'clientes' });
