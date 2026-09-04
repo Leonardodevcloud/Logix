@@ -88,8 +88,8 @@ export async function montar(container) {
 
   function card(c, fase) {
     const acts = fase === 'aguardando' || fase === 'emrota' ? ['rastreio']
-      : fase === 'devolucao' || fase === 'concluido' ? ['rastreio', 'protocolo']
-      : ['protocolo']; // cancelado
+      : fase === 'devolucao' ? ['rastreio', 'protocolo']
+      : ['protocolo']; // concluido e cancelado: só protocolo (corrida encerrada, sem rastreio ao vivo)
 
     const topo = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px' },
       el('span', { style: 'font-size:14px;font-weight:800;color:var(--lx-azul-primario)' }, c.protocolo),
