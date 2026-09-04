@@ -1,6 +1,6 @@
 // Service worker network-first: sempre busca a versão mais nova da rede e cai no
 // cache apenas quando offline. Evita servir HTML/CSS/JS velhos após um deploy.
-const CACHE = 'logix-v7';
+const CACHE = 'logix-v9';
 const SHELL = ['/', '/index.html', '/assets/tokens.css', '/assets/componentes.css', '/src/main.js'];
 
 self.addEventListener('install', (e) => {
