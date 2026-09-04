@@ -113,6 +113,16 @@ const fmtHaQuanto = iso => {
   return `${h}h${min % 60 ? ' ' + (min % 60) + 'm' : ''}`;
 };
 function svgIcone(p, size = 15) { const s = el('span', { style: `display:inline-flex;vertical-align:-3px` }); s.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`; return s; }
+// [acoes-linha v5] trava o layout das ações em uma linha só, vencendo qualquer
+// estilo/JS antigo que tente empilhar (grid). Injetado uma vez por carga.
+if (typeof document !== 'undefined' && !document.getElementById('lx-acomp-css')) {
+  const _st = document.createElement('style');
+  _st.id = 'lx-acomp-css';
+  _st.textContent = '.lx-acoes-row{display:flex !important;flex-wrap:nowrap !important;justify-content:flex-end;align-items:center;gap:5px;margin-left:auto}';
+  document.head.appendChild(_st);
+}
+try { console.log('[acompanhamento] acoes-linha v5 ativo'); } catch (_) {}
+
 const P = {
   lista: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
   kanban: '<rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="6" height="9" rx="1"/>',
@@ -753,9 +763,9 @@ export async function montar(container) {
   }
   function acoes(c, faseArg, compacto) {
     const fase = faseArg || _aba;
-    const w = el('div', { style: compacto
-      ? 'display:flex;flex-wrap:wrap;gap:5px;align-items:center'
-      : 'display:flex;flex-wrap:nowrap;gap:5px;justify-content:flex-end;align-items:center;margin-left:auto' });
+    const w = el('div', compacto
+      ? { style: 'display:flex;flex-wrap:wrap;gap:5px;align-items:center' }
+      : { class: 'lx-acoes-row' });
     if (fase === 'sem') {
       if (podeGerenciar) {
         const bAtr = el('button', { class: 'lx-btn lx-btn-secundario', style: 'padding:5px 9px;font-size:12px;color:var(--lx-azul-primario);display:inline-flex;align-items:center;justify-content:center;gap:4px' + (compacto ? ';flex:1 0 100%;width:100%' : ''), onClick: () => abrirAtribuir(c) }, svgIcone(P.add, 14), el('span', {}, 'atribuir'));
