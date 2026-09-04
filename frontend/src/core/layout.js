@@ -17,10 +17,15 @@ function gruposNav() {
       ]},
       { titulo: 'Cadastros', itens: [
         { rota: '/clientes', rotulo: 'Clientes', icone: 'clientes' },
+        { rotulo: 'Entregadores', icone: 'motoboys', filhos: [
+          { rota: '/motoboys', rotulo: 'Cadastro de entregadores' },
+          { rota: '/rotas', rotulo: 'Rotas traçadas' },
+          { rota: '/gamificacao', rotulo: 'Gamificação' },
+        ] },
+        { rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' },
       ]},
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
-        { rota: '/custos-api', rotulo: 'Custos de API', icone: '__api__' },
       ]},
     ];
   }
@@ -30,6 +35,9 @@ function gruposNav() {
   // Central tem a tela de Acompanhamento (visão de todas as lojas).
   if (central && auth.temModulo('entregas') && auth.pode('entregas.ver'))
     operacao.push({ rota: '/acompanhamento', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
+  // Loja tem o Acompanhamento em Kanban, só das próprias corridas (somente leitura).
+  else if (a.perfil === 'loja' && auth.temModulo('entregas') && auth.pode('entregas.ver'))
+    operacao.push({ rota: '/acompanhamento-loja', rotulo: 'Acompanhamento', icone: 'acompanhamento' });
   // Rastreio logo abaixo de Acompanhamento.
   if (auth.temModulo('rastreamento') && auth.pode('rastreamento.ver'))
     operacao.push({ rota: '/rastreio', rotulo: 'Rastreio', icone: 'rastreio' });

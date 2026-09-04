@@ -671,7 +671,7 @@ async function listarAcompanhamento({ empresaId, lojaIds = null, cidades = null,
   }
 
   const { rows } = await query(
-    `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em, e.rastreio_token,
+    `SELECT e.id, e.protocolo, e.status, e.distancia_km, e.criado_em, e.concluida_em, e.cancelada_em, e.rastreio_token,
             e.coleta_nome, e.coleta_endereco, e.coleta_lat, e.coleta_lng, e.loja_id,
             l.nome_fantasia AS loja_nome, l.codigo AS loja_codigo, l.cidade AS loja_cidade, l.estado AS loja_uf,
             cc.nome AS centro_nome, cc.codigo AS centro_codigo,
