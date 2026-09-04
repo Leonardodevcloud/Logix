@@ -258,12 +258,19 @@ export async function montar(container) {
     return nome.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   }
 
-  function stopEl(num, proto, dest, prox) {
-    return el('div', { class: 'lx-stop' + (prox ? ' prox' : '') },
+  function focarPonto(lat, lng, pin) {
+    if (lat == null || lng == null) return;
+    _mapa.flyTo([Number(lat), Number(lng)], 15, { duration: 0.7 });
+    if (pin) setTimeout(() => pin.openPopup(), 520);
+  }
+  function stopEl(num, proto, dest, prox, onClick) {
+    const d = el('div', { class: 'lx-stop' + (prox ? ' prox' : '') },
       el('div', { class: 'lx-stop-num' }, String(num)),
       el('div', { class: 'lx-stop-info' },
         el('div', { class: 'lx-stop-proto' }, String(proto || ('Parada ' + num)) + (prox ? '  ·  próxima' : '')),
         el('div', { class: 'lx-stop-dest' }, dest || '—')));
+    if (onClick) { d.style.cursor = 'pointer'; d.title = 'Ver no mapa'; d.addEventListener('click', onClick); }
+    return d;
   }
 
   function limparRota() {
@@ -293,14 +300,15 @@ export async function montar(container) {
         }).addTo(_mapa);
 
         // Pins dos destinos pendentes
-        const pinsDest = (dados.pontos || []).map((p, i) => {
-          if (!p.lat || !p.lng) return null;
-          return window.L.marker([p.lat, p.lng], { icon: pinDiv(i + 1, '#185FA5', '#fff', 30) })
+        const pins = [];
+        (dados.pontos || []).forEach((p, i) => {
+          if (!p.lat || !p.lng) return;
+          pins[i] = window.L.marker([p.lat, p.lng], { icon: pinDiv(i + 1, '#185FA5', '#fff', 30) })
             .bindPopup(`<b>${i+1}. ${p.protocolo || 'Parada'}</b><br>${p.endereco || '—'}`)
             .addTo(_mapa);
-        }).filter(Boolean);
+        });
 
-        _polyRota = [poly, ...pinsDest];
+        _polyRota = [poly, ...pins.filter(Boolean)];
         _mapa.fitBounds(poly.getBounds(), { padding: [60, 60] });
 
         detalheRotaInfo.style.display = 'flex';
@@ -312,7 +320,8 @@ export async function montar(container) {
         // Timeline na ordem otimizada
         detalheRoteiro.innerHTML = '';
         detalheRoteiro.append(el('div', { class: 'lx-roteiro-tit' }, 'Roteiro otimizado · ' + (dados.pontos || []).length + ' parada' + ((dados.pontos || []).length > 1 ? 's' : '')));
-        (dados.pontos || []).forEach((p, i) => detalheRoteiro.append(stopEl(i + 1, p.protocolo, p.endereco, i === 0)));
+        (dados.pontos || []).forEach((p, i) => detalheRoteiro.append(stopEl(i + 1, p.protocolo, p.endereco, i === 0,
+          (p.lat && p.lng) ? () => focarPonto(p.lat, p.lng, pins[i]) : null)));
       } else {
         detalheRotaInfo.style.display = 'flex';
         detalheRotaInfo.textContent = 'Posição indisponível para este motoboy.';
@@ -352,7 +361,8 @@ export async function montar(container) {
     detalheRoteiro.innerHTML = '';
     if (m.entregas?.length) {
       detalheRoteiro.append(el('div', { class: 'lx-roteiro-tit' }, 'Roteiro · ' + m.entregas.length + ' parada' + (m.entregas.length > 1 ? 's' : '')));
-      m.entregas.forEach((e, i) => detalheRoteiro.append(stopEl(i + 1, e.protocolo, e.destino, false)));
+      m.entregas.forEach((e, i) => detalheRoteiro.append(stopEl(i + 1, e.protocolo, e.destino, false,
+        (e.destino_lat && e.destino_lng) ? () => focarPonto(e.destino_lat, e.destino_lng) : null)));
       detalheRoteiro.append(el('div', { style: 'font-size:10.5px;color:#8AA2BE;padding:8px 6px 2px' }, 'Toque em "Ver rota otimizada" para reordenar pela melhor rota.'));
     }
 

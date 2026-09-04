@@ -38,7 +38,9 @@ module.exports = function rastreioRoutes() {
                 json_agg(
                   json_build_object(
                     'id', e.id, 'protocolo', e.protocolo, 'status', e.status,
-                    'destino', (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem DESC LIMIT 1)
+                    'destino', (SELECT ep.endereco FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem DESC LIMIT 1),
+                    'destino_lat', (SELECT ep.lat FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem DESC LIMIT 1),
+                    'destino_lng', (SELECT ep.lng FROM entregas_pontos ep WHERE ep.entrega_id = e.id ORDER BY ep.ordem DESC LIMIT 1)
                   )
                 ) FILTER (WHERE e.id IS NOT NULL) AS entregas
          FROM motoboys m
