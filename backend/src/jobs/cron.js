@@ -3,6 +3,7 @@ const log = require('../shared/logger');
 const { comLockExclusivo } = require('../shared/locks');
 const posicoes = require('../modules/posicoes');
 const saude = require('../modules/saude');
+const filas = require('../modules/filas');
 const { query } = require('../shared/db');
 const radar = require('../modules/radar');
 const { emitirParaEmpresa } = require('../realtime/ws');
@@ -13,6 +14,12 @@ const RETENCAO_DIAS = Number(process.env.RASTREAMENTO_RETENCAO_DIAS) || 30;
 // Agenda os jobs de manutenção. `origem` só identifica nos logs (api | worker).
 function iniciarCron(origem = 'worker') {
   // Limpeza diária às 03:00: rastreamento antigo + refresh tokens vencidos/revogados.
+  // Ofertas órfãs (entrega já saiu da fila mas a oferta ficou 'ofertada'): fecha a cada 5 min.
+  cron.schedule('*/5 * * * *', () => comLockExclusivo('cron:ofertas-orfas', async () => {
+    try { const n = await filas.encerrarOfertasOrfas(); if (n) log.info({ origem, fechadas: n }, 'cron: ofertas órfãs encerradas'); }
+    catch (e) { log.error({ origem, err: e }, 'cron: ofertas órfãs falhou'); }
+  }).catch((e) => log.error({ err: e }, 'cron ofertas-orfas: lock falhou')));
+
   // Todo job roda dentro de um advisory lock do Postgres: se a API tiver N réplicas
   // com cron embutido, ou API + worker ao mesmo tempo, só UM processo executa.
   cron.schedule('0 3 * * *', () => comLockExclusivo('cron:limpeza', async () => {

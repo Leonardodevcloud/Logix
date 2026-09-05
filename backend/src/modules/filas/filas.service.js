@@ -476,6 +476,9 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
     );
     outros.forEach(o => emitirParaMotoboy(o.motoboy_id, 'oferta.encerrada', { ofertaId }));
   } catch {}
+  // Outras ofertas ainda abertas da MESMA entrega (redisparos anteriores) morrem aqui —
+  // antes ficavam 'ofertada' para sempre (achado da tela Saúde: 107 órfãs).
+  await query(`UPDATE entregas_ofertas SET status = 'expirada' WHERE entrega_id = $1 AND id <> $2 AND status = 'ofertada'`, [entregaId, ofertaId]);
   // Evento de domínio: score (e quem mais quiser) ouve 'oferta.aceita'.
   eventos.emitir('oferta.aceita', { empresaId, motoboyId, ofertaId, entregaId, protocolo: upd.rows[0].protocolo });
   return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
@@ -696,4 +699,16 @@ async function desatribuir({ empresaId, entregaId, usuarioId, ip }) {
   return { ...rows[0], motoboy_nome: null };
 }
 
-module.exports = { listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, desatribuir, listarTodosAtivos, promoverOndasPendentes };
+// Varredura de segurança (cron, 5 min): fecha ofertas 'ofertada' cuja entrega já saiu da
+// fila (atribuída, em rota, entregue, cancelada) ou cujo prazo venceu. Idempotente.
+async function encerrarOfertasOrfas() {
+  const r = await query(
+    `UPDATE entregas_ofertas o
+        SET status = CASE WHEN e.status = 'cancelada' THEN 'cancelada' ELSE 'expirada' END
+       FROM entregas e
+      WHERE e.id = o.entrega_id AND o.status = 'ofertada'
+        AND (e.status <> 'aguardando_atribuicao' OR e.motoboy_id IS NOT NULL OR o.expira_em < now())`);
+  return r.rowCount;
+}
+
+module.exports = { encerrarOfertasOrfas, listarFila, listarDisponiveis, atribuir, atribuirLote, dispararOferta, aceitarOferta, recusarOferta, ofertaAtivaDoMotoboy, ofertasDoMotoboy, detalheOferta, atribuirAutomatica, distribuirFila, reatribuir, desatribuir, listarTodosAtivos, promoverOndasPendentes };
