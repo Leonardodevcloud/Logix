@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
 const storage = require('../../shared/storage');
+const uploads = require('../uploads');
 let emitirParaEmpresa = () => {};
 try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catch {}
 let emitirParaMotoboy = () => {};
@@ -199,7 +200,7 @@ async function cadastrarPeloApp({ empresaId, dados }) {
   for (const tipo of TIPOS_DOC) {
     if (docs[tipo]) {
       try {
-        const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: docs[tipo] });
+        const { key, mime, tamanho } = await uploads.resolverArquivo({ empresaId, motoboyId, finalidade: 'documento', finalidadesAceitas: ['documento', 'cadastro'], entrada: docs[tipo] });
         await query(
           `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho)
            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
@@ -281,7 +282,7 @@ async function cadastrarPeloAdmin({ empresaId, dados, usuarioId }) {
   for (const tipo of TIPOS_DOC) {
     if (docs[tipo]) {
       try {
-        const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: docs[tipo] });
+        const { key, mime, tamanho } = await uploads.resolverArquivo({ empresaId, motoboyId, finalidade: 'documento', finalidadesAceitas: ['documento', 'cadastro'], entrada: docs[tipo] });
         await query(
           `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho)
            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
@@ -501,7 +502,7 @@ async function reenviarCadastro({ empresaId, motoboyId, dados }) {
   const docs = d.documentos || {};
   for (const tipo of TIPOS_DOC) {
     if (docs[tipo]) {
-      const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: docs[tipo] });
+      const { key, mime, tamanho } = await uploads.resolverArquivo({ empresaId, motoboyId, finalidade: 'documento', finalidadesAceitas: ['documento', 'cadastro'], entrada: docs[tipo] });
       await query(
         `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho)
          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (motoboy_id, tipo) DO UPDATE SET storage_key = $4, mime = $5, tamanho = $6, status = 'enviado', enviado_em = now()`,
@@ -541,7 +542,7 @@ async function atualizarMeusDados({ empresaId, motoboyId, dados }) {
 async function enviarDocumentoApp({ empresaId, motoboyId, tipo, arquivo }) {
   if (!TIPOS_DOC.includes(tipo)) throw AppError.validacao('Tipo de documento inválido');
   if (!arquivo) throw AppError.validacao('Envie um arquivo');
-  const { key, mime, tamanho } = await storage.subirBase64({ empresaId, motoboyId, tipo, dataUri: arquivo });
+  const { key, mime, tamanho } = await uploads.resolverArquivo({ empresaId, motoboyId, finalidade: 'documento', finalidadesAceitas: ['documento', 'cadastro'], entrada: arquivo });
   await query(
     `INSERT INTO motoboy_documentos (empresa_id, motoboy_id, tipo, storage_key, mime, tamanho, status)
      VALUES ($1,$2,$3,$4,$5,$6,'enviado')

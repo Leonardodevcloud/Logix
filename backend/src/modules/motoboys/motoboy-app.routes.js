@@ -6,6 +6,22 @@ const { limiteRastreamentoMotoboy } = require('../../middleware/rateLimit');
 const { validar } = require('../../middleware/validar');
 const eventos = require('../../shared/eventos');
 const posicoes = require('../posicoes');
+const uploads = require('../uploads');
+
+// Fotos de protocolo: aceita `fotos_keys` (upload direto) e/ou `fotos_urls` (base64 legado).
+// Nos dois casos o que vai para o banco é a CHAVE do storage — nunca mais base64 em linha.
+async function gravarFotosProtocolo({ empresaId, motoboyId, pontoId, tipo, fotosKeys, fotosUrls }) {
+  const entradas = [...(Array.isArray(fotosKeys) ? fotosKeys : []), ...(Array.isArray(fotosUrls) ? fotosUrls : [])].filter(Boolean);
+  for (const entrada of entradas) {
+    try {
+      const arq = await uploads.resolverArquivo({ empresaId, motoboyId, finalidade: 'protocolo', entrada });
+      if (!arq) continue;
+      await query(`INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, $2, $3)`, [pontoId, tipo, arq.key]);
+    } catch (err) {
+      require('../../shared/logger').error({ err, pontoId }, 'foto de protocolo não gravada');
+    }
+  }
+}
 const { schemas } = require('../../shared/schemas');
 const storage = require('../../shared/storage');
 const push = require('../../shared/push');
@@ -463,10 +479,20 @@ module.exports = function motoboyAppRoutes() {
   // Responde imediatamente e processa fotos em background (evita timeout no app)
   router.post('/app/entregas/:entregaId/pontos/:pontoId/concluir', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls, ocorrencia_id } = req.body;
+      const { recebedor, fotos_urls, fotos_keys, ocorrencia_id } = req.body;
       const observacao = _lerObservacao(req.body);
       const { entregaId, pontoId } = req.params;
       const empresaId = req.motoboy.empresaId;
+
+      // Autorização: a entrega tem que existir, ser desta EMPRESA e estar atribuída a
+      // ESTE motoboy. Sem isto, qualquer id válido (mesmo de outro tenant) era aceito.
+      {
+        const { rows: dono } = await query(
+          `SELECT 1 FROM entregas WHERE id = $1 AND empresa_id = $2 AND motoboy_id = $3`,
+          [entregaId, empresaId, req.motoboy.id]
+        );
+        if (!dono[0]) throw AppError.naoEncontrado('Entrega não encontrada ou não atribuída a você');
+      }
 
       // Idempotência: se o ponto JÁ foi concluído (entregue/insucesso), este pedido
       // é o retry / duplo-toque de uma conclusão que já deu certo (a 1ª resposta se
@@ -608,26 +634,12 @@ module.exports = function motoboyAppRoutes() {
       // dos dois é conhecido aqui (ARQUITETURA.md §5).
       eventos.emitir('entrega.ponto_concluido', {
         empresaId, motoboyId: req.motoboy.id, entregaId, pontoId,
-        insucesso: ehInsucesso, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+        insucesso: ehInsucesso, temFoto: (Array.isArray(fotos_urls) && fotos_urls.length > 0) || (Array.isArray(fotos_keys) && fotos_keys.length > 0),
       });
       if (todosResolvidos) eventos.emitir('entrega.concluida', { empresaId, motoboyId: req.motoboy.id, entregaId });
 
-      // 6. Fotos em background, vinculadas ao protocolo do ponto.
-      if (Array.isArray(fotos_urls) && fotos_urls.length) {
-        setImmediate(async () => {
-          for (const url of fotos_urls) {
-            if (!url) continue;
-            try {
-              await query(
-                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, $2, $3)`,
-                [pontoId, ehInsucesso ? 'insucesso' : 'outro', url]
-              );
-            } catch (err) {
-              console.error('[app:concluir] foto background:', err.message);
-            }
-          }
-        });
-      }
+      // 6. Fotos em background: chave do storage (upload direto) ou base64 legado → storage.
+      setImmediate(() => gravarFotosProtocolo({ empresaId, motoboyId: req.motoboy.id, pontoId, tipo: ehInsucesso ? 'insucesso' : 'outro', fotosKeys: fotos_keys, fotosUrls: fotos_urls }));
 
       if (todosResolvidos) {
         emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });
@@ -642,10 +654,19 @@ module.exports = function motoboyAppRoutes() {
   // Fallback: pega automaticamente o primeiro ponto pendente
   router.post('/app/entregas/:entregaId/concluir-sem-ponto', verificarTokenMotoboy, async (req, res, next) => {
     try {
-      const { recebedor, fotos_urls } = req.body;
+      const { recebedor, fotos_urls, fotos_keys } = req.body;
       const observacao = _lerObservacao(req.body);
       const { entregaId } = req.params;
       const empresaId = req.motoboy.empresaId;
+
+      // Autorização: entrega desta empresa e atribuída a este motoboy.
+      {
+        const { rows: dono } = await query(
+          `SELECT 1 FROM entregas WHERE id = $1 AND empresa_id = $2 AND motoboy_id = $3`,
+          [entregaId, empresaId, req.motoboy.id]
+        );
+        if (!dono[0]) throw AppError.naoEncontrado('Entrega não encontrada ou não atribuída a você');
+      }
 
       // Pegar o primeiro ponto pendente
       const { rows: pontos } = await query(
@@ -699,26 +720,12 @@ module.exports = function motoboyAppRoutes() {
 
       eventos.emitir('entrega.ponto_concluido', {
         empresaId, motoboyId: req.motoboy.id, entregaId, pontoId,
-        insucesso: false, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+        insucesso: false, temFoto: (Array.isArray(fotos_urls) && fotos_urls.length > 0) || (Array.isArray(fotos_keys) && fotos_keys.length > 0),
       });
       if (todosEntregues) eventos.emitir('entrega.concluida', { empresaId, motoboyId: req.motoboy.id, entregaId });
 
       // Fotos em background
-      if (pontoId && Array.isArray(fotos_urls) && fotos_urls.length) {
-        setImmediate(async () => {
-          for (const url of fotos_urls) {
-            if (!url) continue;
-            try {
-              await query(
-                `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, 'outro', $2)`,
-                [pontoId, url]
-              );
-            } catch (err) {
-              console.error('[app:concluir-sem-ponto] foto background:', err.message);
-            }
-          }
-        });
-      }
+      if (pontoId) setImmediate(() => gravarFotosProtocolo({ empresaId, motoboyId: req.motoboy.id, pontoId, tipo: 'outro', fotosKeys: fotos_keys, fotosUrls: fotos_urls }));
 
       if (todosEntregues) {
         emitirParaEmpresa(empresaId, 'entrega.concluida', { entregaId });

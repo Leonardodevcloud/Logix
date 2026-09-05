@@ -177,6 +177,11 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 **Decisão:** ver §6. Baseline de boot congelada; novas mudanças só em `migrations/` com `down` obrigatório; `railway.json` executa `npm run migrate` no pre-deploy.
 **Consequências:** rollback de schema documentado e testado; CI valida `up` em banco vazio.
 
+### ADR-011 · Arquivos por upload direto ao storage (URL pré-assinada) (2026-09)
+**Contexto:** fotos/documentos chegavam em base64 pela API (`limit: '15mb'` global); fotos de protocolo eram gravadas em base64 **dentro do Postgres**.
+**Decisão:** módulo `uploads` emite URL assinada de PUT; cliente envia direto ao R2; rota de negócio recebe só a `storage_key` e confirma (prefixo da empresa + HEAD + tamanho). Base64 legado é aceito por compatibilidade, mas vai para o storage — nunca para o banco. Body JSON global = 1 MB.
+**Consequências:** API sem tráfego de bytes de arquivo; Postgres para de inchar; chaves auditáveis por empresa/finalidade. Custo: CORS no bucket precisa listar os domínios do painel; clientes precisam de 2 chamadas (URL + PUT) em vez de 1.
+
 ### ADR-006 · Validação de entrada com zod (2026-09)
 **Decisão:** `validar(schema)` por rota; schemas em `shared/schemas.js`. Substitui `validators.js` e o sanitizer global (que será removido quando todas as rotas de escrita tiverem schema).
 
@@ -203,6 +208,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 | 1 | Observabilidade (pino, reqId, Sentry, health, shutdown) · CORS · ADR-003 · zod nas rotas críticas · CI · testes base · boot em banco vazio | **feito** |
 | 2A/2B | Redis opcional (WS pub/sub, rate-limit, cache) · `SKIP LOCKED` nas ondas · advisory locks no cron · barramento de eventos (score, chat) · `src/app.js` · testes de integração com Postgres+Redis no CI | **feito** |
 | 3 | módulo `posicoes` · `motoboy_posicao_atual` · `rastreamento` particionada · GPS em lote · migrations versionadas · `/metrics` Prometheus | **feito** |
-| 3b | App: adotar `/app/posicoes` em lote (OTA) · upload direto S3 · Grafana + alertas · remover `rastreamento_legado` | próximo |
+| 3b | App: GPS em lote com buffer offline (OTA) · backend de upload direto (módulo `uploads`) · correção de autorização no `concluir` | **feito** |
+| 3c | Clientes do upload direto (app: conclusão, cadastro, documentos, chat; painel: motoboy-novo, chat, logo) · Grafana + alertas · remover `rastreamento_legado` | próximo |
 | 2C | Row-Level Security (depois que testes de integração cobrirem mais rotas) | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |

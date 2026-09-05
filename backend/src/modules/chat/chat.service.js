@@ -151,7 +151,8 @@ async function enviar({ empresaId, conversaId, autorTipo, autorId, autorNome, ti
   if (tipo === 'foto') {
     if (!arquivo) throw AppError.validacao('Envie a foto');
     if (String(arquivo).length > 11 * 1024 * 1024) throw AppError.validacao('Foto muito grande (máx ~8MB).');
-    const up = await storage.subirBase64({ empresaId, motoboyId: conv.motoboy_id || empresaId, tipo: 'chat', dataUri: arquivo });
+    // `arquivo` = storage_key (upload direto) ou data URI base64 (legado).
+    const up = await require('../uploads').resolverArquivo({ empresaId, motoboyId: conv.motoboy_id || empresaId, finalidade: 'chat', entrada: arquivo });
     midiaKey = up.key;
   } else if (tipo === 'local') {
     if (lat == null || lng == null) throw AppError.validacao('Localização inválida');

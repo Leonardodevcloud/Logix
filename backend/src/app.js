@@ -16,6 +16,7 @@ const eventos = require('./shared/eventos');
 const metricas = require('./shared/metricas');
 const { rodarMigracoes } = require('./shared/migracoes');
 const posicoes = require('./modules/posicoes');
+const uploads = require('./modules/uploads');
 const { estatisticasWebSocket } = require('./realtime/ws');
 
 // Módulos (cada um expõe initXRoutes + initXTables)
@@ -139,8 +140,20 @@ function montarApp(estado = { encerrando: false }) {
     credentials: true,
     exposedHeaders: ['X-Request-Id'],
   }));
-  // 15mb: o cadastro do app envia até 4 documentos/fotos em base64 numa única requisição.
-  app.use(express.json({ limit: '15mb' }));
+  // Corpo JSON: 1 MB por padrão. Arquivos NÃO passam mais pela API (upload direto ao
+  // storage via /uploads). As rotas abaixo ainda aceitam base64 de apps/painéis ANTIGOS
+  // e por isso mantêm 15 MB — a lista encolhe até sumir quando todos os clientes migrarem.
+  const jsonPadrao = express.json({ limit: '1mb' });
+  const jsonLegadoGrande = express.json({ limit: '15mb' });
+  const ROTAS_LEGADAS_BASE64 = [
+    /^\/api\/v1\/motoboys\/app\/entregas\/[^/]+\/(pontos\/[^/]+\/concluir|concluir-sem-ponto)$/,
+    /^\/api\/v1\/motoboys\/app\/documentos$/,
+    /^\/api\/v1\/motoboys\/cadastro\/([^/]+|reenviar-cadastro|documentos|cadastros(\/[^/]+\/aprovar)?)$/,
+    /^\/api\/v1\/chat\/.+\/mensagens$/,
+    /^\/api\/v1\/entregas\/[^/]+\/pontos\/[^/]+\/(concluir|comprovantes)$/,
+    /^\/api\/v1\/branding\/?$/,
+  ];
+  app.use((req, res, next) => (ROTAS_LEGADAS_BASE64.some((re) => re.test(req.path)) ? jsonLegadoGrande : jsonPadrao)(req, res, next));
   app.use(cookieParser());
   app.use(sanitizarEntrada);
 
@@ -185,9 +198,9 @@ function montarApp(estado = { encerrando: false }) {
   });
 
   const api = express.Router();
-  // Contexto por requisição (carrega empresa_id até as integrações externas p/ métricas de API).
-  const { als } = require('./shared/contexto');
-  api.use((req, res, next) => als.run({ empresaId: null }, () => next()));
+  // (O contexto por requisição — reqId/empresaId/usuarioId — já foi aberto pelo
+  // requestLogger. Reabrir aqui descartava o reqId dentro das rotas.)
+  api.use('/uploads', uploads.initUploadsRoutes()); // upload direto ao storage (URL assinada) — qualquer perfil logado
   api.use('/auth', auth.initAuthRoutes());
   api.use('/empresas', empresas.initEmpresasRoutes());
   api.use('/motoboys', motoboys.initMotoboysRoutes());

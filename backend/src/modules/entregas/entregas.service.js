@@ -450,6 +450,19 @@ async function dashboardMetricas({ empresaId, lojaId = null, centroId = null, de
   };
 }
 
+
+// Fotos de protocolo: o banco guarda a CHAVE do storage (ou, em registros antigos,
+// uma URL/data URI). Na leitura, chave vira URL assinada (1 h).
+async function assinarFotosDosPontos(pontos) {
+  const { urlParaExibir } = require('../uploads');
+  for (const p of pontos || []) {
+    let fotos = p.fotos;
+    if (typeof fotos === 'string') { try { fotos = JSON.parse(fotos); } catch { fotos = []; } }
+    if (!Array.isArray(fotos)) continue;
+    p.fotos = await Promise.all(fotos.map(async (f) => ({ ...f, url: await urlParaExibir(f.url) })));
+  }
+  return pontos;
+}
 // Detalhe de uma entrega concluída: pontos + protocolos (fotos)
 async function detalharConcluida({ empresaId, id, lojaId = null }) {
   const { rows: ent } = await query(
@@ -478,6 +491,7 @@ async function detalharConcluida({ empresaId, id, lojaId = null }) {
      LEFT JOIN protocolos pr ON pr.entrega_ponto_id = ep.id
      WHERE ep.entrega_id = $1
      GROUP BY ep.id ORDER BY ep.ordem`, [id]);
+  await assinarFotosDosPontos(pontos);
 
   const e = ent[0];
   await resolverSelfies([e]);   // selfie assinada fresca (nunca a foto_url persistida)
@@ -566,9 +580,12 @@ async function registrarProtocoloPonto({ empresaId, entregaId, pontoId, recebedo
   try {
     await cliente.query('BEGIN');
     for (const c of comprovantes) {
+      // Chave do storage (upload direto) ou base64 legado → vai para o storage. Nunca base64 no banco.
+      const arq = await require('../uploads').resolverArquivo({ empresaId, finalidade: 'protocolo', entrada: c.storage_key || c.arquivoUrl });
+      if (!arq) continue;
       await cliente.query(
         `INSERT INTO protocolos (entrega_ponto_id, tipo, arquivo_url) VALUES ($1, $2, $3)`,
-        [pontoId, c.tipo, c.arquivoUrl]
+        [pontoId, c.tipo, arq.key]
       );
     }
     await cliente.query(
@@ -1556,6 +1573,7 @@ async function gerarProtocoloHtml(id) {
      LEFT JOIN protocolos pr ON pr.entrega_ponto_id = ep.id
      WHERE ep.entrega_id = $1
      GROUP BY ep.id ORDER BY ep.ordem`, [id]);
+  await assinarFotosDosPontos(pontos);
 
   const cor = d.cor_primaria || '#185FA5';
   const nomeEmpresa = d.nome_exibicao || d.nome_fantasia || d.razao_social || 'Logix';

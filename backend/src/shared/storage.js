@@ -10,7 +10,7 @@
 //   STORAGE_SECRET_KEY    secret access key
 //   STORAGE_PUBLIC_URL    (opcional) base de URL pública do bucket, se tiver domínio público
 
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
 
@@ -79,4 +79,51 @@ async function removerArquivo(key) {
   try { await client().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })); } catch (e) { /* ignora */ }
 }
 
-module.exports = { storageConfigurado, subirArquivo, subirBase64, urlDe, removerArquivo };
+// ── Upload DIRETO (URL pré-assinada) ──────────────────────────────────────────
+// O cliente (app/painel) faz PUT do arquivo direto no bucket; a API só emite a URL
+// e depois confirma a chave. Bytes nunca passam pela API (ver módulo uploads).
+const FINALIDADES = ['protocolo', 'documento', 'chat', 'cadastro', 'logo'];
+
+function extensaoDe(mime) {
+  const m = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
+  return m[mime] || 'bin';
+}
+
+// Chave por empresa/finalidade/ano-mês/uuid. O prefixo empresas/<id>/ é o que
+// permite validar depois que a chave pertence ao tenant que a está usando.
+function gerarChaveUpload({ empresaId, finalidade, mime }) {
+  if (!FINALIDADES.includes(finalidade)) throw new Error('Finalidade de upload inválida');
+  const d = new Date();
+  const ym = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  return `empresas/${empresaId}/${finalidade}/${ym}/${crypto.randomUUID()}.${extensaoDe(mime)}`;
+}
+
+function chavePertenceA(key, empresaId, finalidade = null) {
+  if (typeof key !== 'string' || key.includes('..') || key.startsWith('/')) return false;
+  const pref = `empresas/${empresaId}/`;
+  if (!key.startsWith(pref)) return false;
+  if (finalidade && !key.startsWith(pref + finalidade + '/')) return false;
+  return true;
+}
+
+// URL assinada para PUT. Content-Type entra na assinatura: o cliente tem que enviar
+// exatamente esse header, senão o bucket rejeita.
+async function urlUpload({ key, mime, expiraSeg = 600 }) {
+  return getSignedUrl(client(), new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: mime }), { expiresIn: expiraSeg });
+}
+
+// HEAD do objeto: existe? tamanho? tipo? (null se não existir)
+async function infoObjeto(key) {
+  try {
+    const r = await client().send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+    return { tamanho: Number(r.ContentLength) || 0, mime: r.ContentType || null };
+  } catch (e) {
+    if (e && (e.$metadata?.httpStatusCode === 404 || e.name === 'NotFound')) return null;
+    throw e;
+  }
+}
+
+// Uma chave de storage ou uma URL? (para colunas que hoje guardam qualquer coisa)
+function ehChaveStorage(v) { return typeof v === 'string' && v.startsWith('empresas/') && !v.startsWith('data:'); }
+
+module.exports = { storageConfigurado, subirArquivo, subirBase64, urlDe, removerArquivo, FINALIDADES, gerarChaveUpload, chavePertenceA, urlUpload, infoObjeto, ehChaveStorage };
