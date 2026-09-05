@@ -1,12 +1,6 @@
 const { query } = require('../../shared/db');
 
 async function initEntregasTables() {
-  // Protocolo agora é só número. Remove o prefixo 'LX-' das corridas antigas
-  // (idempotente: após a 1ª execução, nenhuma linha casa mais).
-  await query(`UPDATE entregas SET protocolo = substring(protocolo from 4) WHERE protocolo LIKE 'LX-%'`);
-  // Token de rastreio público em TODAS as corridas (backfill das antigas sem token).
-  await query(`ALTER TABLE entregas ADD COLUMN IF NOT EXISTS rastreio_token TEXT`);
-  await query(`UPDATE entregas SET rastreio_token = encode(gen_random_bytes(12), 'hex') WHERE rastreio_token IS NULL`);
   // Sequência para o protocolo legível (número)
   await query(`CREATE SEQUENCE IF NOT EXISTS seq_protocolo_entrega START 20000`);
 
@@ -28,6 +22,14 @@ async function initEntregasTables() {
       iniciada_em        TIMESTAMPTZ, concluida_em TIMESTAMPTZ
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_entregas_empresa_status ON entregas(empresa_id, status)`);
+
+  // Backfills legados — SÓ depois do CREATE TABLE (em banco vazio a tabela ainda não
+  // existia e o boot quebrava: "relation entregas does not exist").
+  // Protocolo agora é só número. Remove o prefixo 'LX-' das corridas antigas (idempotente).
+  await query(`UPDATE entregas SET protocolo = substring(protocolo from 4) WHERE protocolo LIKE 'LX-%'`);
+  // Token de rastreio público em TODAS as corridas (backfill das antigas sem token).
+  await query(`ALTER TABLE entregas ADD COLUMN IF NOT EXISTS rastreio_token TEXT`);
+  await query(`UPDATE entregas SET rastreio_token = encode(gen_random_bytes(12), 'hex') WHERE rastreio_token IS NULL`);
   await query(`CREATE INDEX IF NOT EXISTS idx_entregas_motoboy ON entregas(motoboy_id)`);
 
   await query(`
@@ -117,7 +119,7 @@ async function initSlaConfig() {
     CREATE TABLE IF NOT EXISTS sla_config (
       id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       empresa_id         UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-      loja_id            UUID REFERENCES lojas(id) ON DELETE CASCADE,  -- NULL = config geral da empresa
+      loja_id            UUID,  -- NULL = config geral da empresa. FK -> lojas criada em lojas.migration (lojas nasce depois de entregas)
       -- faixas de km -> minutos de SLA. Ex.: [{"ate_km":3,"minutos":60},{"ate_km":7,"minutos":90},...]
       faixas             JSONB NOT NULL DEFAULT '[]'::jsonb,
       -- minutos para entrar em cada alerta antes do vencimento

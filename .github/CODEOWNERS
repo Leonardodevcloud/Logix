@@ -1,0 +1,12 @@
+# Dono por módulo. Quando entrar mais gente, cada linha vira o time/pessoa responsável
+# e o GitHub exige review do owner em PRs que toquem a pasta.
+*                                   @Leonardodevcloud
+/backend/src/shared/                @Leonardodevcloud
+/backend/src/middleware/            @Leonardodevcloud
+/backend/src/modules/auth/          @Leonardodevcloud
+/backend/src/modules/permissoes/    @Leonardodevcloud
+/backend/src/modules/entregas/      @Leonardodevcloud
+/backend/src/modules/filas/         @Leonardodevcloud
+/backend/src/modules/financeiro/    @Leonardodevcloud
+/backend/src/modules/integracoes/   @Leonardodevcloud
+/.github/                           @Leonardodevcloud

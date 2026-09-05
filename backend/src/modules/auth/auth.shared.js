@@ -25,7 +25,9 @@ function gerarRefreshToken() {
 }
 function hashRefresh(bruto) { return crypto.createHash('sha256').update(bruto).digest('hex'); }
 
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none', path: '/' }; // 'none' permite o painel (Vercel) usar o cookie de refresh
+// sameSite 'none': o painel (Vercel) e a API (Railway) estão em domínios diferentes.
+// path restrito: o cookie de refresh só viaja para /api/v1/auth/* — nunca para rotas de negócio.
+const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none', path: '/api/v1/auth' };
 const MS_ACCESS = 15 * 60_000;
 const MS_REFRESH = REFRESH_TTL_DIAS * 86400_000;
 

@@ -2,27 +2,27 @@ const express = require('express');
 const AppError = require('../../shared/AppError');
 const { verificarToken, verificarAdmin } = require('../../middleware/auth');
 const { limiteLogin } = require('../../middleware/rateLimit');
-const { obrigatorios, ehEmail } = require('../../shared/validators');
+const { validar } = require('../../middleware/validar');
+const { schemas } = require('../../shared/schemas');
 const service = require('./auth.service');
 const sh = require('./auth.shared');
 
+// ADR-003: só o REFRESH vai em cookie httpOnly (path restrito ao /auth). O access
+// token vai no corpo e o cliente envia como Bearer. Nenhuma rota de negócio aceita cookie.
 function setarCookiesSessao(res, r) {
-  res.cookie('lx_access', r.accessToken, { ...sh.COOKIE_OPTS, maxAge: sh.MS_ACCESS });
   res.cookie('lx_refresh', r.refreshToken, { ...sh.COOKIE_OPTS, maxAge: sh.MS_REFRESH });
+  res.clearCookie('lx_access', { ...sh.COOKIE_OPTS }); // limpa cookie legado de sessões antigas
 }
 
 function initAuthRoutes() {
   const router = express.Router();
 
   // POST /auth/login
-  router.post('/login', limiteLogin, async (req, res, next) => {
+  router.post('/login', limiteLogin, validar(schemas.login), async (req, res, next) => {
     try {
-      const faltando = obrigatorios(req.body, ['email', 'senha']);
-      if (faltando.length) throw AppError.validacao('Campos obrigatórios', { faltando });
-      if (!ehEmail(req.body.email)) throw AppError.validacao('E-mail inválido');
       const r = await service.autenticar({ email: req.body.email, senha: req.body.senha, ip: req.ip });
       setarCookiesSessao(res, r);
-      res.json({ usuario: r.usuario, accessToken: r.accessToken }); // token também no corpo (app)
+      res.json({ usuario: r.usuario, accessToken: r.accessToken });
     } catch (e) { next(e); }
   });
 
@@ -41,8 +41,8 @@ function initAuthRoutes() {
     try {
       const refreshToken = (req.cookies && req.cookies.lx_refresh) || (req.body && req.body.refreshToken);
       await service.encerrar({ refreshToken });
-      res.clearCookie('lx_access');
-      res.clearCookie('lx_refresh');
+      res.clearCookie('lx_access', { ...sh.COOKIE_OPTS });
+      res.clearCookie('lx_refresh', { ...sh.COOKIE_OPTS });
       res.json({ ok: true });
     } catch (e) { next(e); }
   });
@@ -52,7 +52,7 @@ function initAuthRoutes() {
     try {
       const r = await service.impersonar({ adminId: req.usuario.id, usuarioAlvoId: req.params.usuarioId, ip: req.ip });
       setarCookiesSessao(res, r);
-      res.json({ ok: true });
+      res.json({ ok: true, accessToken: r.accessToken });
     } catch (e) { next(e); }
   });
 

@@ -85,10 +85,14 @@ module.exports = function rastreioRoutes() {
     try {
       const motoboyId = req.params.id;
 
-      // Última posição do motoboy
+      // Última posição do motoboy — SEMPRE escopada pelo tenant (o id vem da URL).
       const { rows: pos } = await query(
-        `SELECT lat, lng FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`,
-        [motoboyId]
+        `SELECT r.lat, r.lng
+           FROM rastreamento r
+           JOIN motoboys m ON m.id = r.motoboy_id AND m.empresa_id = $2
+          WHERE r.motoboy_id = $1
+          ORDER BY r.capturado_em DESC LIMIT 1`,
+        [motoboyId, req.empresaId]
       );
       if (!pos[0]) return res.json({ geom: [], pontos: [], distanciaKm: 0, duracaoMin: 0 });
 

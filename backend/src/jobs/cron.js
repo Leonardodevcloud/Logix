@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const log = require('../shared/logger');
 const { query } = require('../shared/db');
 const radar = require('../modules/radar');
 const { emitirParaEmpresa } = require('../realtime/ws');
@@ -16,23 +17,23 @@ function iniciarCron(origem = 'worker') {
         [RETENCAO_DIAS]
       );
       const r2 = await query(`DELETE FROM refresh_tokens WHERE expira_em < now() OR revogado = TRUE`);
-      console.log(`[cron:${origem}] rastreamento expirado=${r1.rowCount}, refresh limpos=${r2.rowCount}`);
+      log.info({ origem, rastreamento_removidos: r1.rowCount, refresh_removidos: r2.rowCount }, 'cron limpeza diária');
     } catch (e) {
-      console.error(`[cron:${origem}] erro na limpeza diária:`, e.message);
+      log.error({ origem, err: e }, 'cron: erro na limpeza diária');
     }
   });
   // Keep-warm: a cada 2 min um SELECT trivial mantém o banco (Neon) acordado.
   // O Neon suspende a computação após ~5 min ociosos; 2 min dá margem segura.
   cron.schedule('*/2 * * * *', async () => {
     try { await query('SELECT 1'); }
-    catch (e) { console.error(`[cron:${origem}] keep-warm falhou:`, e.message); }
+    catch (e) { log.error({ origem, err: e }, 'cron: keep-warm falhou'); }
   });
 
   // Radar operacional: a cada 1 min, detecta motoboys parados / sem sinal em corridas
   // em rota. Só roda para empresas com config ativa (o service filtra isso).
   cron.schedule('*/1 * * * *', async () => {
     try { await radar.varrerAlertas(emitirParaEmpresa); }
-    catch (e) { console.error(`[cron:${origem}] radar falhou:`, e.message); }
+    catch (e) { log.error({ origem, err: e }, 'cron: radar falhou'); }
   });
 
   // Webhooks de integração: reconciliação de estado a cada 20s. Compara as colunas
@@ -44,7 +45,7 @@ function iniciarCron(origem = 'worker') {
     if (_reconciliando) return; // evita sobreposição se um ciclo demorar
     _reconciliando = true;
     try { await integracoes.reconciliarWebhooks(); }
-    catch (e) { console.error(`[cron:${origem}] webhook integração falhou:`, e.message); }
+    catch (e) { log.error({ origem, err: e }, 'cron: webhook integração falhou'); }
     finally { _reconciliando = false; }
   });
 
@@ -56,11 +57,11 @@ function iniciarCron(origem = 'worker') {
     if (_fechando) return;
     _fechando = true;
     try { await financeiro.service.rodarFechamentosAutomaticos(); }
-    catch (e) { console.error(`[cron:${origem}] fechamento automático falhou:`, e.message); }
+    catch (e) { log.error({ origem, err: e }, 'cron: fechamento automático falhou'); }
     finally { _fechando = false; }
   });
 
-  console.log(`[cron:${origem}] agendado (retenção rastreamento=${RETENCAO_DIAS}d, webhooks integração=20s)`);
+  log.info({ origem, retencao_dias: RETENCAO_DIAS }, 'cron agendado');
 }
 
 module.exports = { iniciarCron };

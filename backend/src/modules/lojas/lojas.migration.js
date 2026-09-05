@@ -25,6 +25,14 @@ async function initLojasTables() {
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_lojas_empresa ON lojas(empresa_id)`);
 
+  // FK sla_config.loja_id -> lojas (a tabela sla_config nasce no módulo entregas, que
+  // roda ANTES deste; a FK só pode existir depois que lojas existe).
+  await query(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'sla_config_loja_id_fkey') THEN
+      ALTER TABLE sla_config ADD CONSTRAINT sla_config_loja_id_fkey FOREIGN KEY (loja_id) REFERENCES lojas(id) ON DELETE CASCADE;
+    END IF;
+  END $$`);
+
   // Config de lançamento controlada pela central: quais modos a loja pode usar
   // (Automático / Manual) e qual vem selecionado por padrão.
   await query(`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS permite_automatico BOOLEAN NOT NULL DEFAULT TRUE`);

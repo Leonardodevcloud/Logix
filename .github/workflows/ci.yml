@@ -1,0 +1,79 @@
+# CI do backend: lint → fronteiras de módulo → auditoria de deps → testes.
+# Roda em todo PR e push na main. Ative "Require status checks" na branch main
+# para o Railway/Vercel só deployarem código que passou aqui.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/ci.yml']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint · fronteiras · audit · testes)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: backend/.nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Fronteiras de módulo (dependency-cruiser)
+        run: npm run deps:check
+      - name: Auditoria de dependências (high/critical)
+        run: npm run audit:ci
+      - name: Testes unitários
+        run: npm test
+
+  # Teste de BOOT em banco vazio: garante que um ambiente novo (staging, dev, testes)
+  # consegue subir do zero — as migrations precisam funcionar sem dados prévios.
+  boot:
+    name: Boot em banco vazio (migrations)
+    runs-on: ubuntu-latest
+    needs: backend
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: pg, POSTGRES_DB: logix }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults: { run: { working-directory: backend } }
+    env:
+      DATABASE_URL: postgres://postgres:pg@localhost:5432/logix
+      DB_SSL: 'false'
+      JWT_ACCESS_SECRET: ci-secret
+      ORS_API_KEY: x
+      CORS_ORIGIN: http://localhost
+      WORKER_EMBUTIDO: 'false'
+      PORT: '3055'
+      NODE_ENV: production
+      SEED_ADMIN_NOME: CI
+      SEED_ADMIN_EMAIL: ci@logix.test
+      SEED_ADMIN_SENHA: CiSenhaForte123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: backend/.nvmrc, cache: npm, cache-dependency-path: backend/package-lock.json }
+      - run: npm ci --omit=dev
+      - name: Sobe API, roda seed e smoke
+        run: |
+          node server.js > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3055/health/ready && break; sleep 1; done
+          curl -sf localhost:3055/health/ready
+          node scripts/seed.js
+          BASE_URL=http://localhost:3055 ADMIN_EMAIL=ci@logix.test ADMIN_SENHA=CiSenhaForte123 node scripts/smoke-test.js
+      - name: Logs em caso de falha
+        if: failure()
+        run: cat backend/api.log || cat api.log

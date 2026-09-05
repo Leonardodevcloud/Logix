@@ -3,11 +3,12 @@ const AppError = require('../shared/AppError');
 const { ERRO_MSGS, PERFIS } = require('../shared/constants');
 
 function extrairToken(req) {
-  // Bearer tem prioridade — usado durante impersonação para sobrepor o cookie do master
   const h = req.headers.authorization;
   if (h && h.startsWith('Bearer ')) return h.slice(7);
-  // Cookie httpOnly — fluxo normal de sessão web
-  if (req.cookies && req.cookies.lx_access) return req.cookies.lx_access;
+  // Decisão (ADR-003): o access token NÃO vive mais em cookie. O painel guarda em
+  // memória e renova pelo cookie httpOnly lx_refresh (só usado em /auth/refresh e
+  // /auth/logout). Assim nenhuma rota de negócio aceita autenticação por cookie e a
+  // superfície de CSRF desaparece.
   return null;
 }
 
@@ -17,6 +18,7 @@ function verificarToken(req, res, next) {
   if (!token) return next(AppError.naoAutorizado(ERRO_MSGS.TOKEN_AUSENTE));
   try {
     req.usuario = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    try { require('../shared/contexto').setUsuario(req.usuario.id); } catch (_) {}
     next();
   } catch {
     next(AppError.naoAutorizado(ERRO_MSGS.TOKEN_INVALIDO));
@@ -46,7 +48,7 @@ function verificarTokenMotoboy(req, res, next) {
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
     if (payload.perfil !== 'motoboy') return next(AppError.naoAutorizado('Acesso restrito a motoboys'));
     req.motoboy = { id: payload.id, empresaId: payload.empresaId, nome: payload.nome };
-    try { require('../shared/contexto').setEmpresa(payload.empresaId); } catch (_) {}
+    try { const ctx = require('../shared/contexto'); ctx.setEmpresa(payload.empresaId); ctx.setUsuario(payload.id); } catch (_) {}
     next();
   } catch { next(AppError.naoAutorizado('Token do motoboy inválido ou expirado')); }
 }

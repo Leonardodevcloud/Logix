@@ -3,6 +3,8 @@ const AppError = require('../../shared/AppError');
 const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
 const { limiteRastreamentoMotoboy } = require('../../middleware/rateLimit');
+const { validar } = require('../../middleware/validar');
+const { schemas } = require('../../shared/schemas');
 const storage = require('../../shared/storage');
 const push = require('../../shared/push');
 let emitirParaEmpresa = () => {};
@@ -366,10 +368,9 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // POST /motoboys/app/posicao
-  router.post('/app/posicao', verificarTokenMotoboy, limiteRastreamentoMotoboy, async (req, res, next) => {
+  router.post('/app/posicao', verificarTokenMotoboy, limiteRastreamentoMotoboy, validar(schemas.posicao), async (req, res, next) => {
     try {
       const { lat, lng, entrega_id } = req.body;
-      if (!lat || !lng) throw AppError.validacao('lat e lng obrigatórios');
       await query(
         `INSERT INTO rastreamento (motoboy_id, entrega_id, lat, lng) VALUES ($1, $2, $3, $4)`,
         [req.motoboy.id, entrega_id || null, lat, lng]
@@ -727,7 +728,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // Registra o token de push (Expo) do aparelho. Chamado pelo app no login/abertura.
-  router.post('/app/push/registrar', verificarTokenMotoboy, async (req, res, next) => {
+  router.post('/app/push/registrar', verificarTokenMotoboy, validar(schemas.pushRegistrar), async (req, res, next) => {
     try {
       const { token, plataforma } = req.body || {};
       const r = await push.registrarToken({
@@ -741,7 +742,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // Remove o token do aparelho (logout) — para de receber push neste celular.
-  router.post('/app/push/remover', verificarTokenMotoboy, async (req, res, next) => {
+  router.post('/app/push/remover', verificarTokenMotoboy, validar(schemas.pushRemover), async (req, res, next) => {
     try {
       const { token } = req.body || {};
       await push.removerToken({ token: token || null });

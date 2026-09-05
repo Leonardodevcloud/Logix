@@ -1,4 +1,7 @@
 require('dotenv').config();
+const { iniciarObservabilidade, capturarErro, encerrarObservabilidade } = require('./src/shared/observabilidade');
+iniciarObservabilidade(); // Sentry (só se SENTRY_DSN definido) — antes de qualquer require de módulo
+const log = require('./src/shared/logger');
 const express = require('express');
 const http = require('http');
 const cookieParser = require('cookie-parser');
@@ -10,7 +13,8 @@ const { requestLogger } = require('./src/middleware/requestLogger');
 const { sanitizarEntrada } = require('./src/middleware/sanitizer');
 const { limiteGlobal } = require('./src/middleware/rateLimit');
 const errorHandler = require('./src/middleware/errorHandler');
-const { iniciarWebSocket } = require('./src/realtime/ws');
+const { iniciarWebSocket, encerrarWebSocket } = require('./src/realtime/ws');
+const { query, estadoPool, encerrarPool } = require('./src/shared/db');
 const { iniciarCron } = require('./src/jobs/cron');
 
 // Módulos (cada um expõe initXRoutes + initXTables)
@@ -38,7 +42,16 @@ const regioes = require('./src/modules/regioes');
 const chat = require('./src/modules/chat');
 
 // Executa as migrations na ordem correta (FKs: empresas antes de usuarios/motoboys/entregas).
+// Advisory lock: com N réplicas subindo juntas no deploy, só UMA executa as
+// migrations; as outras esperam e seguem. Sem isto, CREATE ... IF NOT EXISTS
+// concorrente gera "duplicate key value violates unique constraint pg_type_typname".
+const MIGRATION_LOCK = 7264_2025;
 async function migrar() {
+  await query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
+  try { await migrarTabelas(); }
+  finally { await query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK]).catch(() => {}); }
+}
+async function migrarTabelas() {
   await empresas.initEmpresasTables();
   await auth.initAuthTables();
   await permissoes.initPermissoesTables();
@@ -59,7 +72,7 @@ async function migrar() {
   await regioes.initRegioesTables();         // regiões (polígonos) por empresa
   await chat.initChatTables();               // chat interno (conversas/mensagens) — depois de entregas/lojas/motoboys
   await apiuso.initApiUsoTables();            // monitor de uso/custo das APIs externas (ORS/Google) por cliente
-  console.log('[migrations] tabelas verificadas/criadas');
+  log.info('migrations verificadas/aplicadas');
 }
 
 // Monta o app Express com middlewares globais e wiring dos módulos.
@@ -68,15 +81,30 @@ function montarApp() {
   app.set('trust proxy', 1);
 
   // Compressao gzip/brotli das respostas (telas de admin enviam listas grandes).
+  // requestLogger PRIMEIRO: gera o X-Request-Id e abre o contexto antes de qualquer
+  // outro middleware — assim até erro de JSON inválido no body-parser sai com reqId.
+  app.use(requestLogger);
   app.use(compression());
   app.use(helmet());
+  // CORS: lista explícita de origens. SEM CORS_ORIGIN, nenhuma origem cross-site é
+  // aceita (antes o padrão era refletir QUALQUER origem com credentials — inseguro).
+  // Requisições sem header Origin (app nativo, ERP server-to-server, curl) passam.
   const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
-  app.use(cors({ origin: origensCors.length ? origensCors : true, credentials: true }));
+  if (!origensCors.length && process.env.NODE_ENV === 'production') log.warn('CORS_ORIGIN vazio — painel web não conseguirá chamar a API');
+  app.use(cors({
+    origin(origin, cb) {
+      if (!origin) return cb(null, true);
+      if (origensCors.includes(origin)) return cb(null, true);
+      if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    credentials: true,
+    exposedHeaders: ['X-Request-Id'],
+  }));
   // 15mb: o cadastro do app envia até 4 documentos/fotos em base64 numa única requisição.
   app.use(express.json({ limit: '15mb' }));
   app.use(cookieParser());
   app.use(sanitizarEntrada);
-  app.use(requestLogger);
 
   // API PÚBLICA de integração (ERP dos clientes) — montada ANTES do limite global
   // por IP: um ERP dispara muitas corridas do mesmo IP e tem limitador próprio por
@@ -85,14 +113,25 @@ function montarApp() {
 
   app.use(limiteGlobal);
 
-  app.get('/health', (req, res) => res.json({ ok: true, servico: 'logix-api', em: new Date().toISOString() }));
-  // Mede a latência real do banco (use um pinger externo aqui para manter tudo quente).
-  app.get('/health/db', async (req, res) => {
-    const { query } = require('./src/shared/db');
+  // Health checks (padrão Kubernetes):
+  //   /health/live  → o processo está vivo (não toca em nada externo)
+  //   /health/ready → pronto para receber tráfego (banco responde). Aponte o Railway aqui.
+  //   /health e /health/db mantidos por compatibilidade.
+  const VERSAO = process.env.APP_VERSION || require('./package.json').version;
+  const live = (req, res) => res.json({ ok: true, servico: 'logix-api', versao: VERSAO, uptime_s: Math.round(process.uptime()), em: new Date().toISOString() });
+  const ready = async (req, res) => {
     const t0 = Date.now();
-    try { await query('SELECT 1'); res.json({ ok: true, db_ms: Date.now() - t0 }); }
-    catch (e) { res.status(500).json({ ok: false, erro: e.message, db_ms: Date.now() - t0 }); }
-  });
+    try {
+      await query('SELECT 1');
+      res.json({ ok: true, versao: VERSAO, db_ms: Date.now() - t0, pool: estadoPool(), encerrando });
+    } catch (e) {
+      res.status(503).json({ ok: false, erro: 'banco indisponível', db_ms: Date.now() - t0 });
+    }
+  };
+  app.get('/health', live);
+  app.get('/health/live', live);
+  app.get('/health/ready', ready);
+  app.get('/health/db', ready);
 
   const api = express.Router();
   // Contexto por requisição (carrega empresa_id até as integrações externas p/ métricas de API).
@@ -126,6 +165,8 @@ function montarApp() {
   return app;
 }
 
+let encerrando = false;
+
 async function iniciar() {
   await migrar();
   const app = montarApp();
@@ -140,17 +181,56 @@ async function iniciar() {
   // Promotor de ondas da prioridade por nível: abre as próximas ondas das
   // ofertas escalonadas. Roda AQUI (processo com WebSocket), a cada 5s. É leve:
   // só toca ofertas 'ofertada' com proxima_onda_em vencida. Blindado por try/catch.
-  setInterval(() => { filas.promoverOndasPendentes().catch(() => {}); }, 5000);
+  const timerOndas = setInterval(() => { filas.promoverOndasPendentes().catch((e) => log.error({ err: e }, 'promoverOndas falhou')); }, 5000);
 
   // Modo econômico (padrão): roda os cron jobs no MESMO processo da API — 1 container só.
   // Ao escalar para múltiplas instâncias, rode o worker separado e defina WORKER_EMBUTIDO=false.
-  if (process.env.WORKER_EMBUTIDO !== 'false') iniciarCron('api');
+  if (process.env.WORKER_EMBUTIDO !== 'false') {
+    if (process.env.NODE_ENV === 'production') log.warn('WORKER_EMBUTIDO=true: cron dentro da API. Ao rodar 2+ réplicas, suba o worker e defina WORKER_EMBUTIDO=false');
+    iniciarCron('api');
+  }
 
   const porta = process.env.PORT || 3000;
-  server.listen(porta, () => console.log(`[logix-api] ouvindo na porta ${porta}`));
+  server.listen(porta, () => log.info({ porta, versao: process.env.APP_VERSION || require('./package.json').version, node: process.version }, 'logix-api ouvindo'));
+
+  // Graceful shutdown: no deploy o Railway envia SIGTERM. Sem isto, requisições em
+  // voo morrem no meio, WebSockets caem sem código e conexões pg ficam presas.
+  // Sequência: para de aceitar → avisa WS → espera requests (até 10s) → fecha pool → sai.
+  const encerrar = async (sinal) => {
+    if (encerrando) return;
+    encerrando = true;
+    log.warn({ sinal }, 'encerrando processo');
+    clearInterval(timerOndas);
+    const forcar = setTimeout(() => { log.error('shutdown forçado (timeout)'); process.exit(1); }, 10000);
+    forcar.unref();
+    try {
+      await new Promise((ok) => server.close(() => ok()));
+      encerrarWebSocket(1001, 'servidor reiniciando');
+      await encerrarPool();
+      await encerrarObservabilidade();
+      log.info('encerrado com sucesso');
+      process.exit(0);
+    } catch (e) {
+      log.error({ err: e }, 'erro no shutdown');
+      process.exit(1);
+    }
+  };
+  process.on('SIGTERM', () => encerrar('SIGTERM'));
+  process.on('SIGINT', () => encerrar('SIGINT'));
 }
 
+// Falhas fora de request: logar + Sentry. unhandledRejection derrubava o processo em silêncio.
+process.on('unhandledRejection', (razao) => {
+  log.error({ err: razao }, 'unhandledRejection');
+  capturarErro(razao instanceof Error ? razao : new Error(String(razao)), { origem: 'unhandledRejection' });
+});
+process.on('uncaughtException', (err) => {
+  log.fatal({ err }, 'uncaughtException — encerrando');
+  capturarErro(err, { origem: 'uncaughtException' });
+  setTimeout(() => process.exit(1), 500).unref();
+});
+
 iniciar().catch((e) => {
-  console.error('[logix-api] falha ao iniciar:', e);
+  log.fatal({ err: e }, 'falha ao iniciar');
   process.exit(1);
 });

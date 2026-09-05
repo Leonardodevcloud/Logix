@@ -102,7 +102,7 @@ npm install
 DATABASE_URL="COLE_A_DATABASE_PUBLIC_URL" DB_SSL=true \
 SEED_ADMIN_NOME="Seu Nome" \
 SEED_ADMIN_EMAIL="voce@logix.com.br" \
-SEED_ADMIN_SENHA="UmaSenhaForte123" \
+SEED_ADMIN_SENHA="<gere-uma-senha-forte>" \
 npm run seed
 ```
 Saída esperada: `Super admin criado: voce@logix.com.br (...)`.
@@ -115,7 +115,7 @@ O smoke bate na API por HTTP, então roda de qualquer lugar apontando para o dom
 ```bash
 BASE_URL="https://SUA_API.up.railway.app" \
 ADMIN_EMAIL="voce@logix.com.br" \
-ADMIN_SENHA="UmaSenhaForte123" \
+ADMIN_SENHA="<a-mesma-senha-do-seed>" \
 npm run smoke
 ```
 Esperado: uma sequência de `OK` (health → login → empresa → motoboy → entrega → acompanhar).

@@ -5,22 +5,43 @@ const { Pool } = require('pg');
 //  - Managed com proxy público (Railway proxy, Supabase, Neon) -> DB_SSL=true (padrão)
 //  - PostgreSQL interno do Railway (rede privada *.railway.internal) ou VPS local -> DB_SSL=false
 const usarSSL = process.env.DB_SSL !== 'false';
+// Validação do certificado LIGADA por padrão (Neon/Supabase/RDS usam CA pública).
+// Só desligue (DB_SSL_REJECT_UNAUTHORIZED=false) para proxy público do Railway com
+// certificado autoassinado — e prefira a URL interna (*.railway.internal) com DB_SSL=false.
+const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: usarSSL ? { rejectUnauthorized: false } : false,
+  ssl: usarSSL ? { rejectUnauthorized } : false,
   max: Number(process.env.DB_POOL_MAX) || 12,
   idleTimeoutMillis: 60000,
   connectionTimeoutMillis: 10000,
   keepAlive: true,
   allowExitOnIdle: false,
+  // Teto de 20s por query: evita que uma consulta travada segure a conexão para sempre.
+  // Aplicado no handshake da conexão (parâmetro de sessão do Postgres).
+  options: `-c statement_timeout=${Number(process.env.DB_STATEMENT_TIMEOUT_MS) || 20000}`,
+  application_name: process.env.SERVICO_NOME || 'logix-api',
 });
 
-pool.on('error', (err) => console.error('[db] erro inesperado no pool:', err.message));
-// Evita que uma query travada segure a conexão para sempre (teto de 20s por query).
-pool.on('connect', (client) => { client.query('SET statement_timeout = 20000').catch(() => {}); });
+const log = require('./logger');
+pool.on('error', (err) => log.error({ err }, 'erro inesperado no pool pg'));
+// (statement_timeout é definido via `options` na conexão — ver acima. O antigo
+// pool.on('connect') + client.query disparava um DeprecationWarning do pg por
+// enfileirar query junto com a primeira do chamador.)
 
 async function query(texto, params = []) {
   return pool.query(texto, params);
 }
 
 module.exports = { pool, query };
+
+// Métricas simples do pool (expostas em /health/ready e futuramente em /metrics).
+function estadoPool() {
+  return { total: pool.totalCount, ociosas: pool.idleCount, aguardando: pool.waitingCount, max: pool.options.max };
+}
+
+// Encerramento limpo (graceful shutdown): espera as queries em voo e fecha o pool.
+async function encerrarPool() { try { await pool.end(); } catch (_) { /* já fechado */ } }
+
+module.exports.estadoPool = estadoPool;
+module.exports.encerrarPool = encerrarPool;
