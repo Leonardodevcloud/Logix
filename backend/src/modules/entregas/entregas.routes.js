@@ -18,7 +18,12 @@ function initEntregasRoutes() {
   // senão o token global barra quem não está logado (era o bug do link público).
   router.get('/:id/protocolo', async (req, res, next) => {
     try {
-      const html = await service.gerarProtocoloHtml(req.params.id);
+      // CSP própria desta página: imagens vêm do storage (https assinado) e o botão
+      // de imprimir usa um <script> com nonce em vez de onclick inline.
+      const nonce = require('crypto').randomBytes(16).toString('base64');
+      const html = await service.gerarProtocoloHtml(req.params.id, { nonce });
+      res.setHeader('Content-Security-Policy',
+        `default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'nonce-${nonce}'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'`);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(html);
     } catch (e) { next(e); }

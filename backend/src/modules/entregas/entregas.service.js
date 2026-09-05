@@ -1542,7 +1542,7 @@ async function cancelarEntrega({ empresaId, id, motivo, usuarioId, ip }) {
 
 // ── Protocolo HTML público ────────────────────────────────────────────────────
 // Gera uma página HTML standalone para impressão/PDF da entrega.
-async function gerarProtocoloHtml(id) {
+async function gerarProtocoloHtml(id, { nonce = 'x' } = {}) {
   // Buscar entrega sem filtro de empresa (é público, mas só expõe dados não sensíveis)
   const { rows: ent } = await query(
     `SELECT e.*,
@@ -1780,9 +1780,10 @@ async function gerarProtocoloHtml(id) {
 
 </div>
 
-<button class="btn-imprimir" onclick="window.print()">
+<button class="btn-imprimir" id="btn-imprimir" type="button">
   🖨 Imprimir / Salvar PDF
 </button>
+<script nonce="${nonce}">document.getElementById('btn-imprimir').addEventListener('click', function () { window.print(); });</script>
 
 </body>
 </html>`;
