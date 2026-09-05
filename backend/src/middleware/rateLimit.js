@@ -8,7 +8,13 @@ function criarLimite(opcoes) {
   let limitador = null;
   let usandoRedis = false;
   const montar = () => {
-    const base = { standardHeaders: true, legacyHeaders: false, ...opcoes };
+    const base = {
+      standardHeaders: true, legacyHeaders: false,
+      // O limitador é criado na 1ª requisição DE PROPÓSITO (o Redis conecta depois do
+      // require dos módulos). Desliga só a validação que reclama disso.
+      validate: { creationStack: false },
+      ...opcoes,
+    };
     if (redisDisponivel()) {
       try {
         const { RedisStore } = require('rate-limit-redis');
