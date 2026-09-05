@@ -11,6 +11,7 @@ const { encerrarPool } = require('./src/shared/db');
 const { iniciarCron } = require('./src/jobs/cron');
 const { montarApp, migrar } = require('./src/app');
 const filas = require('./src/modules/filas');
+const saude = require('./src/modules/saude');
 
 const estado = { encerrando: false };
 
@@ -31,6 +32,9 @@ async function iniciar() {
   // ofertas escalonadas. Roda AQUI (processo com WebSocket), a cada 5s. É leve:
   // só toca ofertas 'ofertada' com proxima_onda_em vencida. Blindado por try/catch.
   const timerOndas = setInterval(() => { filas.promoverOndasPendentes().catch((e) => log.error({ err: e }, 'promoverOndas falhou')); }, 5000);
+  // Amostra de saúde desta réplica, 1x/min (cada réplica grava a sua — sem lock).
+  const timerSaude = setInterval(() => { saude.gravarAmostra().catch((e) => log.warn({ err: e }, 'amostra de saúde falhou')); }, Number(process.env.SAUDE_INTERVALO_MS) || 60_000);
+  timerSaude.unref();
 
   // Modo econômico (padrão): roda os cron jobs no MESMO processo da API — 1 container só.
   // Ao escalar para múltiplas instâncias, rode o worker separado e defina WORKER_EMBUTIDO=false.
@@ -49,7 +53,7 @@ async function iniciar() {
     if (estado.encerrando) return;
     estado.encerrando = true;
     log.warn({ sinal }, 'encerrando processo');
-    clearInterval(timerOndas);
+    clearInterval(timerOndas); clearInterval(timerSaude);
     const forcar = setTimeout(() => { log.error('shutdown forçado (timeout)'); process.exit(1); }, 10000);
     forcar.unref();
     try {

@@ -61,6 +61,7 @@ async function registrar({ empresaId, motoboyId, pontos }) {
   } finally { client.release(); }
 
   metricas.gpsPontos.inc({ lote: norm.length > 1 ? 'sim' : 'nao' }, norm.length);
+  metricas.contarGps(norm.length, norm.length > 1);
   emitirParaEmpresa(empresaId, 'motoboy.posicao', { motoboyId, entregaId: ultimo.entregaId, lat: ultimo.lat, lng: ultimo.lng, em: ultimo.em.toISOString() });
   eventos.emitir('motoboy.posicao_atualizada', { empresaId, motoboyId, entregaId: ultimo.entregaId, lat: ultimo.lat, lng: ultimo.lng, em: ultimo.em.toISOString() });
   return { gravados: norm.length };

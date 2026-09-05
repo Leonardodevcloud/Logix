@@ -187,6 +187,11 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 **Decisão:** política `tenant_isolamento` em toda tabela com `empresa_id` (migration 0004, `FORCE ROW LEVEL SECURITY`); contexto via `set_config('app.empresa_id')` em todo checkout de conexão (`shared/db.js`), só para perfis presos a uma empresa. Sem contexto → permissiva. Ligado por `RLS_ENABLED`. Exige usuário de banco não-superuser.
 **Consequências:** defesa em profundidade provada por teste (SELECT sem WHERE no contexto de B não vê A; INSERT com empresa errada falha com 42501). Custo: 1 round-trip por checkout. Super_admin permanece cross-tenant por design.
 
+### ADR-013 · Observabilidade dentro do produto (módulo `saude`) (2026-09)
+**Contexto:** Prometheus/Grafana exigem ferramenta externa; a operação precisa de um "está tudo bem?" no próprio painel.
+**Decisão:** cada réplica grava 1 amostra/min (`saude_amostras`, JSONB: HTTP, p95 por rota, GPS, WS, pool, memória, event-loop); `errorHandler` emite `sistema.erro_http` e o módulo `saude` persiste (`saude_erros`). `GET /saude/resumo` agrega (buckets por período, mediana dos p95) em lotes de 4 consultas para não esgotar o pool. Retenção 7 dias (cron). Grafana continua para alertas e retenção longa.
+**Consequências:** visão ao vivo de réplicas, RLS efetivo, uploads legados (gatilho para remover base64) sem sair do painel. Custo: ~1 INSERT/min por réplica.
+
 ### ADR-006 · Validação de entrada com zod (2026-09)
 **Decisão:** `validar(schema)` por rota; schemas em `shared/schemas.js`. Substitui `validators.js` e o sanitizer global (que será removido quando todas as rotas de escrita tiverem schema).
 
@@ -217,6 +222,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 | 3b | App: GPS em lote com buffer offline (OTA) · backend de upload direto (módulo `uploads`) · correção de autorização no `concluir` | **feito** |
 | 3c | Clientes do upload direto (app + painel) · OpenAPI da API pública (`/integracao/openapi.json` + `/openapi.html`) · remoção de `rastreamento_legado` (0003) · `npm run fotos:migrar` · dashboard Grafana (`docs/grafana/`) | **feito** |
 | 4 | RLS (migration 0004 + `RLS_ENABLED`, verificação de superuser no boot e em `/ready`) · logo do branding pelo `uploads` · `docs/DR-CONTINUIDADE.md` · `docs/LGPD-DADOS-PESSOAIS.md` · ciclo `middleware/permissoes` ↔ módulo quebrado | **feito** (RLS aguarda ligar em produção) |
-| 5 | Remover suporte a base64 (quando `logix_uploads_legado_base64_total` = 0) · pagar violações de fronteira · OpenTelemetry · rotação de segredos (`kid`) · scripts LGPD de exportação/exclusão por titular | próximo |
+| 5 | Tela **Saúde do sistema** (super_admin): módulo `saude` (amostras por minuto de cada réplica em `saude_amostras`, erros 5xx em `saude_erros` via evento `sistema.erro_http`, `/saude/resumo`), painel `modulos/saude.js` fiel ao mockup aprovado · rota `/custos-api` registrada (estava só no menu) | **feito** |
+| 6 | Remover suporte a base64 (quando o painel "Arquivos" mostrar 0 em base64 por 7 dias) · OpenTelemetry · rotação de segredos (`kid`) · scripts LGPD de exportação/exclusão por titular | próximo |
 | 2C | Row-Level Security (depois que testes de integração cobrirem mais rotas) | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |

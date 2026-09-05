@@ -17,6 +17,7 @@ const metricas = require('./shared/metricas');
 const { rodarMigracoes } = require('./shared/migracoes');
 const posicoes = require('./modules/posicoes');
 const uploads = require('./modules/uploads');
+const saude = require('./modules/saude');
 const { estatisticasWebSocket } = require('./realtime/ws');
 
 // Módulos (cada um expõe initXRoutes + initXTables)
@@ -92,6 +93,7 @@ function registrarOuvintes() {
   eventos.limpar();
   score.registrarOuvintes();
   chat.registrarOuvintes();
+  saude.registrarOuvintes();
   log.info({ eventos: ['oferta.aceita', 'oferta.recusada', 'entrega.ponto_concluido', 'entrega.concluida'] }, 'ouvintes de eventos registrados');
 }
 
@@ -233,6 +235,7 @@ function montarApp(estado = { encerrando: false }) {
   api.use('/relatorios', relatorios.initRelatoriosRoutes());
   api.use('/score', score.initScoreRoutes());
   api.use('/api-uso', apiuso.initApiUsoRoutes());
+  api.use('/saude', saude.initSaudeRoutes());     // saúde do sistema (super_admin)
   api.use('/regioes', regioes.initRegioesRoutes());
   api.use('/chat', chat.initChatRoutes());
   app.use('/api/v1', api);

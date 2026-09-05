@@ -21,6 +21,7 @@ function gruposNav() {
       { titulo: 'Sistema', itens: [
         { rota: '/marca', rotulo: 'White-label', icone: '__whitelabel__' },
         { rota: '/custos-api', rotulo: 'Custos de API', icone: '__api__' },
+        { rota: '/saude', rotulo: 'Saúde do sistema', icone: '__saude__' },
       ]},
     ];
   }
@@ -84,8 +85,10 @@ function gruposNav() {
   return grupos;
 }
 
+const iconeSaude = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>';
 function iconeNav(key) {
   if (key === '__whitelabel__') return iconeWhitelabel;
+  if (key === '__saude__') return iconeSaude;
   if (key === '__api__') return iconeApi;
   return icones[key] || '';
 }

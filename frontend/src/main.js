@@ -100,6 +100,8 @@ async function boot() {
   router.rota('/financeiro',           () => import('./modulos/financeiro.js'));
   router.rota('/radar',                () => import('./modulos/radar.js'));
   router.rota('/marca',                () => import('./modulos/branding.js'));
+  router.rota('/custos-api',           () => import('./modulos/custos-api.js'));  // estava no menu mas sem rota registrada
+  router.rota('/saude',                () => import('./modulos/saude.js'));
   router.rota('/integracoes',          () => import('./modulos/integracoes.js'));
   router.rota('/equipe',               () => import('./modulos/equipe.js'));
   router.rota('/configuracoes',        () => import('./modulos/configuracoes.js'));

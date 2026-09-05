@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const log = require('../shared/logger');
 const { comLockExclusivo } = require('../shared/locks');
 const posicoes = require('../modules/posicoes');
+const saude = require('../modules/saude');
 const { query } = require('../shared/db');
 const radar = require('../modules/radar');
 const { emitirParaEmpresa } = require('../realtime/ws');
@@ -25,7 +26,8 @@ function iniciarCron(origem = 'worker') {
         removidos = r1.rowCount;
       }
       const r2 = await query(`DELETE FROM refresh_tokens WHERE expira_em < now() OR revogado = TRUE`);
-      log.info({ origem, particoes: part, rastreamento_removidos: removidos, refresh_removidos: r2.rowCount }, 'cron limpeza diária');
+      const sa = await saude.limparAntigas().catch(() => null);
+      log.info({ origem, particoes: part, rastreamento_removidos: removidos, refresh_removidos: r2.rowCount, saude_removidas: sa }, 'cron limpeza diária');
     } catch (e) {
       log.error({ origem, err: e }, 'cron: erro na limpeza diária');
     }
