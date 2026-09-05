@@ -1,5 +1,5 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { criarLimite } = require('../../middleware/rateLimit');
 const service = require('./integracoes.service');
 
 // API pública para os sistemas dos clientes (ERP) criarem/consultarem/cancelarem
@@ -13,20 +13,17 @@ const service = require('./integracoes.service');
 const chaveLimite = (req) => (req.body && req.body.codCliente) ? String(req.body.codCliente) : req.ip;
 
 // 2 gravações por segundo por cliente (janela de 1s, teto 2).
-const limiteGravar = rateLimit({
-  windowMs: 1000, max: 2, keyGenerator: chaveLimite,
-  standardHeaders: true, legacyHeaders: false,
+const limiteGravar = criarLimite({
+  nome: 'integ-gravar', windowMs: 1000, max: 2, keyGenerator: chaveLimite,
   message: { Erro: 'Só é permitido solicitar 2 serviços por segundo.' },
 });
 // 1 consulta a cada 30s por cliente.
-const limiteStatus = rateLimit({
-  windowMs: 30_000, max: 1, keyGenerator: chaveLimite,
-  standardHeaders: true, legacyHeaders: false,
+const limiteStatus = criarLimite({
+  nome: 'integ-status', windowMs: 30_000, max: 1, keyGenerator: chaveLimite,
   message: { Erro: 'É permitido realizar uma consulta a cada 30 segundos.' },
 });
-const limiteCalcular = rateLimit({
-  windowMs: 1000, max: 2, keyGenerator: chaveLimite,
-  standardHeaders: true, legacyHeaders: false,
+const limiteCalcular = criarLimite({
+  nome: 'integ-calcular', windowMs: 1000, max: 2, keyGenerator: chaveLimite,
 });
 
 // Resolve a credencial da operação e injeta req.credencial. Erros saem no formato

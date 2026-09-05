@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const log = require('../shared/logger');
+const { comLockExclusivo } = require('../shared/locks');
 const { query } = require('../shared/db');
 const radar = require('../modules/radar');
 const { emitirParaEmpresa } = require('../realtime/ws');
@@ -10,7 +11,9 @@ const RETENCAO_DIAS = Number(process.env.RASTREAMENTO_RETENCAO_DIAS) || 30;
 // Agenda os jobs de manutenção. `origem` só identifica nos logs (api | worker).
 function iniciarCron(origem = 'worker') {
   // Limpeza diária às 03:00: rastreamento antigo + refresh tokens vencidos/revogados.
-  cron.schedule('0 3 * * *', async () => {
+  // Todo job roda dentro de um advisory lock do Postgres: se a API tiver N réplicas
+  // com cron embutido, ou API + worker ao mesmo tempo, só UM processo executa.
+  cron.schedule('0 3 * * *', () => comLockExclusivo('cron:limpeza', async () => {
     try {
       const r1 = await query(
         `DELETE FROM rastreamento WHERE capturado_em < now() - make_interval(days => $1)`,
@@ -21,7 +24,7 @@ function iniciarCron(origem = 'worker') {
     } catch (e) {
       log.error({ origem, err: e }, 'cron: erro na limpeza diária');
     }
-  });
+  }).catch((e) => log.error({ err: e }, 'cron limpeza: lock falhou')));
   // Keep-warm: a cada 2 min um SELECT trivial mantém o banco (Neon) acordado.
   // O Neon suspende a computação após ~5 min ociosos; 2 min dá margem segura.
   cron.schedule('*/2 * * * *', async () => {
@@ -31,35 +34,28 @@ function iniciarCron(origem = 'worker') {
 
   // Radar operacional: a cada 1 min, detecta motoboys parados / sem sinal em corridas
   // em rota. Só roda para empresas com config ativa (o service filtra isso).
-  cron.schedule('*/1 * * * *', async () => {
+  cron.schedule('*/1 * * * *', () => comLockExclusivo('cron:radar', async () => {
     try { await radar.varrerAlertas(emitirParaEmpresa); }
     catch (e) { log.error({ origem, err: e }, 'cron: radar falhou'); }
-  });
+  }).catch((e) => log.error({ err: e }, 'cron radar: lock falhou')));
 
   // Webhooks de integração: reconciliação de estado a cada 20s. Compara as colunas
   // da entrega com o que já foi notificado e dispara os momentos que faltaram
   // (0/0.5/0.75/1/2/3) para o sistema do cliente — sem tocar no motor de entrega.
   const integracoes = require('../modules/integracoes');
-  let _reconciliando = false;
-  cron.schedule('*/20 * * * * *', async () => {
-    if (_reconciliando) return; // evita sobreposição se um ciclo demorar
-    _reconciliando = true;
+  // O lock do Postgres substitui a flag em memória: vale entre processos.
+  cron.schedule('*/20 * * * * *', () => comLockExclusivo('cron:webhooks', async () => {
     try { await integracoes.reconciliarWebhooks(); }
     catch (e) { log.error({ origem, err: e }, 'cron: webhook integração falhou'); }
-    finally { _reconciliando = false; }
-  });
+  }).catch((e) => log.error({ err: e }, 'cron webhooks: lock falhou')));
 
   // Fechamento automático do financeiro: a cada 10 min verifica empresas cujo
   // horário semanal chegou e fecha o período (o service filtra o que é devido).
   const financeiro = require('../modules/financeiro');
-  let _fechando = false;
-  cron.schedule('*/10 * * * *', async () => {
-    if (_fechando) return;
-    _fechando = true;
+  cron.schedule('*/10 * * * *', () => comLockExclusivo('cron:fechamento', async () => {
     try { await financeiro.service.rodarFechamentosAutomaticos(); }
     catch (e) { log.error({ origem, err: e }, 'cron: fechamento automático falhou'); }
-    finally { _fechando = false; }
-  });
+  }).catch((e) => log.error({ err: e }, 'cron fechamento: lock falhou')));
 
   log.info({ origem, retencao_dias: RETENCAO_DIAS }, 'cron agendado');
 }

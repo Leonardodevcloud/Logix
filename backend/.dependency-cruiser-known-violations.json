@@ -127,15 +127,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/modules/filas/filas.service.js",
-    "to": "src/modules/score/score.service.js",
-    "rule": {
-      "severity": "error",
-      "name": "modulo-importa-interno-de-outro-modulo"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/modules/integracoes/integracoes.service.js",
     "to": "src/modules/clientehub/clientehub.service.js",
     "rule": {
@@ -209,25 +200,7 @@
   {
     "type": "dependency",
     "from": "src/modules/motoboys/motoboy-app.routes.js",
-    "to": "src/modules/chat/chat.service.js",
-    "rule": {
-      "severity": "error",
-      "name": "modulo-importa-interno-de-outro-modulo"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/motoboys/motoboy-app.routes.js",
     "to": "src/modules/filas/filas.service.js",
-    "rule": {
-      "severity": "error",
-      "name": "modulo-importa-interno-de-outro-modulo"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/modules/motoboys/motoboy-app.routes.js",
-    "to": "src/modules/score/score.service.js",
     "rule": {
       "severity": "error",
       "name": "modulo-importa-interno-de-outro-modulo"

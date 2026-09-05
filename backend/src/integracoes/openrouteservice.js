@@ -1,6 +1,6 @@
 const { httpRequest } = require('../shared/httpRequest');
 const AppError = require('../shared/AppError');
-const NodeCache = require('node-cache');
+const cache = require('../shared/cache');
 // Contador de uso de API (fire-and-forget). require tolerante p/ não afetar boot/ordem.
 let contar = () => {};
 try { contar = require('../modules/apiuso/apiuso.service').contar; } catch (_) {}
@@ -8,7 +8,7 @@ try { contar = require('../modules/apiuso/apiuso.service').contar; } catch (_) {
 const BASE = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 // Cache curto da otimização: a ordem das paradas é estável para o mesmo conjunto
 // de pontos, então evita repetir a chamada (lenta) ao ORS a cada poll do app.
-const cacheRota = new NodeCache({ stdTTL: 120, checkperiod: 180 });
+const TTL_ROTA_SEG = 120;
 
 // Geocodifica um endereço -> { lat, lng }.
 async function geocodificar(endereco) {
@@ -34,7 +34,7 @@ async function otimizarRota({ coleta, pontos, retornar = false }) {
     p: pontos.map((p) => [r5(p.lng), r5(p.lat)]),
     r: !!retornar,
   });
-  const emCache = cacheRota.get(chave);
+  const emCache = await cache.obter('ors:opt:' + chave);
   if (emCache) { contar('ors', 'optimization', true); return emCache; }
   contar('ors', 'optimization', false);
   const vehicle = { id: 1, profile: 'driving-car', start: [coleta.lng, coleta.lat] };
@@ -58,7 +58,7 @@ async function otimizarRota({ coleta, pontos, retornar = false }) {
     distanciaKm: Number((rota.distance / 1000).toFixed(2)),
     duracaoMin: Math.round(rota.duration / 60),
   };
-  cacheRota.set(chave, resultado);
+  await cache.guardar('ors:opt:' + chave, resultado, TTL_ROTA_SEG);
   return resultado;
 }
 

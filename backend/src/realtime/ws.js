@@ -1,6 +1,42 @@
 const { WebSocketServer } = require('ws');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const log = require('../shared/logger');
+const { redis, redisSub, redisDisponivel } = require('../shared/redis');
+
+// Identidade desta réplica: ao receber do Redis um evento que ela mesma publicou,
+// não entrega de novo (já entregou localmente).
+const INSTANCIA = crypto.randomBytes(6).toString('hex');
+const CANAL = 'lx:ws';
+let pubsubAtivo = false;
+
+// Liga o pub/sub. Chamado uma vez no boot, depois de iniciarRedis().
+async function iniciarPubSubWebSocket() {
+  if (!redisDisponivel()) return false;
+  try {
+    await redisSub().subscribe(CANAL);
+    redisSub().on('message', (canal, texto) => {
+      if (canal !== CANAL) return;
+      try {
+        const m = JSON.parse(texto);
+        if (m.origem === INSTANCIA) return;
+        if (m.tipo === 'empresa') entregarEmpresa(m.empresaId, m.msg);
+        else if (m.tipo === 'motoboy') entregarMotoboy(m.motoboyId, m.msg);
+      } catch (e) { log.warn({ err: e }, 'ws pub/sub: mensagem inválida'); }
+    });
+    pubsubAtivo = true;
+    log.info({ instancia: INSTANCIA }, 'ws pub/sub entre réplicas ativo');
+    return true;
+  } catch (e) {
+    log.error({ err: e }, 'ws pub/sub não iniciou — só entrega local');
+    return false;
+  }
+}
+
+function publicar(payload) {
+  if (!pubsubAtivo || !redisDisponivel()) return;
+  redis().publish(CANAL, JSON.stringify({ ...payload, origem: INSTANCIA })).catch(() => {});
+}
 
 let wss = null;
 const salas = new Map(); // chaveSala -> Set<ws>
@@ -80,28 +116,33 @@ function encerrarWebSocket(codigo = 1001, motivo = 'reiniciando') {
 function estatisticasWebSocket() {
   let motoboys = 0, painel = 0;
   for (const [chave, set] of salas) { if (chave.startsWith('motoboy:')) motoboys += set.size; else if (chave !== '__super__') painel += set.size; }
-  return { motoboys, painel, total: wss ? wss.clients.size : 0 };
+  return { motoboys, painel, total: wss ? wss.clients.size : 0, pubsub: pubsubAtivo, instancia: INSTANCIA };
 }
 
 // Emite um evento para todos os clientes conectados de uma empresa.
 // Também alcança os super admins (sala global), que veem todas as empresas.
+function entregarSala(chave, msg) {
+  const sala = salas.get(chave);
+  if (!sala) return;
+  for (const ws of sala) if (ws.readyState === 1) ws.send(msg);
+}
+function entregarEmpresa(empresaId, msg) {
+  entregarSala(empresaId, msg);
+  if (empresaId !== '__super__') entregarSala('__super__', msg);
+}
+function entregarMotoboy(motoboyId, msg) { entregarSala(`motoboy:${motoboyId}`, msg); }
+
 function emitirParaEmpresa(empresaId, evento, dados) {
   const msg = JSON.stringify({ evento, dados, em: new Date().toISOString() });
-  const entregar = (chave) => {
-    const sala = salas.get(chave);
-    if (!sala) return;
-    for (const ws of sala) if (ws.readyState === 1) ws.send(msg);
-  };
-  entregar(empresaId);
-  if (empresaId !== '__super__') entregar('__super__');
+  entregarEmpresa(empresaId, msg);                       // conexões desta réplica
+  publicar({ tipo: 'empresa', empresaId, msg });          // conexões das outras
 }
 
 // Emite um evento para o app de um motoboy específico.
 function emitirParaMotoboy(motoboyId, evento, dados) {
-  const sala = salas.get(`motoboy:${motoboyId}`);
-  if (!sala) return;
   const msg = JSON.stringify({ evento, dados, em: new Date().toISOString() });
-  for (const ws of sala) if (ws.readyState === 1) ws.send(msg);
+  entregarMotoboy(motoboyId, msg);
+  publicar({ tipo: 'motoboy', motoboyId, msg });
 }
 
-module.exports = { iniciarWebSocket, emitirParaEmpresa, emitirParaMotoboy, encerrarWebSocket, estatisticasWebSocket };
+module.exports = { iniciarWebSocket, iniciarPubSubWebSocket, emitirParaEmpresa, emitirParaMotoboy, encerrarWebSocket, estatisticasWebSocket };

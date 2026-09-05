@@ -28,12 +28,12 @@ Não é microserviços. Não vai ser microserviços por padrão. A seção 7 diz
 └───────┬──────────────┬─────────────────┬─────────────────────────────────┘
         │              │                 │
 ┌───────▼──────┐ ┌─────▼──────┐  ┌───────▼──────────────────────────────────┐
-│ PostgreSQL   │ │ Redis*     │  │ WORKER (1 instância)                      │
-│ shared-schema│ │ pub/sub WS │  │ cron · ondas de oferta · webhooks ·       │
-│ empresa_id   │ │ rate-limit │  │ fechamento financeiro · push · limpeza    │
-│ em toda tab. │ │ cache      │  └───────────────────────────────────────────┘
-└──────────────┘ └────────────┘   * Redis: em adoção (Sprint 2). Hoje esses
-                                    três itens vivem em memória → 1 réplica.
+│ PostgreSQL   │ │ Redis      │  │ WORKER (opcional)                         │
+│ shared-schema│ │ pub/sub WS │  │ cron · webhooks · fechamento · limpeza    │
+│ empresa_id   │ │ rate-limit │  │ (todo job com advisory lock: N processos  │
+│ em toda tab. │ │ cache      │  │  podem rodar, só um executa)              │
+└──────────────┘ └────────────┘  └───────────────────────────────────────────┘
+                 Redis opcional: sem REDIS_URL o sistema roda em modo 1 réplica.
 Externos: ORS/heigit (rotas, geocoding) · Google Maps · Expo Push · S3/R2 (fotos) · Sentry
 ```
 
@@ -71,7 +71,7 @@ backend/
 | R7 | Toda query em tabela com `empresa_id` **filtra por `empresa_id`**. Sem exceção, inclusive quando o id do recurso vem da URL. | Isolamento de tenant é a promessa central do produto. |
 | R8 | Nenhum `console.*` em `src/`. Só `shared/logger` (pino). | Log sem `reqId`/`empresaId` é log que ninguém consegue usar em produção. |
 
-**Estado atual das regras:** R1–R3 estão ativas com **baseline de 31 violações conhecidas** em `backend/.dependency-cruiser-known-violations.json` (dívida registrada em 2026-09). O CI falha em violação **nova**; as antigas são pagas conforme os módulos forem tocados. Para ver a dívida: `npm run deps:divida`. Ao pagar uma, rode `npm run deps:baseline` e commite o JSON.
+**Estado atual das regras:** R1–R3 estão ativas com **baseline de 28 violações conhecidas** em `backend/.dependency-cruiser-known-violations.json` (dívida registrada em 2026-09; eram 31, 3 pagas na Sprint 2 via eventos). O CI falha em violação **nova**; as antigas são pagas conforme os módulos forem tocados. Para ver a dívida: `npm run deps:divida`. Ao pagar uma, rode `npm run deps:baseline` e commite o JSON.
 
 ## 4. Fluxo de uma requisição
 
@@ -91,9 +91,7 @@ Tudo dentro do handler enxerga `reqId`, `empresaId` e `usuarioId` pelo `AsyncLoc
 
 ## 5. Comunicação entre módulos
 
-**Hoje:** chamada direta via `index.js` (síncrono) e alguns *fire-and-forget* com `try/catch` (score, push, ws).
-
-**Alvo (Sprint 2):** barramento de eventos de domínio em `shared/eventos.js`:
+**Implementado (Sprint 2):** barramento de eventos de domínio em `shared/eventos.js`. Cada módulo registra seus ouvintes em `registrarOuvintes()` no próprio `index.js`; `src/app.js` chama todos no boot.
 
 ```js
 // no módulo que causa o fato
@@ -105,9 +103,9 @@ eventos.ouvir('entrega.concluida', async (e) => scoreService.pontuar(e));
 
 Regras: nome `<agregado>.<fato-no-passado>`; payload só com ids e dados imutáveis (quem precisa de mais consulta); handler nunca lança (loga e segue); handler é idempotente (o mesmo evento pode chegar duas vezes).
 
-Implementação inicial: `EventEmitter` in-process. Quando houver Redis, o mesmo `emitir/ouvir` publica em Redis Streams — **nenhum módulo muda**. Essa é a fronteira que vira fila quando um módulo for extraído (§7).
+Implementação: `EventEmitter` in-process (o processo que causa o fato trata os ouvintes). Para extrair um módulo, o mesmo `emitir/ouvir` passa a publicar em Redis Streams — **nenhum módulo muda**. Essa é a fronteira que vira fila (§7).
 
-Catálogo inicial: `entrega.criada`, `entrega.atribuida`, `entrega.status_alterado`, `entrega.concluida`, `entrega.cancelada`, `oferta.aceita`, `motoboy.posicao`, `motoboy.online_alterado`, `chat.mensagem`, `financeiro.fechado`.
+Catálogo em uso: `oferta.aceita`, `oferta.recusada`, `entrega.ponto_concluido`, `entrega.concluida` (ouvintes: score, chat). Próximos: `entrega.criada`, `entrega.atribuida`, `entrega.cancelada`, `motoboy.online_alterado`, `financeiro.fechado`.
 
 ## 6. Multi-tenancy e dados
 
@@ -116,6 +114,7 @@ Catálogo inicial: `entrega.criada`, `entrega.atribuida`, `entrega.status_altera
 - **Próxima trava (Sprint 2):** Row-Level Security no Postgres (`SET app.empresa_id` por transação + policy por tabela). É a segunda camada: se um dev esquecer o `WHERE`, o banco barra.
 - Se um cliente exigir banco dedicado por contrato: `DATABASE_URL` resolvido por tenant no `contexto.js`. A arquitetura permite; não fazemos por padrão.
 - **Dados de alto volume** (`rastreamento`): particionar por dia (`PARTITION BY RANGE (capturado_em)`), retenção via `DROP PARTITION`; leitura de "posição atual" vem de `motoboy_posicao_atual` (1 linha por motoboy, UPSERT), nunca do histórico.
+- **Concorrência entre processos:** ondas de oferta com `FOR UPDATE SKIP LOCKED`; todo job do cron com `pg_try_advisory_lock` (`shared/locks.js`). Testado com 3 execuções paralelas (test/integracao/concorrencia).
 - **Migrations:** hoje idempotentes no boot, protegidas por `pg_advisory_lock` (uma réplica migra, as outras esperam). O CI sobe a API em banco **vazio** para garantir que um ambiente novo sempre nasce. Alvo: migrations versionadas (`node-pg-migrate`) como *release command*.
 
 ## 7. Quando (e como) um módulo vira serviço próprio
@@ -145,7 +144,7 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 ### ADR-002 · API sem estado; Redis para tudo que é compartilhado (2026-09)
 **Contexto:** WS, rate-limit, cache e timers vivem em memória → 1 réplica.
 **Decisão:** nenhum estado compartilhado em memória de processo. Redis para pub/sub, rate-limit e cache; worker separado para jobs; `FOR UPDATE SKIP LOCKED` / `pg_advisory_lock` onde N processos concorrem.
-**Consequências:** escala horizontal trivial; dependência nova (Redis). Migração em Sprint 2.
+**Consequências:** escala horizontal trivial; dependência nova (Redis, opcional — sem ela o sistema cai para modo 1 réplica automaticamente). Implementado na Sprint 2: `shared/redis.js`, `shared/cache.js`, `middleware/rateLimit.js` (store Redis), `realtime/ws.js` (pub/sub com id de instância para não duplicar entrega local).
 
 ### ADR-003 · Access token só em Bearer; cookie apenas para refresh (2026-09)
 **Contexto:** cookie `lx_access` com `sameSite=none` autenticava rotas de negócio; middleware CSRF existia mas nunca foi aplicado.
@@ -160,6 +159,15 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 **Contexto:** sem `CORS_ORIGIN`, a API refletia qualquer origem com credentials.
 **Decisão:** só origens listadas; sem `Origin` (app nativo, server-to-server) passa; `localhost` só fora de produção.
 
+### ADR-007 · Eventos de domínio in-process, locks no Postgres (2026-09)
+**Contexto:** score/chat eram chamados direto de filas/entregas com `try/catch` espalhado; jobs usavam flags em memória contra sobreposição.
+**Decisão:** `shared/eventos.js` (EventEmitter) para efeitos colaterais entre módulos; `shared/locks.js` (advisory lock) e `SKIP LOCKED` para exclusão mútua entre processos. Não adotar fila externa (BullMQ/Kafka) até haver um consumidor fora do processo.
+**Consequências:** módulos desacoplados sem infraestrutura nova; cron seguro em N réplicas; a troca para Redis Streams fica localizada em `eventos.js`.
+
+### ADR-008 · `src/app.js` separado de `server.js` (2026-09)
+**Decisão:** aplicação Express (middlewares, módulos, migrations) em `src/app.js`; processo (porta, WS, Redis, sinais) em `server.js`.
+**Consequências:** testes de integração sobem o app com supertest sem porta nem WS; o CI roda isolamento de tenant e concorrência contra Postgres+Redis reais.
+
 ### ADR-006 · Validação de entrada com zod (2026-09)
 **Decisão:** `validar(schema)` por rota; schemas em `shared/schemas.js`. Substitui `validators.js` e o sanitizer global (que será removido quando todas as rotas de escrita tiverem schema).
 
@@ -171,7 +179,8 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 | `npm run lint` | ESLint (erros reais, `no-console` em `src/`) |
 | `npm run deps:check` | Fronteiras de módulo (falha em violação nova) |
 | `npm run deps:divida` | Lista as violações conhecidas (baseline) |
-| `npm test` | Testes (vitest) — tenant, auth, schemas, errorHandler |
+| `npm test` | Testes (vitest). Unitários sempre; integração só com `DATABASE_URL_TEST` definida |
+| `npm run test:integracao` | Só integração (Postgres real; Redis se `REDIS_URL`) |
 | `npm run check` | lint + deps + test (o que o CI roda) |
 | `npm run smoke` | Cadeia principal contra uma API viva |
 
@@ -182,6 +191,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 | Sprint | Entrega | Status |
 |---|---|---|
 | 1 | Observabilidade (pino, reqId, Sentry, health, shutdown) · CORS · ADR-003 · zod nas rotas críticas · CI · testes base · boot em banco vazio | **feito** |
-| 2 | Redis (WS pub/sub, rate-limit, cache) · worker padrão · `SKIP LOCKED` nas ondas · barramento de eventos · RLS · migrations versionadas · testes de isolamento com banco | próximo |
+| 2A/2B | Redis opcional (WS pub/sub, rate-limit, cache) · `SKIP LOCKED` nas ondas · advisory locks no cron · barramento de eventos (score, chat) · `src/app.js` · testes de integração com Postgres+Redis no CI | **feito** |
+| 2C | Row-Level Security · migrations versionadas (`node-pg-migrate`) como release command | próximo |
 | 3 | `motoboy_posicao_atual` · particionamento de `rastreamento` · GPS em lote · upload direto S3 · `/metrics` + Grafana + alertas | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |

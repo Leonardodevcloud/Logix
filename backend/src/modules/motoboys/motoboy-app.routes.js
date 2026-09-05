@@ -4,6 +4,7 @@ const { query } = require('../../shared/db');
 const { verificarTokenMotoboy } = require('../../middleware/auth');
 const { limiteRastreamentoMotoboy } = require('../../middleware/rateLimit');
 const { validar } = require('../../middleware/validar');
+const eventos = require('../../shared/eventos');
 const { schemas } = require('../../shared/schemas');
 const storage = require('../../shared/storage');
 const push = require('../../shared/push');
@@ -599,15 +600,13 @@ module.exports = function motoboyAppRoutes() {
       // 5. Responder imediatamente ao app.
       res.json({ ok: true, todos_entregues: todosResolvidos, retorno_gerado: pontoRetornoCriado });
 
-      // 5b. Score (fire-and-forget, blindado): registra os eventos deste ponto.
-      try {
-        require('../score/score.service').registrarEventosConclusao({
-          empresaId, motoboyId: req.motoboy.id, entregaId, refId: pontoId,
-          insucesso: ehInsucesso, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
-        }).catch(() => {});
-      } catch {}
-      // 5c. Chat (fire-and-forget): corrida finalizada → encerra as conversas dela.
-      if (todosResolvidos) { try { require('../chat/chat.service').encerrarPorCorrida({ empresaId, entregaId }).catch(() => {}); } catch {} }
+      // 5b. Eventos de domínio: score pontua o ponto; chat encerra a corrida. Nenhum
+      // dos dois é conhecido aqui (ARQUITETURA.md §5).
+      eventos.emitir('entrega.ponto_concluido', {
+        empresaId, motoboyId: req.motoboy.id, entregaId, pontoId,
+        insucesso: ehInsucesso, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+      });
+      if (todosResolvidos) eventos.emitir('entrega.concluida', { empresaId, motoboyId: req.motoboy.id, entregaId });
 
       // 6. Fotos em background, vinculadas ao protocolo do ponto.
       if (Array.isArray(fotos_urls) && fotos_urls.length) {
@@ -694,14 +693,11 @@ module.exports = function motoboyAppRoutes() {
       // Responder imediatamente
       res.json({ ok: true, todos_entregues: todosEntregues });
 
-      // Score (fire-and-forget): sempre sucesso neste fluxo (sem ocorrência de insucesso).
-      try {
-        require('../score/score.service').registrarEventosConclusao({
-          empresaId, motoboyId: req.motoboy.id, entregaId, refId: pontoId,
-          insucesso: false, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
-        }).catch(() => {});
-      } catch {}
-      if (todosEntregues) { try { require('../chat/chat.service').encerrarPorCorrida({ empresaId, entregaId }).catch(() => {}); } catch {} }
+      eventos.emitir('entrega.ponto_concluido', {
+        empresaId, motoboyId: req.motoboy.id, entregaId, pontoId,
+        insucesso: false, temFoto: Array.isArray(fotos_urls) && fotos_urls.length > 0,
+      });
+      if (todosEntregues) eventos.emitir('entrega.concluida', { empresaId, motoboyId: req.motoboy.id, entregaId });
 
       // Fotos em background
       if (pontoId && Array.isArray(fotos_urls) && fotos_urls.length) {

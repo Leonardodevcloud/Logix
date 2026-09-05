@@ -4,8 +4,11 @@ const { AUDIT_CATEGORIES, STATUS_ENTREGA } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { emitirParaEmpresa, emitirParaMotoboy } = require('../../realtime/ws');
 const { notificarMotoboy } = require('../../shared/push');
+const { pool } = require('../../shared/db');
+const eventos = require('../../shared/eventos');
+// Níveis (prioridade por nível) vêm da API pública do módulo score.
 let scoreService = null;
-try { scoreService = require('../score/score.service'); } catch {}
+try { scoreService = require('../score'); } catch {}
 
 const STATUS_ATIVOS = [STATUS_ENTREGA.AGUARDANDO_COLETA, STATUS_ENTREGA.EM_COLETA, STATUS_ENTREGA.EM_ROTA];
 
@@ -360,38 +363,56 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
 // ── Promotor de ondas: abre a próxima onda das ofertas escalonadas cujo tempo
 // chegou. Roda no PROCESSO PRINCIPAL (precisa do WebSocket). Cumulativo: só
 // ADICIONA candidatos — quem já estava continua podendo aceitar.
+// Seguro para rodar em N processos ao mesmo tempo: cada oferta vencida é
+// travada com FOR UPDATE SKIP LOCKED dentro de uma transação curta — duas
+// réplicas nunca promovem a mesma onda (uma pega, a outra pula).
 async function promoverOndasPendentes() {
+  const client = await pool.connect();
   let ofertas = [];
   try {
-    const r = await query(
+    await client.query('BEGIN');
+    const r = await client.query(
       `SELECT o.id, o.entrega_id, o.empresa_id, o.ondas, o.onda_atual, o.onda_intervalo_seg, e.protocolo
          FROM entregas_ofertas o JOIN entregas e ON e.id = o.entrega_id
         WHERE o.status = 'ofertada' AND o.ondas IS NOT NULL
           AND o.proxima_onda_em IS NOT NULL AND o.proxima_onda_em <= now()
-        LIMIT 50`
+        LIMIT 50
+        FOR UPDATE OF o SKIP LOCKED`
     );
     ofertas = r.rows;
-  } catch { return; }
-
-  for (const o of ofertas) {
-    try {
+    // Avança o ponteiro da onda AINDA na transação: quem ler depois já vê a
+    // próxima onda agendada (ou NULL) e não repete o trabalho.
+    for (const o of ofertas) {
       const ondas = Array.isArray(o.ondas) ? o.ondas : [];
       const prox = Number(o.onda_atual) + 1;
-      if (prox >= ondas.length) { await query(`UPDATE entregas_ofertas SET proxima_onda_em = NULL WHERE id = $1`, [o.id]); continue; }
-      const nova = ondas[prox] || [];
-      for (const c of nova) {
-        await query(`INSERT INTO entregas_ofertas_candidatos (oferta_id, motoboy_id, distancia_km) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [o.id, c.m, c.d]);
-        emitirParaMotoboy(c.m, 'oferta.nova', { ofertaId: o.id, entregaId: o.entrega_id, protocolo: o.protocolo, distanciaKm: c.d });
-        notificarMotoboy(c.m, {
-          titulo: '🛵 Nova corrida disponível!',
-          corpo: `Corrida ${o.protocolo} a ${c.d} km de você. Toque para ver.`,
-          dados: { tipo: 'oferta', ofertaId: o.id, entregaId: o.entrega_id },
-        }).catch(() => {});
-      }
+      if (prox >= ondas.length) { await client.query(`UPDATE entregas_ofertas SET proxima_onda_em = NULL WHERE id = $1`, [o.id]); o._pular = true; continue; }
+      o._prox = prox; o._nova = ondas[prox] || [];
       const temMais = prox + 1 < ondas.length;
       const proxEm = temMais ? new Date(Date.now() + (Number(o.onda_intervalo_seg) || 15) * 1000).toISOString() : null;
-      await query(`UPDATE entregas_ofertas SET onda_atual = $2, proxima_onda_em = $3 WHERE id = $1 AND status = 'ofertada'`, [o.id, prox, proxEm]);
-    } catch { /* segue para a próxima oferta */ }
+      for (const c of o._nova) {
+        await client.query(`INSERT INTO entregas_ofertas_candidatos (oferta_id, motoboy_id, distancia_km) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [o.id, c.m, c.d]);
+      }
+      await client.query(`UPDATE entregas_ofertas SET onda_atual = $2, proxima_onda_em = $3 WHERE id = $1 AND status = 'ofertada'`, [o.id, prox, proxEm]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    return;
+  } finally {
+    client.release();
+  }
+
+  // Notificações FORA da transação (rede lenta não pode segurar lock de banco).
+  for (const o of ofertas) {
+    if (o._pular) continue;
+    for (const c of o._nova) {
+      emitirParaMotoboy(c.m, 'oferta.nova', { ofertaId: o.id, entregaId: o.entrega_id, protocolo: o.protocolo, distanciaKm: c.d });
+      notificarMotoboy(c.m, {
+        titulo: '🛵 Nova corrida disponível!',
+        corpo: `Corrida ${o.protocolo} a ${c.d} km de você. Toque para ver.`,
+        dados: { tipo: 'oferta', ofertaId: o.id, entregaId: o.entrega_id },
+      }).catch(() => {});
+    }
   }
 }
 
@@ -457,8 +478,8 @@ async function aceitarOferta({ empresaId, ofertaId, motoboyId }) {
     );
     outros.forEach(o => emitirParaMotoboy(o.motoboy_id, 'oferta.encerrada', { ofertaId }));
   } catch {}
-  // Score (fire-and-forget): pontua o aceite.
-  try { if (scoreService && scoreService.registrarEvento) scoreService.registrarEvento({ empresaId, motoboyId, tipo: 'aceitar_oferta', refId: ofertaId }).catch(() => {}); } catch {}
+  // Evento de domínio: score (e quem mais quiser) ouve 'oferta.aceita'.
+  eventos.emitir('oferta.aceita', { empresaId, motoboyId, ofertaId, entregaId, protocolo: upd.rows[0].protocolo });
   return { entregaId, protocolo: upd.rows[0].protocolo, ok: true };
 }
 
@@ -468,7 +489,7 @@ async function recusarOferta({ empresaId, ofertaId, motoboyId }) {
   const ofe = await query(`SELECT id FROM entregas_ofertas WHERE id = $1 AND empresa_id = $2`, [ofertaId, empresaId]);
   if (!ofe.rows[0]) throw AppError.naoEncontrado('Oferta não encontrada');
   await query(`UPDATE entregas_ofertas_candidatos SET recusada_em = now() WHERE oferta_id = $1 AND motoboy_id = $2`, [ofertaId, motoboyId]);
-  try { if (scoreService && scoreService.registrarEvento) scoreService.registrarEvento({ empresaId, motoboyId, tipo: 'recusar_oferta', refId: ofertaId }).catch(() => {}); } catch {}
+  eventos.emitir('oferta.recusada', { empresaId, motoboyId, ofertaId });
   return { ok: true };
 }
 
