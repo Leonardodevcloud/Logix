@@ -18,12 +18,17 @@ try { emitirParaEmpresa = require('../../realtime/ws').emitirParaEmpresa; } catc
 async function registrar({ empresaId, motoboyId, pontos }) {
   if (!Array.isArray(pontos) || !pontos.length) return { gravados: 0 };
   const agora = Date.now();
+  const IDADE_MAX_MS = 24 * 3600_000;
   const norm = pontos.map((p) => {
     let em = p.capturado_em ? new Date(p.capturado_em) : new Date(agora);
-    // Relógio do celular pode estar errado: aceita até 1 h no passado, nunca no futuro.
-    if (Number.isNaN(em.getTime()) || em.getTime() > agora + 60_000 || em.getTime() < agora - 3600_000) em = new Date(agora);
+    // Relógio do celular no futuro → carimba como agora. Ponto sem data → agora.
+    if (Number.isNaN(em.getTime()) || em.getTime() > agora + 60_000) em = new Date(agora);
+    // Ponto ANTIGO (buffer offline do app) é preservado com a data original —
+    // NUNCA re-carimbado, senão um lugar velho vira "posição atual". Mais de 24 h: descarta.
+    if (agora - em.getTime() > IDADE_MAX_MS) return null;
     return { lat: Number(p.lat), lng: Number(p.lng), entregaId: p.entrega_id || null, em, precisao: p.precisao_m ?? null, velocidade: p.velocidade ?? null };
-  }).sort((a, b) => a.em - b.em);
+  }).filter(Boolean).sort((a, b) => a.em - b.em);
+  if (!norm.length) return { gravados: 0, descartados: pontos.length };
   const ultimo = norm[norm.length - 1];
 
   const valores = []; const params = [];
