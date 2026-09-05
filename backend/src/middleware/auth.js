@@ -48,7 +48,7 @@ function verificarTokenMotoboy(req, res, next) {
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
     if (payload.perfil !== 'motoboy') return next(AppError.naoAutorizado('Acesso restrito a motoboys'));
     req.motoboy = { id: payload.id, empresaId: payload.empresaId, nome: payload.nome };
-    try { const ctx = require('../shared/contexto'); ctx.setEmpresa(payload.empresaId); ctx.setUsuario(payload.id); } catch (_) {}
+    try { const ctx = require('../shared/contexto'); ctx.setEmpresa(payload.empresaId); ctx.setRlsEmpresa(payload.empresaId); ctx.setUsuario(payload.id); } catch (_) {}
     next();
   } catch { next(AppError.naoAutorizado('Token do motoboy inválido ou expirado')); }
 }

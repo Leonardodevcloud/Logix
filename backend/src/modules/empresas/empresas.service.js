@@ -3,7 +3,7 @@ const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, ERRO_MSGS, PERFIS } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { apenasDigitos, ehCnpj, obrigatorios } = require('../../shared/validators');
-const authService = require('../auth/auth.service');
+const authService = require('../auth').service;
 
 async function listar({ ativo }) {
   const cond = []; const params = [];
@@ -43,7 +43,7 @@ async function criar(dados, { adminId, ip }) {
        dados.cidade || null, dados.estado || null, dados.responsavel || null, dados.email, dados.telefone || null]
     );
     const empresa = rows[0];
-    const permissoesService = require('../permissoes/permissoes.service');
+    const permissoesService = require('../permissoes').service;
     await permissoesService.habilitarModulosPadrao(empresa.id, (sql, params) => cliente.query(sql, params));
     const papelAdminId = await permissoesService.idDoTemplate('Administrador');
     const usuario = await authService.criarUsuario({

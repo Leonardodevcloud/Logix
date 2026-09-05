@@ -1,9 +1,13 @@
 const AppError = require('../shared/AppError');
 const { PERFIS } = require('../shared/constants');
-const { MODULOS } = require('../modules/permissoes/permissoes.shared');
-const service = require('../modules/permissoes/permissoes.service');
-
-const CODIGOS = new Set(MODULOS.map((m) => m.codigo));
+// Requires PREGUIÇOSOS: permissoes.routes importa este middleware, e este middleware
+// importa o módulo permissoes — carregar no topo fecha um ciclo em que
+// `exigirPermissao` chega undefined dependendo da ordem de carga (quebrava os testes).
+let _mod = null;
+function mod() { if (!_mod) _mod = require('../modules/permissoes'); return _mod; }
+const service = new Proxy({}, { get: (_, k) => mod().service[k] });
+let _codigos = null;
+function CODIGOS() { if (!_codigos) _codigos = new Set(mod().MODULOS.map((m) => m.codigo)); return _codigos; }
 
 // Exige que o cliente tenha o módulo contratado. Super admin passa direto.
 function exigirModulo(codigo) {
@@ -31,7 +35,7 @@ function exigirPermissao(permissao) {
       const doPapel = await service.permissoesDoUsuario(u.id);
       if (!doPapel.has(permissao)) return next(AppError.proibido('Sem permissão para esta ação'));
       const codigo = permissao.split('.')[0];
-      if (CODIGOS.has(codigo)) {
+      if (CODIGOS().has(codigo)) {
         const empresaId = req.empresaId || u.empresaId;
         if (!(await service.empresaTemModulo(empresaId, codigo))) {
           return next(AppError.proibido(`Módulo "${codigo}" não está no plano deste cliente`));

@@ -19,7 +19,7 @@ module.exports = function lancamentoRoutes() {
       let motoboyId = req.body.motoboy_id;
       let distribuicao = req.body.distribuicao;
       if (req.lojaId && motoboyId) {
-        const clienteHub = require('../../clientehub/clientehub.service');
+        const clienteHub = require('../../clientehub').service;
         const podeEscolher = await clienteHub.lojaPode(req.lojaId, 'pode_escolher_profissional');
         if (!podeEscolher) { motoboyId = undefined; distribuicao = 'automatica'; }
       }

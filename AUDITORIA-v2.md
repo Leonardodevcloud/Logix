@@ -11,7 +11,7 @@
 |---|---|---|---|
 | Arquitetura | 8 | **8.5** | Monólito modular confirmado como decisão (ADR-001); fronteiras agora impostas por CI (dependency-cruiser), não por disciplina; módulos se comunicam por eventos de domínio. |
 | Escalabilidade | 5 | **8.5** | De 1 réplica obrigatória para N réplicas (Redis pub/sub, rate-limit e cache compartilhados; `SKIP LOCKED`; advisory locks). GPS: posição atual O(1), histórico particionado por dia, ingestão em lote com buffer offline. **2 réplicas em produção.** |
-| Segurança | 6.5 | **8** | CSRF eliminado por design (auth só Bearer), CORS por tenant, zod, SSL estrito, token do WS fora da URL, arquivos por URL assinada, 1 falha de autorização real corrigida (§4). |
+| Segurança | 6.5 | **8.5** | CSRF eliminado por design (auth só Bearer), CORS por tenant, zod, SSL estrito, token do WS fora da URL, arquivos por URL assinada, **Row-Level Security** pronto com testes (falta ligar em produção), 1 falha de autorização real corrigida (§4). |
 | Observabilidade | 3 | **8** | pino JSON com `reqId`/`empresaId`, Sentry, Prometheus `/metrics` + Grafana, health live/ready, graceful shutdown. |
 | Governança | 3.5 | **8** | CI (lint · fronteiras · audit · 39 testes · boot em banco vazio · integração com Postgres+Redis reais), migrations versionadas com pre-deploy e rollback testado, 11 ADRs, OpenAPI da API pública. |
 
@@ -100,13 +100,13 @@ O ponto a fazer na reunião: **nenhuma dessas foi encontrada por revisão de có
 
 ## 6. O que ainda falta (ordem sugerida)
 
-1. **Remover suporte a base64** (rotas legadas 15 MB, `resolverArquivo` legado) quando `logix_uploads_legado_base64_total` ficar zero por uma semana; rodar `npm run fotos:migrar` + `VACUUM FULL protocolos`.
-2. **Row-Level Security** como segunda trava de tenant. Custo: `set_config` local exige transação por request ou reescrita do `shared/db.js`. Fazer depois que os testes de integração cobrirem mais rotas.
+1. **Ligar o RLS em produção** (código, migration e testes prontos — `DEPLOY-rls.md`): criar papel `NOSUPERUSER`, trocar `DATABASE_URL`, `RLS_ENABLED=true`. `/health/ready` mostra `rls.efetivo`.
+2. **Remover suporte a base64** (rotas legadas 15 MB, `resolverArquivo` legado) quando `logix_uploads_legado_base64_total` ficar zero por uma semana; rodar `npm run fotos:migrar` + `VACUUM FULL protocolos`.
 3. **Pagar as 28 violações de fronteira** módulo a módulo (tenant.js → permissoes; filas → precos; etc.).
 4. **Fila de ingestão** (Redis Streams) entre `/app/posicoes` e o banco quando o volume justificar (>~50 pontos/s sustentados) — hoje 1 transação por lote é suficiente.
-5. **Branding**: logo ainda em base64 na tabela (pequeno; migrar para o `uploads` com finalidade `logo`).
-6. **OpenTelemetry** (traces por request com spans de pg/ORS) e **rotação de segredos** (`kid` no JWT).
-7. **Documentação de DR/LGPD**: PITR habilitado, teste de restore trimestral, retenção de dados pessoais (GPS já tem).
+5. **OpenTelemetry** (traces por request com spans de pg/ORS) e **rotação de segredos** (`kid` no JWT).
+6. **LGPD**: preencher encarregado/DPO e escrever os scripts de exportação/exclusão por titular (`docs/LGPD-DADOS-PESSOAIS.md` já mapeia dados, bases legais e retenções).
+7. **DR**: primeiro teste de restauração trimestral registrado (`docs/DR-CONTINUIDADE.md`).
 8. Consolidar as migrations de boot (baseline) em um único arquivo versionado.
 
 ---
@@ -122,4 +122,4 @@ Railway → API                 → 2 replicas · Redis · pre-deploy "npm run m
 Postgres → SELECT relkind FROM pg_class WHERE relname='rastreamento'  → 'p'
 ```
 
-Documentos: `ARQUITETURA.md` (regras, ADRs, critérios de extração), `DEPLOY-*.md` por sprint, `docs/grafana/`.
+Documentos: `ARQUITETURA.md` (regras, ADRs, critérios de extração), `DEPLOY-*.md` por sprint, `docs/grafana/`, `docs/DR-CONTINUIDADE.md`, `docs/LGPD-DADOS-PESSOAIS.md`.

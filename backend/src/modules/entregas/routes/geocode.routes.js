@@ -7,7 +7,7 @@ const { consultarCep } = require('../../../integracoes/cep');
 const { query } = require('../../../shared/db');
 // Contador de uso de API (fire-and-forget).
 let contar = () => {};
-try { contar = require('../../apiuso/apiuso.service').contar; } catch (_) {}
+try { contar = require('../../apiuso').service.contar; } catch (_) {}
 const PROV_GEO = () => (process.env.GOOGLE_MAPS_API_KEY ? 'google' : 'ors');
 
 const BASE_ORS = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';

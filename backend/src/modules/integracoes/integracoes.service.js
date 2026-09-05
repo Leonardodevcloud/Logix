@@ -309,7 +309,7 @@ async function gravarServico({ credencial, body, ip }) {
   const codigoProf = M.s(body.codigoProf || body.codigoProfissional);
   let motoboyAlvo = null, avisoProf = null;
   if (codigoProf) {
-    const clienteHub = require('../clientehub/clientehub.service');
+    const clienteHub = require('../clientehub').service;
     const podeEscolher = credencial.lojaId ? await clienteHub.lojaPode(credencial.lojaId, 'pode_escolher_profissional') : true;
     if (!podeEscolher) {
       avisoProf = { profissionalNaoAlocado: true, codigoProfInformado: codigoProf,
@@ -331,7 +331,7 @@ async function gravarServico({ credencial, body, ip }) {
     }
   }
 
-  const entregasService = require('../entregas/entregas.service');
+  const entregasService = require('../entregas').service;
   const entrega = await entregasService.criarEntrega({
     empresaId: credencial.empresaId,
     lojaId: credencial.lojaId,
@@ -355,7 +355,7 @@ async function gravarServico({ credencial, body, ip }) {
   // corridas e disponibilidade). Se não der, a corrida fica criada sem profissional
   // e o motivo volta na resposta (não bloqueia o lançamento).
   if (motoboyAlvo) {
-    const filasService = require('../filas/filas.service');
+    const filasService = require('../filas').service;
     try {
       await filasService.atribuir({ empresaId: credencial.empresaId, entregaId: entrega.id, motoboyId: motoboyAlvo, usuarioId: null, ip });
     } catch (e) {
@@ -505,12 +505,12 @@ async function cancelarServico({ credencial, body, ip }) {
   // (pode_cancelar_associada). Corrida ainda na fila pode ser cancelada livremente.
   const associada = !!e.motoboy_id || e.status !== 'aguardando_atribuicao';
   if (associada && credencial.lojaId) {
-    const clienteHub = require('../clientehub/clientehub.service');
+    const clienteHub = require('../clientehub').service;
     const permitido = await clienteHub.lojaPode(credencial.lojaId, 'pode_cancelar_associada');
     if (!permitido) return { Erro: 'Alocado' }; // cliente não pode cancelar corrida já associada
   }
 
-  const entregasService = require('../entregas/entregas.service');
+  const entregasService = require('../entregas').service;
   await entregasService.cancelarEntrega({
     empresaId: credencial.empresaId, id: e.id,
     motivo: M.s(body.descricaoMotivo) || 'Cancelado via integração',
@@ -541,7 +541,7 @@ async function calcularServico({ credencial, body }) {
     distanciaKm = r.distanciaKm; duracaoMin = r.duracaoMin;
   } catch { /* segue sem otimização */ }
 
-  const configService = require('../config/config.service');
+  const configService = require('../config').service;
   const preco = await configService.precificar({
     empresaId: credencial.empresaId, lojaId: credencial.lojaId, km: distanciaKm,
   });

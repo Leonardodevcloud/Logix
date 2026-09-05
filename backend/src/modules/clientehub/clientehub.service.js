@@ -2,7 +2,7 @@ const { query } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { PERFIS } = require('../../shared/constants');
-const authService = require('../auth/auth.service');
+const authService = require('../auth').service;
 // Geocoder (ORS) para localizar os endereços de centro de custo no mapa.
 let geocodificar = null;
 try { geocodificar = require('../../integracoes/openrouteservice').geocodificar; } catch {}
@@ -109,7 +109,7 @@ async function criarUsuarioCentro({ empresaId, lojaId, centroId, nome, email, te
   if (!centro.rows[0]) throw AppError.naoEncontrado('Centro de custo não encontrado');
 
   let papelId = null;
-  try { papelId = await require('../permissoes/permissoes.service').idDoTemplate('Loja'); } catch {}
+  try { papelId = await require('../permissoes').service.idDoTemplate('Loja'); } catch {}
   let novo;
   try {
     novo = await authService.criarUsuario({ empresaId, lojaId, perfil: PERFIS.LOJA, nome, email, telefone: telefone || null, senha, papelId });
@@ -151,7 +151,7 @@ async function criarUsuario({ empresaId, lojaId, nome, email, telefone, senha, u
   await exigirLoja(empresaId, lojaId);
   if (!nome || !email || !senha) throw AppError.validacao('Nome, e-mail e senha são obrigatórios');
   let papelId = null;
-  try { papelId = await require('../permissoes/permissoes.service').idDoTemplate('Loja'); } catch {}
+  try { papelId = await require('../permissoes').service.idDoTemplate('Loja'); } catch {}
   let novo;
   try {
     novo = await authService.criarUsuario({ empresaId, lojaId, perfil: PERFIS.LOJA, nome, email, telefone: telefone || null, senha, papelId });

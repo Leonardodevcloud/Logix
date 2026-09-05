@@ -3,7 +3,7 @@ const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./equipe.service');
-const permissoesService = require('../permissoes/permissoes.service');
+const permissoesService = require('../permissoes').service;
 
 function initEquipeRoutes() {
   const router = express.Router();

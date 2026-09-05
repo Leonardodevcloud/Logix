@@ -5,6 +5,31 @@ const { registrarAuditoria } = require('../../shared/auditLogger');
 const { TEMA_PADRAO, ehCorHex, extrairSubdominio } = require('./branding.shared');
 
 // Resolve o empresa_id a partir do host (domínio próprio ou subdomínio).
+// Imagens da marca: no banco fica a CHAVE do storage (ou URL externa/legado). Na leitura,
+// chave vira URL assinada de 7 dias (máximo do S3) — o painel/rastreio/manifest leem várias
+// vezes ao dia, e 7 dias evita re-assinar a cada request.
+const CAMPOS_IMAGEM = ['logo_url', 'logo_escuro_url', 'icone_app_url', 'favicon_url', 'og_image_url'];
+async function assinarImagens(obj) {
+  const { urlParaExibir } = require('../uploads');
+  for (const c of CAMPOS_IMAGEM) if (obj && obj[c]) obj[c] = await urlParaExibir(obj[c], { expiraSeg: 7 * 24 * 3600 });
+  return obj;
+}
+// Na gravação: chave (upload direto) fica como veio; data URI (legado) sobe para o storage.
+async function normalizarImagens(empresaId, dados) {
+  const { resolverArquivo } = require('../uploads');
+  const { ehChaveStorage } = require('../../shared/storage');
+  for (const c of CAMPOS_IMAGEM) {
+    const v = dados[c];
+    if (!v || typeof v !== 'string') continue;
+    if (ehChaveStorage(v) || /^data:/.test(v)) {
+      const arq = await resolverArquivo({ empresaId, finalidade: 'logo', entrada: v });
+      dados[c] = arq ? arq.key : null;
+    }
+    // URL externa (http...) é aceita como está.
+  }
+  return dados;
+}
+
 async function resolverEmpresaPorHost(host) {
   if (!host) return null;
   const limpo = host.split(':')[0].toLowerCase();
@@ -31,7 +56,7 @@ async function obterPublico({ empresaId = null, host = null }) {
   );
   if (!rows[0]) return { ...TEMA_PADRAO, empresa_id: id };
   const b = rows[0];
-  return {
+  return assinarImagens({
     empresa_id: b.empresa_id,
     nome_exibicao: b.nome_exibicao || b.nome_fantasia || b.razao_social || TEMA_PADRAO.nome_exibicao,
     logo_url: b.logo_url,
@@ -45,19 +70,20 @@ async function obterPublico({ empresaId = null, host = null }) {
     cor_clara: b.cor_clara || TEMA_PADRAO.cor_clara,
     mostrar_powered_by: b.mostrar_powered_by,
     extra: b.extra || null,
-  };
+  });
 }
 
 // Branding completo (inclui domínio/remetente) — uso na tela de configuração.
 async function obterCompleto(empresaId) {
   const { rows } = await query(`SELECT * FROM empresa_branding WHERE empresa_id = $1`, [empresaId]);
-  return rows[0] || null;
+  return rows[0] ? assinarImagens(rows[0]) : null;
 }
 
 // Cria/atualiza (upsert) o branding de uma empresa.
 async function definir({ empresaId, dados, usuarioId, ip }) {
   // Garantir que empresaId existe e é válido
   if (!empresaId) throw AppError.validacao('empresa_id é obrigatório');
+  await normalizarImagens(empresaId, dados); // logo em base64 nunca mais vai para o banco
   for (const campo of ['cor_primaria', 'cor_secundaria', 'cor_destaque', 'cor_clara']) {
     if (dados[campo] != null && !ehCorHex(dados[campo])) {
       throw AppError.validacao(`Cor inválida em ${campo} (use o formato #RRGGBB)`);
@@ -103,7 +129,7 @@ async function definir({ empresaId, dados, usuarioId, ip }) {
     });
     console.log('[branding.definir] GRAVADO empresa=%s cor_primaria=%s logo=%s dominio=%s subdominio=%s',
       empresaId, rows[0].cor_primaria, rows[0].logo_url ? 'sim' : 'nao', rows[0].dominio || '-', rows[0].subdominio || '-');
-    return rows[0];
+    return assinarImagens(rows[0]);
   } catch (e) {
     if (e.code === '23505') throw AppError.conflito('Domínio ou subdomínio já está em uso por outra empresa');
     // Log detalhado para diagnóstico

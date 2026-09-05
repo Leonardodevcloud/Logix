@@ -6,7 +6,7 @@ try { const ws = require('../../realtime/ws'); emitirParaEmpresa = ws.emitirPara
 let notificarMotoboy = async () => {};
 try { notificarMotoboy = require('../../shared/push').notificarMotoboy; } catch {}
 let empresaTemModulo = async () => true;
-try { empresaTemModulo = require('../permissoes/permissoes.service').empresaTemModulo; } catch {}
+try { empresaTemModulo = require('../permissoes').service.empresaTemModulo; } catch {}
 
 async function chatAtivo(empresaId) { try { return await empresaTemModulo(empresaId, 'chat'); } catch { return false; } }
 

@@ -3,6 +3,7 @@
 import { casca } from '../core/layout.js';
 import { el, secHeader, campo } from '../core/ui.js';
 import { get, put } from '../core/api.js';
+import { uploadDireto } from '../core/upload.js';
 
 const PADRAO = {
   cor_primaria: '#185FA5',
@@ -66,7 +67,10 @@ export async function montar(container) {
     const nomeInp = el('input', { class: 'lx-input', value: dados.nome_exibicao || '', placeholder: 'Nome exibido no painel do cliente' });
     const ehDataUri = (v) => typeof v === 'string' && v.startsWith('data:');
     // Logo enviada por upload (data URI). Se a empresa já tem logo em base64, começa com ela.
+    // logoData: o que vai ser GRAVADO (chave do storage após upload direto, ou data URI legado).
+    // logoPreview: o que aparece na tela (a URL assinada atual ou o data URI recém-redimensionado).
     let logoData = ehDataUri(dados.logo_url) ? dados.logo_url : null;
+    let logoPreview = dados.logo_url || null;
     const logoInp = el('input', { class: 'lx-input', value: ehDataUri(dados.logo_url) ? '' : (dados.logo_url || ''), placeholder: 'https://…/logo.png (ou envie um arquivo)' });
     const subdominioInp = el('input', { class: 'lx-input', value: dados.subdominio || '', placeholder: 'pecasexpress (sem .logix.com.br)' });
     const dominioInp = el('input', { class: 'lx-input', value: dados.dominio || '', placeholder: 'painel.ig-express.com (domínio próprio)' });
@@ -82,12 +86,12 @@ export async function montar(container) {
     const thumb = el('div', { style: 'width:40px;height:40px;border-radius:8px;border:1px solid var(--lx-linha);background:#fff;display:grid;place-items:center;overflow:hidden;flex:none' });
     function pintarThumb() {
       thumb.innerHTML = '';
-      const fonte = logoData || logoInp.value.trim();
+      const fonte = logoPreview || logoInp.value.trim();
       if (fonte) thumb.append(el('img', { src: fonte, style: 'width:100%;height:100%;object-fit:contain' }));
       else thumb.append(el('span', { style: 'font-size:10px;color:var(--lx-tinta-2)' }, 'logo'));
     }
     const btnUpload = el('button', { class: 'lx-btn lx-btn-secundario', type: 'button', onClick: () => fileInp.click() }, 'Enviar arquivo');
-    const btnLimpar = el('button', { class: 'lx-btn lx-btn-secundario', type: 'button', onClick: () => { logoData = null; logoInp.value = ''; pintarThumb(); pintarPreview(); } }, 'Remover');
+    const btnLimpar = el('button', { class: 'lx-btn lx-btn-secundario', type: 'button', onClick: () => { logoData = null; logoPreview = null; logoInp.value = ''; pintarThumb(); pintarPreview(); } }, 'Remover');
     fileInp.addEventListener('change', () => {
       const f = fileInp.files && fileInp.files[0];
       if (!f) return;
@@ -100,9 +104,16 @@ export async function montar(container) {
           w = Math.round(w * escala); h = Math.round(h * escala);
           const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
           cv.getContext('2d').drawImage(img, 0, 0, w, h);
-          logoData = cv.toDataURL('image/png');
+          const dataUri = cv.toDataURL('image/png');
+          logoPreview = dataUri; logoData = dataUri; // fallback: base64 (o servidor sobe para o storage)
           logoInp.value = '';
           pintarThumb(); pintarPreview();
+          // Upload direto ao storage: se der certo, grava só a chave.
+          cv.toBlob(async (blob) => {
+            if (!blob) return;
+            const key = await uploadDireto(new File([blob], 'logo.png', { type: 'image/png' }), 'logo');
+            if (key) logoData = key;
+          }, 'image/png');
         };
         img.src = reader.result;
       };
@@ -117,7 +128,7 @@ export async function montar(container) {
       const nomeCliente = nomeInp.value.trim() ||
         (empresas.find(e => String(e.id) === String(empresaId))?.razao_social || 'Cliente');
 
-      const logoUrl = logoData || logoInp.value.trim();
+      const logoUrl = logoPreview || logoInp.value.trim();
       const marcaBox = logoUrl
         ? el('div', { style: 'width:30px;height:30px;border-radius:8px;overflow:hidden;background:#fff;display:grid;place-items:center' },
             el('img', { src: logoUrl, style: 'width:100%;height:100%;object-fit:contain', onerror: function(){ this.style.display='none'; } }))

@@ -5,7 +5,7 @@ const AppError = require('../../shared/AppError');
 const { PERFIS } = require('../../shared/constants');
 const service = require('./mapa.service');
 let lojaPode = async () => true;
-try { lojaPode = require('../clientehub/clientehub.service').lojaPode; } catch {}
+try { lojaPode = require('../clientehub').service.lojaPode; } catch {}
 
 module.exports = function mapaRoutes() {
   const router = express.Router();

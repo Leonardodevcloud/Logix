@@ -3,7 +3,7 @@ const { verificarToken } = require('../../middleware/auth');
 const { resolverTenant, exigirTenant } = require('../../middleware/tenant');
 const { exigirModulo, exigirPermissao } = require('../../middleware/permissoes');
 const service = require('./filas.service');
-const clienteHub = require('../clientehub/clientehub.service');
+const clienteHub = require('../clientehub').service;
 const AppError = require('../../shared/AppError');
 
 function initFilasRoutes() {

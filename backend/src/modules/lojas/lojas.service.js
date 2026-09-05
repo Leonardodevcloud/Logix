@@ -3,7 +3,7 @@ const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES, PERFIS } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
 const { apenasDigitos, obrigatorios } = require('../../shared/validators');
-const authService = require('../auth/auth.service');
+const authService = require('../auth').service;
 
 // Lista as lojas de uma empresa (com contagem de entregas e usuários).
 async function listar({ empresaId, ativo }) {
@@ -54,7 +54,7 @@ async function criar({ empresaId, dados, usuarioId, ip }) {
     // Cria usuário de acesso da loja, se vier email + senha.
     let usuarioLoja = null;
     if (dados.email && dados.senha) {
-      const permissoesService = require('../permissoes/permissoes.service');
+      const permissoesService = require('../permissoes').service;
       // Papel "Loja" (template de loja) ou cai para Administrador da empresa, se não existir.
       let papelId = null;
       try { papelId = await permissoesService.idDoTemplate('Loja'); } catch {}
@@ -126,7 +126,7 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
   // `lojas`, e o campo `senha` era descartado em silêncio — por isso a loja não
   // conseguia entrar com a senha nova. O login usa usuarios.email + usuarios.senha_hash.
   if (dados.email || dados.senha) {
-    const { hashSenha } = require('../auth/auth.shared');
+    const { hashSenha } = require('../auth');
     // Cobre tanto o perfil atual ('loja') quanto o legado ('cliente').
     const { rows: us } = await query(
       `SELECT id FROM usuarios WHERE loja_id = $1 AND perfil = ANY($2::text[]) ORDER BY criado_em LIMIT 1`,
@@ -145,7 +145,7 @@ async function atualizar({ empresaId, id, dados, usuarioId, ip }) {
       }
     } else if (dados.email && dados.senha) {
       // Loja ainda sem login: cria o usuário de acesso agora (mesma lógica do criar()).
-      const permissoesService = require('../permissoes/permissoes.service');
+      const permissoesService = require('../permissoes').service;
       let papelId = null;
       try { papelId = await permissoesService.idDoTemplate('Loja'); } catch {}
       if (!papelId) { try { papelId = await permissoesService.idDoTemplate('Administrador'); } catch {} }

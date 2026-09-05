@@ -2,8 +2,8 @@ const { query } = require('../../shared/db');
 const AppError = require('../../shared/AppError');
 const { AUDIT_CATEGORIES } = require('../../shared/constants');
 const { registrarAuditoria } = require('../../shared/auditLogger');
-const authService = require('../auth/auth.service');
-const permissoesService = require('../permissoes/permissoes.service');
+const authService = require('../auth').service;
+const permissoesService = require('../permissoes').service;
 
 // Usuários (perfil cliente) do tenant, com o nome do papel.
 async function listarEquipe(empresaId) {

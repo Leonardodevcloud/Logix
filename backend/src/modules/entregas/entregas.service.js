@@ -49,7 +49,7 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
   let valorClienteCent = null, valorMotoboyCent = null;
   let precoDinamicoId = null, dinamicaAddCliente = 0, dinamicaAddMotoboy = 0;
   try {
-    const configService = require('../config/config.service');
+    const configService = require('../config').service;
     const preco = await configService.precificar({ empresaId, lojaId, km: distanciaKm });
     valorClienteCent = preco.valor_cliente_cent;
     valorMotoboyCent = preco.valor_motoboy_cent;
@@ -114,7 +114,7 @@ async function criarEntrega({ empresaId, lojaId = null, criadoPor, coleta, desti
     if (status === STATUS_ENTREGA.AGUARDANDO_ATRIBUICAO && !naoDispararAutomatico) {
       (async () => {
         try {
-          const filasService = require('../filas/filas.service');
+          const filasService = require('../filas').service;
           await filasService.dispararOferta({ empresaId, entregaId, usuarioId: criadoPor, ip, automatico: true });
           console.log('[entregas] oferta automática disparada para', protocolo);
         } catch (e) {
@@ -1026,7 +1026,7 @@ async function calcularRotaEPreco({ empresaId, lojaId, coleta, pontos }) {
   if (seq.length >= 2) {
     try { const r = await tracarRota(seq); if (r.distanciaKm > 0) distanciaKm = parseFloat(r.distanciaKm.toFixed(2)); } catch {}
   }
-  const configService = require('../config/config.service');
+  const configService = require('../config').service;
   const preco = await configService.precificar({ empresaId, lojaId: lojaId || null, km: distanciaKm });
   return { distancia_km: distanciaKm, valor_cliente_cent: preco.valor_cliente_cent, valor_motoboy_cent: preco.valor_motoboy_cent };
 }

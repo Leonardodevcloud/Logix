@@ -11,7 +11,7 @@ const { requestLogger } = require('./middleware/requestLogger');
 const { sanitizarEntrada } = require('./middleware/sanitizer');
 const { limiteGlobal } = require('./middleware/rateLimit');
 const errorHandler = require('./middleware/errorHandler');
-const { query, estadoPool } = require('./shared/db');
+const { query, estadoPool, verificarRls } = require('./shared/db');
 const eventos = require('./shared/eventos');
 const metricas = require('./shared/metricas');
 const { rodarMigracoes } = require('./shared/migracoes');
@@ -80,6 +80,8 @@ async function migrarTabelas() {
   await rodarMigracoes();
   // Partições do histórico GPS: garante os próximos 7 dias (o cron mantém depois).
   await posicoes.manterParticoes({ diasFrente: 7, retencaoDias: Number(process.env.RASTREAMENTO_RETENCAO_DIAS) || 30 });
+  const rls = await verificarRls();
+  if (rls.ativo) log.info(rls, rls.efetivo ? 'RLS ativo e efetivo' : 'RLS ativo mas NÃO efetivo');
 }
 
 // Ouvintes de eventos de domínio (score, chat, ...). Idempotente.
@@ -106,7 +108,17 @@ function montarApp(estado = { encerrando: false }) {
   app.use(requestLogger);
   app.use(metricas.middlewareHttp);
   app.use(compression());
-  app.use(helmet());
+  // Helmet com CSP ajustada: a API serve algumas páginas HTML (comprovante de entrega
+  // impresso) cujas imagens agora vêm do storage (URL assinada https), não mais data:.
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // painel (Vercel) consome a API de outra origem
+  }));
   // CORS: lista explícita de origens. SEM CORS_ORIGIN, nenhuma origem cross-site é
   // aceita (antes o padrão era refletir QUALQUER origem com credentials — inseguro).
   // Requisições sem header Origin (app nativo, ERP server-to-server, curl) passam.
@@ -174,7 +186,7 @@ function montarApp(estado = { encerrando: false }) {
     const t0 = Date.now();
     try {
       await query('SELECT 1');
-      res.json({ ok: true, versao: VERSAO, db_ms: Date.now() - t0, pool: estadoPool(), encerrando: estado.encerrando });
+      res.json({ ok: true, versao: VERSAO, db_ms: Date.now() - t0, pool: estadoPool(), rls: await verificarRls(), encerrando: estado.encerrando });
     } catch (e) {
       res.status(503).json({ ok: false, erro: 'banco indisponível', db_ms: Date.now() - t0 });
     }

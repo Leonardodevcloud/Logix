@@ -197,7 +197,7 @@ module.exports = function motoboyAppRoutes() {
   });
 
   // ── Ofertas de corrida ──────────────────────────────────────────
-  const filasService = require('../filas/filas.service');
+  const filasService = require('../filas').service;
 
   // GET /motoboys/app/oferta-ativa — oferta pendente (compat, singular).
   router.get('/app/oferta-ativa', verificarTokenMotoboy, async (req, res, next) => {

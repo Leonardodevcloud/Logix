@@ -152,7 +152,7 @@ async function registrarEventosConclusao({ empresaId, motoboyId, entregaId, refI
 //  FASE 2 — Campanhas (missões) com alvo + bônus em R$ (liberação manual)
 // ═══════════════════════════════════════════════════════════════════
 const AppError = require('../../shared/AppError');
-const financeiro = require('../financeiro/financeiro.service');
+const financeiro = require('../financeiro').service;
 
 const HOJE = "(now() AT TIME ZONE 'America/Bahia')::date";
 

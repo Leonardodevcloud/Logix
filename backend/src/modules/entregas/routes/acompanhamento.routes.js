@@ -3,7 +3,7 @@ const { exigirTenant } = require('../../../middleware/tenant');
 const { exigirPermissao } = require('../../../middleware/permissoes');
 const { limiteRastreamento } = require('../../../middleware/rateLimit');
 const service = require('../entregas.service');
-const clienteHub = require('../../clientehub/clientehub.service');
+const clienteHub = require('../../clientehub').service;
 const AppError = require('../../../shared/AppError');
 const { query } = require('../../../shared/db');
 

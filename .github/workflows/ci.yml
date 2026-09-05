@@ -43,6 +43,7 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        # Usuário NÃO superuser: superuser ignora Row-Level Security e o teste de RLS não valeria nada.
         env: { POSTGRES_PASSWORD: pg, POSTGRES_DB: logix_test }
         ports: ['5432:5432']
         options: >-
@@ -54,8 +55,9 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     defaults: { run: { working-directory: backend } }
     env:
-      DATABASE_URL_TEST: postgres://postgres:pg@localhost:5432/logix_test
+      DATABASE_URL_TEST: postgres://logix_app:pg@localhost:5432/logix_test
       REDIS_URL: redis://localhost:6379
+      RLS_ENABLED: 'true'
       JWT_ACCESS_SECRET: ci-secret
       ORS_API_KEY: x
     steps:
@@ -63,7 +65,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version-file: backend/.nvmrc, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
-      - name: Isolamento de tenant + concorrência entre processos
+      - name: Papel de aplicação NÃO-superuser (RLS só vale para não-superuser)
+        run: |
+          PGPASSWORD=pg psql -h localhost -U postgres -d logix_test -v ON_ERROR_STOP=1 -c "CREATE ROLE logix_app LOGIN PASSWORD 'pg' NOSUPERUSER;" -c "GRANT ALL ON DATABASE logix_test TO logix_app;" -c "GRANT ALL ON SCHEMA public TO logix_app;" -c "ALTER DATABASE logix_test OWNER TO logix_app;"
+      - name: Isolamento de tenant (app + RLS) + concorrência (Postgres e Redis reais)
         run: npm run test:integracao
 
   # Teste de BOOT em banco vazio: garante que um ambiente novo (staging, dev, testes)

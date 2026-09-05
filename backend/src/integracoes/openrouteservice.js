@@ -3,7 +3,7 @@ const AppError = require('../shared/AppError');
 const cache = require('../shared/cache');
 // Contador de uso de API (fire-and-forget). require tolerante p/ não afetar boot/ordem.
 let contar = () => {};
-try { contar = require('../modules/apiuso/apiuso.service').contar; } catch (_) {}
+try { contar = require('../modules/apiuso').service.contar; } catch (_) {}
 
 const BASE = process.env.ORS_BASE || 'https://api.heigit.org/openrouteservice';
 // Cache curto da otimização: a ordem das paradas é estável para o mesmo conjunto

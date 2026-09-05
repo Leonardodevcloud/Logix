@@ -1,6 +1,6 @@
 const AppError = require('../shared/AppError');
 const { PERFIS } = require('../shared/constants');
-const { setEmpresa } = require('../shared/contexto');
+const { setEmpresa, setRlsEmpresa } = require('../shared/contexto');
 
 // Perfis que operam a empresa inteira (não ficam presos a uma loja).
 const PERFIS_CENTRAL = [PERFIS.SUPER_ADMIN, PERFIS.CENTRAL_ADMIN];
@@ -31,6 +31,8 @@ function resolverTenant(req, res, next) {
     req.lojaId = u.lojaId || null;
   }
   setEmpresa(req.empresaId);
+  // RLS (segunda trava): quem NÃO é super_admin fica preso à própria empresa também no banco.
+  if (u.perfil !== PERFIS.SUPER_ADMIN) setRlsEmpresa(req.empresaId);
   next();
 }
 
@@ -59,7 +61,7 @@ function escopadoPorLoja(req) {
 // Resolve o tenant pelo domínio/subdomínio do Host (páginas públicas do portal white-label).
 async function resolverTenantPorHost(req, res, next) {
   try {
-    const { resolverEmpresaPorHost } = require('../modules/branding/branding.service');
+    const { resolverEmpresaPorHost } = require('../modules/branding').service;
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     req.empresaId = await resolverEmpresaPorHost(host);
     setEmpresa(req.empresaId);

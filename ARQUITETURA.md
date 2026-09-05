@@ -111,7 +111,7 @@ Catálogo em uso: `oferta.aceita`, `oferta.recusada`, `entrega.ponto_concluido`,
 
 - **Shared database, shared schema.** `empresa_id UUID NOT NULL` em toda tabela de negócio; `loja_id` no segundo nível.
 - Escopo resolvido em `middleware/tenant.js`; nunca confie em `empresa_id` vindo do body.
-- **Próxima trava (Sprint 2):** Row-Level Security no Postgres (`SET app.empresa_id` por transação + policy por tabela). É a segunda camada: se um dev esquecer o `WHERE`, o banco barra.
+- **Segunda trava (ADR-012):** Row-Level Security em todas as 43 tabelas com `empresa_id` (`RLS_ENABLED=true`, usuário não-superuser). Se um dev esquecer o `WHERE`, o banco barra — coberto por teste de integração.
 - Se um cliente exigir banco dedicado por contrato: `DATABASE_URL` resolvido por tenant no `contexto.js`. A arquitetura permite; não fazemos por padrão.
 - **GPS (módulo `posicoes`, dono do dado):** `rastreamento` particionada por dia (`PARTITION BY RANGE (capturado_em)`, partições `rastreamento_YYYYMMDD` + `rastreamento_default`); retenção = `DROP` da partição (cron diário, `manterParticoes`). "Posição atual" vem de `motoboy_posicao_atual` (1 linha por motoboy, UPSERT que nunca regride no tempo) — **tabela publicada**: outros módulos podem lê-la em JOIN, só `posicoes` escreve. Histórico só é lido para trajeto de entrega e janela do radar (índice `(entrega_id, capturado_em)`).
 - **Concorrência entre processos:** ondas de oferta com `FOR UPDATE SKIP LOCKED`; todo job do cron com `pg_try_advisory_lock` (`shared/locks.js`). Testado com 3 execuções paralelas (test/integracao/concorrencia).
@@ -182,6 +182,11 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 **Decisão:** módulo `uploads` emite URL assinada de PUT; cliente envia direto ao R2; rota de negócio recebe só a `storage_key` e confirma (prefixo da empresa + HEAD + tamanho). Base64 legado é aceito por compatibilidade, mas vai para o storage — nunca para o banco. Body JSON global = 1 MB.
 **Consequências:** API sem tráfego de bytes de arquivo; Postgres para de inchar; chaves auditáveis por empresa/finalidade. Custo: CORS no bucket precisa listar os domínios do painel; clientes precisam de 2 chamadas (URL + PUT) em vez de 1.
 
+### ADR-012 · Row-Level Security como segunda trava de tenant (2026-09)
+**Contexto:** isolamento dependia 100% de `WHERE empresa_id` em cada query (regra R7). Um esquecimento vazaria dados entre clientes.
+**Decisão:** política `tenant_isolamento` em toda tabela com `empresa_id` (migration 0004, `FORCE ROW LEVEL SECURITY`); contexto via `set_config('app.empresa_id')` em todo checkout de conexão (`shared/db.js`), só para perfis presos a uma empresa. Sem contexto → permissiva. Ligado por `RLS_ENABLED`. Exige usuário de banco não-superuser.
+**Consequências:** defesa em profundidade provada por teste (SELECT sem WHERE no contexto de B não vê A; INSERT com empresa errada falha com 42501). Custo: 1 round-trip por checkout. Super_admin permanece cross-tenant por design.
+
 ### ADR-006 · Validação de entrada com zod (2026-09)
 **Decisão:** `validar(schema)` por rota; schemas em `shared/schemas.js`. Substitui `validators.js` e o sanitizer global (que será removido quando todas as rotas de escrita tiverem schema).
 
@@ -211,6 +216,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 | 3 | módulo `posicoes` · `motoboy_posicao_atual` · `rastreamento` particionada · GPS em lote · migrations versionadas · `/metrics` Prometheus | **feito** |
 | 3b | App: GPS em lote com buffer offline (OTA) · backend de upload direto (módulo `uploads`) · correção de autorização no `concluir` | **feito** |
 | 3c | Clientes do upload direto (app + painel) · OpenAPI da API pública (`/integracao/openapi.json` + `/openapi.html`) · remoção de `rastreamento_legado` (0003) · `npm run fotos:migrar` · dashboard Grafana (`docs/grafana/`) | **feito** |
-| 4 | Remover suporte a base64 (quando `logix_uploads_legado_base64_total` = 0) · RLS · pagar violações de fronteira · OpenTelemetry · rotação de segredos · DR/LGPD | próximo |
+| 4 | RLS (migration 0004 + `RLS_ENABLED`, verificação de superuser no boot e em `/ready`) · logo do branding pelo `uploads` · `docs/DR-CONTINUIDADE.md` · `docs/LGPD-DADOS-PESSOAIS.md` · ciclo `middleware/permissoes` ↔ módulo quebrado | **feito** (RLS aguarda ligar em produção) |
+| 5 | Remover suporte a base64 (quando `logix_uploads_legado_base64_total` = 0) · pagar violações de fronteira · OpenTelemetry · rotação de segredos (`kid`) · scripts LGPD de exportação/exclusão por titular | próximo |
 | 2C | Row-Level Security (depois que testes de integração cobrirem mais rotas) | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |
