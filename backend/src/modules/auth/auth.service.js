@@ -21,7 +21,7 @@ async function emitirSessao(usuario) {
 
 async function autenticar({ email, senha, ip }) {
   const { rows } = await query(
-    `SELECT id, empresa_id, loja_id, perfil, nome, email, senha_hash, ativo FROM usuarios WHERE email = $1`,
+    `SELECT id, empresa_id, loja_id, perfil, nome, email, senha_hash, ativo FROM usuarios WHERE lower(email) = lower($1)`,
     [email]
   );
   const usuario = rows[0];

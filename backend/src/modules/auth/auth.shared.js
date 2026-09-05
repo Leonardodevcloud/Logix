@@ -26,8 +26,10 @@ function gerarRefreshToken() {
 function hashRefresh(bruto) { return crypto.createHash('sha256').update(bruto).digest('hex'); }
 
 // sameSite 'none': o painel (Vercel) e a API (Railway) estão em domínios diferentes.
-// path restrito: o cookie de refresh só viaja para /api/v1/auth/* — nunca para rotas de negócio.
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none', path: '/api/v1/auth' };
+// path '/': o painel chega pelo BFF da Vercel (/bff/v1/auth/...), então um path
+// restrito a /api/v1/auth nunca casaria e o refresh quebraria. Não há risco em
+// enviar o cookie para outras rotas: nenhuma rota aceita autenticação por cookie (ADR-003).
+const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none', path: '/' };
 const MS_ACCESS = 15 * 60_000;
 const MS_REFRESH = REFRESH_TTL_DIAS * 86400_000;
 
