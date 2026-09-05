@@ -89,14 +89,32 @@ function montarApp() {
   // CORS: lista explícita de origens. SEM CORS_ORIGIN, nenhuma origem cross-site é
   // aceita (antes o padrão era refletir QUALQUER origem com credentials — inseguro).
   // Requisições sem header Origin (app nativo, ERP server-to-server, curl) passam.
+  // Origens permitidas = CORS_ORIGIN (fixas: painel Logix/Vercel) + qualquer domínio
+  // white-label cadastrado em empresa_branding (dinâmico, cache 5 min). Um cliente novo
+  // não precisa de variável nem de deploy. Sem curinga: com credentials=true, um
+  // curinga permitiria que outro site lesse /auth/refresh com o cookie da vítima.
   const origensCors = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (!origensCors.length && process.env.NODE_ENV === 'production') log.warn('CORS_ORIGIN vazio — painel web não conseguirá chamar a API');
+  if (!origensCors.length && process.env.NODE_ENV === 'production') log.warn('CORS_ORIGIN vazio — só domínios white-label cadastrados serão aceitos');
+  const cacheOrigem = new Map(); // origin -> { ok, ate }
+  const ORIGEM_TTL_MS = 5 * 60_000;
+  async function origemPermitida(origin) {
+    if (origensCors.includes(origin)) return true;
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+    const c = cacheOrigem.get(origin);
+    if (c && c.ate > Date.now()) return c.ok;
+    let ok = false;
+    try {
+      const host = new URL(origin).hostname;
+      ok = !!(await branding.resolverEmpresaPorHost(host));
+    } catch (_) { ok = false; }
+    cacheOrigem.set(origin, { ok, ate: Date.now() + ORIGEM_TTL_MS });
+    if (!ok) log.warn({ origin }, 'CORS: origem não permitida');
+    return ok;
+  }
   app.use(cors({
     origin(origin, cb) {
-      if (!origin) return cb(null, true);
-      if (origensCors.includes(origin)) return cb(null, true);
-      if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-      return cb(null, false);
+      if (!origin) return cb(null, true); // app nativo, ERP, curl, same-origin sem header
+      origemPermitida(origin).then((ok) => cb(null, ok)).catch(() => cb(null, false));
     },
     credentials: true,
     exposedHeaders: ['X-Request-Id'],

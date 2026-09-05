@@ -59,7 +59,8 @@
   </div>
 <script>
 (function(){
-  var API = 'https://logix-production-61ae.up.railway.app/api/v1';
+  // Mesma origem via BFF da Vercel (/bff -> Railway): sem CORS e sem expor a URL da API.
+  var API = (window.LOGIX_API || '/bff/v1');
   var mPath = location.pathname.match(/\/rastreio\/([^/?#]+)/);
   var qp = new URLSearchParams(location.search);
   var token = (mPath && mPath[1]) || qp.get('t') || qp.get('token') || '';
