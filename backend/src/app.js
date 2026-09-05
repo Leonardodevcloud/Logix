@@ -13,6 +13,10 @@ const { limiteGlobal } = require('./middleware/rateLimit');
 const errorHandler = require('./middleware/errorHandler');
 const { query, estadoPool } = require('./shared/db');
 const eventos = require('./shared/eventos');
+const metricas = require('./shared/metricas');
+const { rodarMigracoes } = require('./shared/migracoes');
+const posicoes = require('./modules/posicoes');
+const { estatisticasWebSocket } = require('./realtime/ws');
 
 // Módulos (cada um expõe initXRoutes + initXTables)
 const auth = require('./modules/auth');
@@ -69,7 +73,12 @@ async function migrarTabelas() {
   await regioes.initRegioesTables();         // regiões (polígonos) por empresa
   await chat.initChatTables();               // chat interno (conversas/mensagens) — depois de entregas/lojas/motoboys
   await apiuso.initApiUsoTables();            // monitor de uso/custo das APIs externas (ORS/Google) por cliente
-  log.info('migrations verificadas/aplicadas');
+  log.info('migrations de boot (baseline) verificadas');
+  // Migrations VERSIONADAS (backend/migrations/*). Idempotente; normalmente já rodou
+  // no release command (npm run migrate) — aqui é rede de segurança.
+  await rodarMigracoes();
+  // Partições do histórico GPS: garante os próximos 7 dias (o cron mantém depois).
+  await posicoes.manterParticoes({ diasFrente: 7, retencaoDias: Number(process.env.RASTREAMENTO_RETENCAO_DIAS) || 30 });
 }
 
 // Ouvintes de eventos de domínio (score, chat, ...). Idempotente.
@@ -94,6 +103,7 @@ function montarApp(estado = { encerrando: false }) {
   // requestLogger PRIMEIRO: gera o X-Request-Id e abre o contexto antes de qualquer
   // outro middleware — assim até erro de JSON inválido no body-parser sai com reqId.
   app.use(requestLogger);
+  app.use(metricas.middlewareHttp);
   app.use(compression());
   app.use(helmet());
   // CORS: lista explícita de origens. SEM CORS_ORIGIN, nenhuma origem cross-site é
@@ -161,6 +171,19 @@ function montarApp(estado = { encerrando: false }) {
   app.get('/health/ready', ready);
   app.get('/health/db', ready);
 
+  // Métricas Prometheus. Protegidas: exige METRICS_TOKEN (Bearer). Sem a variável → 404.
+  metricas.registrarColetores({
+    estatisticasWebSocket, estadoPool,
+    contarOfertasAbertas: async () => { const r = await query(`SELECT count(*)::int AS n FROM entregas_ofertas WHERE status = 'ofertada'`); return r.rows[0].n; },
+  });
+  app.get('/metrics', async (req, res) => {
+    const tk = process.env.METRICS_TOKEN;
+    if (!tk) return res.status(404).end();
+    if ((req.headers.authorization || '') !== `Bearer ${tk}`) return res.status(401).end();
+    res.set('Content-Type', metricas.tipoConteudo);
+    res.send(await metricas.texto());
+  });
+
   const api = express.Router();
   // Contexto por requisição (carrega empresa_id até as integrações externas p/ métricas de API).
   const { als } = require('./shared/contexto');
@@ -189,6 +212,8 @@ function montarApp(estado = { encerrando: false }) {
   api.use('/chat', chat.initChatRoutes());
   app.use('/api/v1', api);
 
+  // Rota inexistente → JSON (o padrão do Express devolve HTML).
+  app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada', codigo: 'NAO_ENCONTRADO', reqId: req.id }));
   app.use(errorHandler); // sempre por último
   return app;
 }

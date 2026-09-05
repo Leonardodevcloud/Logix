@@ -47,8 +47,7 @@ function fmt(d) {
 async function ultimaPosicao(motoboyId) {
   if (!motoboyId) return null;
   const { rows } = await query(
-    `SELECT lat, lng, capturado_em FROM rastreamento
-      WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`, [motoboyId]);
+    `SELECT lat, lng, capturado_em FROM motoboy_posicao_atual WHERE motoboy_id = $1`, [motoboyId]);
   if (!rows[0]) return null;
   return { lat: Number(rows[0].lat), lng: Number(rows[0].lng), em: fmt(rows[0].capturado_em) };
 }

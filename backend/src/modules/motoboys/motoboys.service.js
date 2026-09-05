@@ -101,9 +101,7 @@ async function listarDisponiveisParaLoja({ empresaId, lojaId, usuarioId }) {
                  AND e2.status IN ('aguardando_coleta','em_coleta','em_rota'))::int AS carga
        FROM cliente_motoboys cm
        JOIN motoboys m ON m.id = cm.motoboy_id
-       LEFT JOIN LATERAL (
-         SELECT capturado_em FROM rastreamento WHERE motoboy_id = m.id ORDER BY capturado_em DESC LIMIT 1
-       ) r ON true
+       LEFT JOIN motoboy_posicao_atual r ON r.motoboy_id = m.id
       WHERE cm.loja_id = $1 AND m.empresa_id = $2 AND m.status = 'ativo'
         AND ($3::uuid IS NULL OR cm.centro_id IS NULL OR cm.centro_id = $3)
       ORDER BY disponivel DESC, m.nome_completo`,

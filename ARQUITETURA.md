@@ -113,9 +113,9 @@ Catálogo em uso: `oferta.aceita`, `oferta.recusada`, `entrega.ponto_concluido`,
 - Escopo resolvido em `middleware/tenant.js`; nunca confie em `empresa_id` vindo do body.
 - **Próxima trava (Sprint 2):** Row-Level Security no Postgres (`SET app.empresa_id` por transação + policy por tabela). É a segunda camada: se um dev esquecer o `WHERE`, o banco barra.
 - Se um cliente exigir banco dedicado por contrato: `DATABASE_URL` resolvido por tenant no `contexto.js`. A arquitetura permite; não fazemos por padrão.
-- **Dados de alto volume** (`rastreamento`): particionar por dia (`PARTITION BY RANGE (capturado_em)`), retenção via `DROP PARTITION`; leitura de "posição atual" vem de `motoboy_posicao_atual` (1 linha por motoboy, UPSERT), nunca do histórico.
+- **GPS (módulo `posicoes`, dono do dado):** `rastreamento` particionada por dia (`PARTITION BY RANGE (capturado_em)`, partições `rastreamento_YYYYMMDD` + `rastreamento_default`); retenção = `DROP` da partição (cron diário, `manterParticoes`). "Posição atual" vem de `motoboy_posicao_atual` (1 linha por motoboy, UPSERT que nunca regride no tempo) — **tabela publicada**: outros módulos podem lê-la em JOIN, só `posicoes` escreve. Histórico só é lido para trajeto de entrega e janela do radar (índice `(entrega_id, capturado_em)`).
 - **Concorrência entre processos:** ondas de oferta com `FOR UPDATE SKIP LOCKED`; todo job do cron com `pg_try_advisory_lock` (`shared/locks.js`). Testado com 3 execuções paralelas (test/integracao/concorrencia).
-- **Migrations:** hoje idempotentes no boot, protegidas por `pg_advisory_lock` (uma réplica migra, as outras esperam). O CI sobe a API em banco **vazio** para garantir que um ambiente novo sempre nasce. Alvo: migrations versionadas (`node-pg-migrate`) como *release command*.
+- **Migrations em duas camadas:** (1) *baseline* idempotente no boot dos módulos (`CREATE IF NOT EXISTS`, congelada — não recebe mais mudanças); (2) **versionadas** em `backend/migrations/` (node-pg-migrate, tabela `pgmigrations`, com `up`/`down`), executadas no pre-deploy (`railway.json`) e repetidas no boot sob `pg_advisory_lock` como rede de segurança. Regra: toda mudança de schema nova é um arquivo em `migrations/`. O CI aplica as migrations e sobe a API em banco **vazio**.
 
 ## 7. Quando (e como) um módulo vira serviço próprio
 
@@ -128,7 +128,7 @@ Um módulo só é extraído se **pelo menos dois** forem verdadeiros:
 
 "Vai crescer" e "tem mais dev" **não** são critérios. Time cresce → mais módulos, mais donos, regras R1–R8 mais rígidas. Não → mais serviços.
 
-**Candidatos, em ordem:** `gps-ingest` (critérios 1 e 4) → `roteirizador` (1 e 3) → `chat` (4). Nenhum outro está no radar.
+**Candidatos, em ordem:** `posicoes` (GPS; critérios 1 e 4 — já isolado como módulo, único escritor das suas tabelas) → `roteirizador` (1 e 3) → `chat` (4). Nenhum outro está no radar.
 
 **Como extrair (strangler):** o módulo já fala com o resto por `index.js` + eventos e é dono das suas tabelas (R1, R4, R5). Extração = mover a pasta para um processo, trocar `eventos` in-process por Redis Streams, expor as funções do `index.js` como HTTP interno. Semanas, não meses — **se as regras estiverem sendo cumpridas.** É por isso que elas existem.
 
@@ -168,6 +168,15 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 **Decisão:** aplicação Express (middlewares, módulos, migrations) em `src/app.js`; processo (porta, WS, Redis, sinais) em `server.js`.
 **Consequências:** testes de integração sobem o app com supertest sem porta nem WS; o CI roda isolamento de tenant e concorrência contra Postgres+Redis reais.
 
+### ADR-009 · GPS: módulo `posicoes`, posição atual separada do histórico, histórico particionado (2026-09)
+**Contexto:** 11 pontos do código faziam `ORDER BY capturado_em DESC LIMIT 1` sobre o histórico; retenção era `DELETE` em tabela que cresce milhões de linhas/dia.
+**Decisão:** módulo `posicoes` é o único escritor de GPS. `motoboy_posicao_atual` (UPSERT, `WHERE EXCLUDED.capturado_em >= atual`) serve toda leitura de "onde está". `rastreamento` particionada por dia; retenção por `DROP`. Ingestão em lote (`/app/posicoes`, ≤20 pontos).
+**Consequências:** leitura do mapa é 1 index scan por motoboy independente do tamanho do histórico; retenção sem bloat; 4× menos requests quando o app adotar o lote. Custo: 1 transação com 2 statements por ping.
+
+### ADR-010 · Migrations versionadas com node-pg-migrate (2026-09)
+**Decisão:** ver §6. Baseline de boot congelada; novas mudanças só em `migrations/` com `down` obrigatório; `railway.json` executa `npm run migrate` no pre-deploy.
+**Consequências:** rollback de schema documentado e testado; CI valida `up` em banco vazio.
+
 ### ADR-006 · Validação de entrada com zod (2026-09)
 **Decisão:** `validar(schema)` por rota; schemas em `shared/schemas.js`. Substitui `validators.js` e o sanitizer global (que será removido quando todas as rotas de escrita tiverem schema).
 
@@ -183,6 +192,7 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 | `npm run test:integracao` | Só integração (Postgres real; Redis se `REDIS_URL`) |
 | `npm run check` | lint + deps + test (o que o CI roda) |
 | `npm run smoke` | Cadeia principal contra uma API viva |
+| `npm run migrate` / `migrate:down` | Migrations versionadas (pre-deploy no Railway) |
 
 CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes → **boot em Postgres vazio + seed + smoke**.
 
@@ -192,6 +202,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 |---|---|---|
 | 1 | Observabilidade (pino, reqId, Sentry, health, shutdown) · CORS · ADR-003 · zod nas rotas críticas · CI · testes base · boot em banco vazio | **feito** |
 | 2A/2B | Redis opcional (WS pub/sub, rate-limit, cache) · `SKIP LOCKED` nas ondas · advisory locks no cron · barramento de eventos (score, chat) · `src/app.js` · testes de integração com Postgres+Redis no CI | **feito** |
-| 2C | Row-Level Security · migrations versionadas (`node-pg-migrate`) como release command | próximo |
-| 3 | `motoboy_posicao_atual` · particionamento de `rastreamento` · GPS em lote · upload direto S3 · `/metrics` + Grafana + alertas | |
+| 3 | módulo `posicoes` · `motoboy_posicao_atual` · `rastreamento` particionada · GPS em lote · migrations versionadas · `/metrics` Prometheus | **feito** |
+| 3b | App: adotar `/app/posicoes` em lote (OTA) · upload direto S3 · Grafana + alertas · remover `rastreamento_legado` | próximo |
+| 2C | Row-Level Security (depois que testes de integração cobrirem mais rotas) | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const log = require('../shared/logger');
 const { comLockExclusivo } = require('../shared/locks');
+const posicoes = require('../modules/posicoes');
 const { query } = require('../shared/db');
 const radar = require('../modules/radar');
 const { emitirParaEmpresa } = require('../realtime/ws');
@@ -15,12 +16,16 @@ function iniciarCron(origem = 'worker') {
   // com cron embutido, ou API + worker ao mesmo tempo, só UM processo executa.
   cron.schedule('0 3 * * *', () => comLockExclusivo('cron:limpeza', async () => {
     try {
-      const r1 = await query(
-        `DELETE FROM rastreamento WHERE capturado_em < now() - make_interval(days => $1)`,
-        [RETENCAO_DIAS]
-      );
+      // Histórico GPS: partições diárias — cria as próximas e DROPA as vencidas (instantâneo).
+      // Se por algum motivo a tabela ainda não for particionada, cai no DELETE antigo.
+      const part = await posicoes.manterParticoes({ diasFrente: 7, retencaoDias: RETENCAO_DIAS });
+      let removidos = null;
+      if (!part.particionada) {
+        const r1 = await query(`DELETE FROM rastreamento WHERE capturado_em < now() - make_interval(days => $1)`, [RETENCAO_DIAS]);
+        removidos = r1.rowCount;
+      }
       const r2 = await query(`DELETE FROM refresh_tokens WHERE expira_em < now() OR revogado = TRUE`);
-      log.info({ origem, rastreamento_removidos: r1.rowCount, refresh_removidos: r2.rowCount }, 'cron limpeza diária');
+      log.info({ origem, particoes: part, rastreamento_removidos: removidos, refresh_removidos: r2.rowCount }, 'cron limpeza diária');
     } catch (e) {
       log.error({ origem, err: e }, 'cron: erro na limpeza diária');
     }

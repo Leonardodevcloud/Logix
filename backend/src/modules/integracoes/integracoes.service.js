@@ -582,9 +582,7 @@ async function rastreioPublico(token) {
 
   let posicao = null;
   if (e.motoboy_id && ['aguardando_coleta', 'em_coleta', 'em_rota'].includes(e.status)) {
-    const { rows: pos } = await query(
-      `SELECT lat, lng, capturado_em FROM rastreamento
-        WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`, [e.motoboy_id]);
+    const { rows: pos } = await query(`SELECT lat, lng, capturado_em FROM motoboy_posicao_atual WHERE motoboy_id = $1`, [e.motoboy_id]);
     if (pos[0]) posicao = { lat: Number(pos[0].lat), lng: Number(pos[0].lng), em: pos[0].capturado_em };
   }
 

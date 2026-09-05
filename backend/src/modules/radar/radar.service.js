@@ -97,7 +97,7 @@ async function varrerEmpresa(cfg, emitir) {
     let tipo = null, sev = 'atencao', minutos = 0, lat = null, lng = null, ultimaEm = null, paradoDesde = null;
 
     if (!pos.length) {
-      const u = await query(`SELECT lat, lng, capturado_em FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`, [e.motoboy_id]);
+      const u = await query(`SELECT lat, lng, capturado_em FROM motoboy_posicao_atual WHERE motoboy_id = $1`, [e.motoboy_id]);
       if (u.rows[0]) {
         const minSem = (agora - new Date(u.rows[0].capturado_em).getTime()) / 60000;
         if (minSem >= cfg.sem_sinal_min) { tipo = 'sem_sinal'; minutos = Math.floor(minSem); lat = u.rows[0].lat; lng = u.rows[0].lng; ultimaEm = u.rows[0].capturado_em; }

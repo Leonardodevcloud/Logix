@@ -26,7 +26,10 @@ const schemas = {
 
   // GPS em lote (preparação para o app enviar 3–4 pontos por request)
   posicoes: z.object({
-    pontos: z.array(z.object({ lat, lng, entrega_id: uuid.nullable().optional(), capturado_em: z.coerce.date().optional() })).min(1).max(20),
+    pontos: z.array(z.object({
+      lat, lng, entrega_id: uuid.nullable().optional(), capturado_em: z.coerce.date().optional(),
+      precisao_m: z.coerce.number().min(0).max(10000).optional(), velocidade: z.coerce.number().min(0).max(300).optional(),
+    })).min(1).max(20),
   }),
 
   pushRegistrar: z.object({

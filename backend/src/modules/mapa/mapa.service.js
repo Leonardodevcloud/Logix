@@ -135,9 +135,7 @@ async function motoboysOnline(empresaId, lojaId) {
               ) ORDER BY e.criado_em
             ) FILTER (WHERE e.id IS NOT NULL), '[]'::json) AS corridas
        FROM motoboys m
-       LEFT JOIN LATERAL (
-         SELECT lat, lng, capturado_em FROM rastreamento WHERE motoboy_id = m.id ORDER BY capturado_em DESC LIMIT 1
-       ) r ON true
+       LEFT JOIN motoboy_posicao_atual r ON r.motoboy_id = m.id
        LEFT JOIN entregas e ON e.motoboy_id = m.id AND e.empresa_id = m.empresa_id
             AND e.status = ANY($2) AND ($3::uuid IS NULL OR e.loja_id = $3)
       WHERE ($1::uuid IS NULL OR m.empresa_id = $1)

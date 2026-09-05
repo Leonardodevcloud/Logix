@@ -5,6 +5,7 @@ const { verificarTokenMotoboy } = require('../../middleware/auth');
 const { limiteRastreamentoMotoboy } = require('../../middleware/rateLimit');
 const { validar } = require('../../middleware/validar');
 const eventos = require('../../shared/eventos');
+const posicoes = require('../posicoes');
 const { schemas } = require('../../shared/schemas');
 const storage = require('../../shared/storage');
 const push = require('../../shared/push');
@@ -371,15 +372,18 @@ module.exports = function motoboyAppRoutes() {
   // POST /motoboys/app/posicao
   router.post('/app/posicao', verificarTokenMotoboy, limiteRastreamentoMotoboy, validar(schemas.posicao), async (req, res, next) => {
     try {
-      const { lat, lng, entrega_id } = req.body;
-      await query(
-        `INSERT INTO rastreamento (motoboy_id, entrega_id, lat, lng) VALUES ($1, $2, $3, $4)`,
-        [req.motoboy.id, entrega_id || null, lat, lng]
-      );
-      emitirParaEmpresa(req.motoboy.empresaId, 'motoboy.posicao', {
-        motoboyId: req.motoboy.id, entregaId: entrega_id || null, lat, lng,
-      });
-      res.json({ ok: true });
+      const r = await posicoes.registrarPosicoes({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, pontos: [req.body] });
+      res.json({ ok: true, gravados: r.gravados });
+    } catch (e) { next(e); }
+  });
+
+  // POST /motoboys/app/posicoes — LOTE (até 20 pontos). O app acumula ~4 pontos e
+  // envia 1 request por minuto em vez de 4: 4x menos conexões/handshakes no servidor
+  // e menos bateria no celular. Cada ponto traz seu capturado_em.
+  router.post('/app/posicoes', verificarTokenMotoboy, limiteRastreamentoMotoboy, validar(schemas.posicoes), async (req, res, next) => {
+    try {
+      const r = await posicoes.registrarPosicoes({ empresaId: req.motoboy.empresaId, motoboyId: req.motoboy.id, pontos: req.body.pontos });
+      res.json({ ok: true, gravados: r.gravados });
     } catch (e) { next(e); }
   });
 
@@ -504,7 +508,7 @@ module.exports = function motoboyAppRoutes() {
             let mlat = req.body.lat, mlng = req.body.lng;
             if (mlat == null || mlng == null) {
               const { rows: pos } = await query(
-                `SELECT lat, lng FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`,
+                `SELECT lat, lng FROM motoboy_posicao_atual WHERE motoboy_id = $1`,
                 [req.motoboy.id]
               );
               if (pos[0]) { mlat = Number(pos[0].lat); mlng = Number(pos[0].lng); }

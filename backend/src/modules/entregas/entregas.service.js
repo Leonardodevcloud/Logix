@@ -538,11 +538,7 @@ async function acompanhar({ empresaId, id }) {
   const entrega = await obter({ empresaId, id });
   let ultimaPosicao = null;
   if (entrega.motoboy_id) {
-    const r = await query(
-      `SELECT lat, lng, capturado_em FROM rastreamento
-        WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`,
-      [entrega.motoboy_id]
-    );
+    const r = await query(`SELECT lat, lng, capturado_em FROM motoboy_posicao_atual WHERE motoboy_id = $1 AND empresa_id = $2`, [entrega.motoboy_id, empresaId]);
     ultimaPosicao = r.rows[0] || null;
   }
   return { ...entrega, ultima_posicao: ultimaPosicao };
@@ -551,11 +547,8 @@ async function acompanhar({ empresaId, id }) {
 // Registra a posição enviada pelo app do motoboy (rastreamento em segundo plano).
 async function registrarPosicao({ empresaId, motoboyId, entregaId, lat, lng }) {
   if (lat == null || lng == null) throw AppError.validacao('Coordenadas obrigatórias');
-  await query(
-    `INSERT INTO rastreamento (motoboy_id, entrega_id, lat, lng) VALUES ($1, $2, $3, $4)`,
-    [motoboyId, entregaId || null, lat, lng]
-  );
-  emitirParaEmpresa(empresaId, 'motoboy.posicao', { motoboyId, entregaId, lat, lng });
+  // Delegado ao módulo posicoes (dono do GPS): histórico + posição atual + WS.
+  await require('../posicoes').registrarPosicoes({ empresaId, motoboyId, pontos: [{ lat, lng, entrega_id: entregaId || null }] });
   return { ok: true };
 }
 

@@ -32,7 +32,7 @@ async function listarDisponiveis(empresaId) {
           WHERE empresa_id = $1 AND status = ANY($2) GROUP BY motoboy_id
        ) c ON c.motoboy_id = m.id
       WHERE m.empresa_id = $1 AND m.online = TRUE AND m.status = 'ativo'
-        AND EXISTS (SELECT 1 FROM rastreamento rr WHERE rr.motoboy_id = m.id AND rr.capturado_em > now() - interval '1 hour')
+        AND EXISTS (SELECT 1 FROM motoboy_posicao_atual rr WHERE rr.motoboy_id = m.id AND rr.capturado_em > now() - interval '1 hour')
       ORDER BY carga ASC, m.nome_completo`,
     [empresaId, STATUS_ATIVOS]
   );
@@ -151,8 +151,7 @@ async function escolherMotoboy(empresaId, entrega) {
   if (entrega.coleta_lat != null && entrega.coleta_lng != null) {
     const ids = disponiveis.map((d) => d.id);
     const { rows } = await query(
-      `SELECT DISTINCT ON (motoboy_id) motoboy_id, lat, lng FROM rastreamento
-        WHERE motoboy_id = ANY($1::uuid[]) ORDER BY motoboy_id, capturado_em DESC`,
+      `SELECT motoboy_id, lat, lng FROM motoboy_posicao_atual WHERE motoboy_id = ANY($1::uuid[])`,
       [ids]
     );
     const pos = new Map(rows.map((r) => [r.motoboy_id, r]));
@@ -285,8 +284,7 @@ async function dispararOferta({ empresaId, entregaId, usuarioId, ip, automatico 
 
   const ids = disp.map(d => d.id);
   const { rows: posicoes } = await query(
-    `SELECT DISTINCT ON (motoboy_id) motoboy_id, lat, lng FROM rastreamento
-      WHERE motoboy_id = ANY($1::uuid[]) ORDER BY motoboy_id, capturado_em DESC`,
+    `SELECT motoboy_id, lat, lng FROM motoboy_posicao_atual WHERE motoboy_id = ANY($1::uuid[])`,
     [ids]
   );
   const posMap = new Map(posicoes.map(p => [p.motoboy_id, p]));

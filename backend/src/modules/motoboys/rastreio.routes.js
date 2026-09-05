@@ -44,12 +44,7 @@ module.exports = function rastreioRoutes() {
                   )
                 ) FILTER (WHERE e.id IS NOT NULL) AS entregas
          FROM motoboys m
-         LEFT JOIN LATERAL (
-           SELECT lat, lng, capturado_em
-           FROM rastreamento
-           WHERE motoboy_id = m.id
-           ORDER BY capturado_em DESC LIMIT 1
-         ) r ON true
+         LEFT JOIN motoboy_posicao_atual r ON r.motoboy_id = m.id
          LEFT JOIN entregas e ON e.motoboy_id = m.id
            AND e.empresa_id = m.empresa_id
            AND e.status IN ('aguardando_atribuicao','aguardando_coleta','em_coleta','em_rota')
@@ -87,11 +82,7 @@ module.exports = function rastreioRoutes() {
 
       // Última posição do motoboy — SEMPRE escopada pelo tenant (o id vem da URL).
       const { rows: pos } = await query(
-        `SELECT r.lat, r.lng
-           FROM rastreamento r
-           JOIN motoboys m ON m.id = r.motoboy_id AND m.empresa_id = $2
-          WHERE r.motoboy_id = $1
-          ORDER BY r.capturado_em DESC LIMIT 1`,
+        `SELECT lat, lng FROM motoboy_posicao_atual WHERE motoboy_id = $1 AND empresa_id = $2`,
         [motoboyId, req.empresaId]
       );
       if (!pos[0]) return res.json({ geom: [], pontos: [], distanciaKm: 0, duracaoMin: 0 });
@@ -146,7 +137,7 @@ module.exports = function rastreioRoutes() {
     try {
       const motoboyId = req.params.id;
       const { rows: pos } = await query(
-        `SELECT lat, lng FROM rastreamento WHERE motoboy_id = $1 ORDER BY capturado_em DESC LIMIT 1`, [motoboyId]);
+        `SELECT lat, lng FROM motoboy_posicao_atual WHERE motoboy_id = $1 AND empresa_id = $2`, [motoboyId, req.empresaId]);
       if (!pos[0]) return res.json({ geom: [], pontos: [], distanciaKm: 0, duracaoMin: 0 });
       const { rows: pontos } = await query(
         `SELECT ep.lat, ep.lng, ep.endereco, ep.ordem, e.protocolo

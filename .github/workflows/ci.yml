@@ -97,6 +97,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version-file: backend/.nvmrc, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci --omit=dev
+      - name: Migrations versionadas (como o pre-deploy do Railway)
+        run: npm run migrate
       - name: Sobe API, roda seed e smoke
         run: |
           node server.js > api.log 2>&1 &
