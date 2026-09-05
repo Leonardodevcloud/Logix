@@ -133,6 +133,14 @@ function initIntegracoesPublicRoutes() {
     }
   });
 
+  // OPENAPI (público): especificação da API de integração para ERPs/geradores de cliente.
+  router.get('/openapi.json', (req, res) => {
+    const { gerarOpenApi } = require('./integracoes.openapi');
+    const baseUrl = process.env.API_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(gerarOpenApi({ baseUrl }));
+  });
+
   // RASTREIO PÚBLICO (consumido pela página do cliente) — o token é o segredo.
   router.get('/rastreio/:token', async (req, res) => {
     try { res.json(await service.rastreioPublico(req.params.token)); }

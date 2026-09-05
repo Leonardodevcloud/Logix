@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Logix — API de Integração (OpenAPI)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; }
+    .topo { background: #0f2747; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 12px; font-weight: 600; }
+    .topo a { color: #cfe0ff; font-weight: 400; font-size: 14px; margin-left: auto; text-decoration: none; }
+    .swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div class="topo">API de Integração — referência OpenAPI <a href="/integracao-docs.html">← Guia de integração</a></div>
+  <div id="swagger"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js" crossorigin></script>
+  <script>
+    // O spec vem da própria API (mesma origem via BFF), sempre na versão em produção.
+    window.ui = SwaggerUIBundle({
+      url: '/bff/v1/integracao/openapi.json',
+      dom_id: '#swagger',
+      deepLinking: true,
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 1,
+      tryItOutEnabled: false,
+    });
+  </script>
+</body>
+</html>

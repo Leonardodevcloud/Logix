@@ -22,7 +22,8 @@
     "deps:divida": "depcruise src server.js worker.js migrations --config .dependency-cruiser.cjs",
     "test:integracao": "vitest run test/integracao",
     "migrate": "node scripts/migrate.js up",
-    "migrate:down": "node scripts/migrate.js down 1"
+    "migrate:down": "node scripts/migrate.js down 1",
+    "fotos:migrar": "node scripts/migrar-fotos-base64.js"
   },
   "engines": {
     "node": ">=20"

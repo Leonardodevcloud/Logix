@@ -198,6 +198,7 @@ Formato: contexto → decisão → consequências. Não se apaga ADR; se mudar, 
 | `npm run check` | lint + deps + test (o que o CI roda) |
 | `npm run smoke` | Cadeia principal contra uma API viva |
 | `npm run migrate` / `migrate:down` | Migrations versionadas (pre-deploy no Railway) |
+| `npm run fotos:migrar [--dry-run]` | Move fotos legadas (base64 no banco) para o storage |
 
 CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes → **boot em Postgres vazio + seed + smoke**.
 
@@ -209,6 +210,7 @@ CI (`.github/workflows/ci.yml`): lint → fronteiras → `npm audit` → testes 
 | 2A/2B | Redis opcional (WS pub/sub, rate-limit, cache) · `SKIP LOCKED` nas ondas · advisory locks no cron · barramento de eventos (score, chat) · `src/app.js` · testes de integração com Postgres+Redis no CI | **feito** |
 | 3 | módulo `posicoes` · `motoboy_posicao_atual` · `rastreamento` particionada · GPS em lote · migrations versionadas · `/metrics` Prometheus | **feito** |
 | 3b | App: GPS em lote com buffer offline (OTA) · backend de upload direto (módulo `uploads`) · correção de autorização no `concluir` | **feito** |
-| 3c | Clientes do upload direto (app: conclusão, cadastro, documentos, chat; painel: motoboy-novo, chat, logo) · Grafana + alertas · remover `rastreamento_legado` | próximo |
+| 3c | Clientes do upload direto (app + painel) · OpenAPI da API pública (`/integracao/openapi.json` + `/openapi.html`) · remoção de `rastreamento_legado` (0003) · `npm run fotos:migrar` · dashboard Grafana (`docs/grafana/`) | **feito** |
+| 4 | Remover suporte a base64 (quando `logix_uploads_legado_base64_total` = 0) · RLS · pagar violações de fronteira · OpenTelemetry · rotação de segredos · DR/LGPD | próximo |
 | 2C | Row-Level Security (depois que testes de integração cobrirem mais rotas) | |
 | 4 | OpenAPI da API pública · OpenTelemetry · rotação de segredos (`kid`) · docs DR/LGPD | |

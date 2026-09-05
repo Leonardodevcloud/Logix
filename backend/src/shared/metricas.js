@@ -13,6 +13,7 @@ const httpDuracao = new client.Histogram({
 const gpsPontos = new client.Counter({ name: 'logix_gps_pontos_total', help: 'Pontos GPS gravados', labelNames: ['lote'], registers: [registro] });
 const wsConexoes = new client.Gauge({ name: 'logix_ws_conexoes', help: 'Conexões WebSocket abertas nesta réplica', labelNames: ['tipo'], registers: [registro] });
 const pgPool = new client.Gauge({ name: 'logix_pg_pool', help: 'Estado do pool pg', labelNames: ['estado'], registers: [registro] });
+const uploadsLegado = new client.Counter({ name: 'logix_uploads_legado_base64_total', help: 'Arquivos ainda recebidos em base64 pela API (clientes antigos). Zero sustentado = pode remover o suporte.', labelNames: ['finalidade'], registers: [registro] });
 const ofertasAbertas = new client.Gauge({ name: 'logix_ofertas_abertas', help: 'Ofertas de corrida aguardando aceite', registers: [registro] });
 
 // Normaliza a rota para não explodir cardinalidade (uuids → :id).
@@ -47,4 +48,4 @@ function registrarColetores({ estatisticasWebSocket, estadoPool, contarOfertasAb
 
 async function texto() { return registro.metrics(); }
 
-module.exports = { registro, middlewareHttp, registrarColetores, texto, tipoConteudo: registro.contentType, gpsPontos };
+module.exports = { registro, middlewareHttp, registrarColetores, texto, tipoConteudo: registro.contentType, gpsPontos, uploadsLegado };

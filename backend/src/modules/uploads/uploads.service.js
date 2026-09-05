@@ -9,6 +9,8 @@
 // assinada na hora de exibir (storage.urlDe).
 const AppError = require('../../shared/AppError');
 const storage = require('../../shared/storage');
+const metricas = require('../../shared/metricas');
+const log = require('../../shared/logger');
 
 const MB = 1024 * 1024;
 // Limites por finalidade. Documento aceita PDF (CNH digital, comprovante).
@@ -62,11 +64,13 @@ async function resolverArquivo({ empresaId, motoboyId = null, finalidade, entrad
   if (storage.ehChaveStorage(chave)) return confirmarChave({ empresaId, key: chave, finalidade, finalidadesAceitas });
   if (typeof entrada === 'string' && /^data:[^;]+;base64,/.test(entrada)) {
     if (!storage.storageConfigurado()) throw new AppError('Storage não configurado no servidor', 503, 'STORAGE_INDISPONIVEL');
+    metricas.uploadsLegado.inc({ finalidade }); log.info({ finalidade, bytes: entrada.length }, 'upload legado em base64 (cliente antigo)');
     return storage.subirBase64({ empresaId, motoboyId: motoboyId || empresaId, tipo: finalidade, dataUri: entrada });
   }
   // Base64 "cru" (sem prefixo data:) — o app antigo de conclusão mandava assim.
   if (typeof entrada === 'string' && /^[A-Za-z0-9+/=]{100,}$/.test(entrada.slice(0, 200))) {
     const mime = entrada.startsWith('/9j/') ? 'image/jpeg' : entrada.startsWith('iVBOR') ? 'image/png' : entrada.startsWith('UklG') ? 'image/webp' : 'image/jpeg';
+    metricas.uploadsLegado.inc({ finalidade }); log.info({ finalidade, bytes: entrada.length }, 'upload legado em base64 cru (app antigo)');
     return storage.subirBase64({ empresaId, motoboyId: motoboyId || empresaId, tipo: finalidade, dataUri: `data:${mime};base64,${entrada}` });
   }
   throw AppError.validacao('Arquivo inválido: envie a storage_key do upload ou o arquivo em base64');
