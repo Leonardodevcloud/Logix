@@ -1,5 +1,6 @@
 import { el } from '../core/ui.js';
 import { get, post } from '../core/api.js';
+import { uploadDireto } from '../core/upload.js';
 
 function toast(msg, tipo) {
   const t = el('div', { style: `position:fixed;bottom:24px;right:24px;z-index:3000;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;max-width:380px;background:${tipo==='erro'?'var(--lx-erro-bg)':'var(--lx-ok-bg)'};color:${tipo==='erro'?'var(--lx-erro)':'var(--lx-ok)'};box-shadow:var(--lx-sombra-lg)` }, msg);
@@ -35,7 +36,8 @@ export function abaNovoMotoboy(aoCriar) {
     pix_tipo: 'cpf', pix_chave: '', titular_nome: '', titular_doc: '',
     banco_codigo: '', banco_nome: '', agencia: '', conta: '', conta_tipo: 'corrente',
   };
-  const docs = {}; // tipo -> dataUri
+  const docs = {};
+  const previews = {}; // tipo -> object URL local (preview quando o upload é direto e docs[tipo] é a chave)
   let modalidades = [];
 
   const nav = el('div', { style: 'display:flex;gap:2px;border-bottom:1px solid var(--lx-linha);margin-bottom:20px' });
@@ -146,9 +148,11 @@ export function abaNovoMotoboy(aoCriar) {
       const head = el('div', { style: 'padding:10px 12px;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--lx-linha)' }, rotulo);
       const corpo = el('div', { style: 'padding:12px' });
       if (temDoc) {
-        const ehImg = docs[tipo].startsWith('data:image/');
+        // Preview: data URI (fluxo antigo) ou object URL local (upload direto — docs[tipo] é a chave).
+        const src = previews[tipo] || docs[tipo];
+        const ehImg = typeof src === 'string' && (src.startsWith('data:image/') || src.startsWith('blob:'));
         corpo.append(ehImg
-          ? el('img', { src: docs[tipo], style: 'width:100%;height:130px;object-fit:cover;border-radius:8px' })
+          ? el('img', { src, style: 'width:100%;height:130px;object-fit:cover;border-radius:8px' })
           : el('div', { style: 'height:130px;display:flex;align-items:center;justify-content:center;color:var(--lx-azul-primario)' }, '📄 Arquivo carregado'));
       } else {
         corpo.append(el('div', { style: 'height:130px;display:flex;align-items:center;justify-content:center;color:var(--lx-tinta-3);font-size:12.5px;border:1px dashed var(--lx-linha);border-radius:8px' }, 'Nenhum arquivo'));
@@ -158,7 +162,12 @@ export function abaNovoMotoboy(aoCriar) {
         const f = inputFile.files[0];
         if (!f) return;
         if (f.size > 8 * 1024 * 1024) { toast('Arquivo muito grande (máx 8MB)', 'erro'); return; }
-        try { docs[tipo] = await lerArquivo(f); render(); } catch { toast('Erro ao ler arquivo', 'erro'); }
+        // Upload direto ao storage (chave); se falhar, lê como base64 (fluxo antigo).
+        try {
+          previews[tipo] = f.type.startsWith('image/') ? URL.createObjectURL(f) : null;
+          docs[tipo] = (await uploadDireto(f, 'documento')) || (await lerArquivo(f));
+          render();
+        } catch { toast('Erro ao ler arquivo', 'erro'); }
       });
       const btn = el('button', { class: 'lx-btn lx-btn-secundario', style: 'width:100%;margin-top:10px;font-size:12.5px', onClick: () => inputFile.click() }, temDoc ? 'Trocar arquivo' : 'Selecionar arquivo');
       corpo.append(btn, inputFile);

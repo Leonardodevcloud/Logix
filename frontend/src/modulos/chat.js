@@ -1,6 +1,7 @@
 import { casca } from '../core/layout.js';
 import { el } from '../core/ui.js';
 import { get, post } from '../core/api.js';
+import { uploadDireto } from '../core/upload.js';
 import * as auth from '../core/auth.js';
 
 function toast(msg, tipo) {
@@ -153,7 +154,7 @@ export async function montar(container) {
   }
   btnEnviar.onclick = () => { const t = inpMsg.value.trim(); if (t) enviar({ tipo: 'texto', texto: t }); };
   inpMsg.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnEnviar.click(); });
-  inpFoto.addEventListener('change', async () => { const f = inpFoto.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('Foto muito grande (máx 8MB)', 'erro'); return; } try { const dataUri = await lerArquivo(f); await enviar({ tipo: 'foto', arquivo: dataUri }); } catch { toast('Erro ao ler foto', 'erro'); } inpFoto.value = ''; });
+  inpFoto.addEventListener('change', async () => { const f = inpFoto.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('Foto muito grande (máx 8MB)', 'erro'); return; } try { const key = await uploadDireto(f, 'chat'); await enviar({ tipo: 'foto', arquivo: key || await lerArquivo(f) }); } catch { toast('Erro ao ler foto', 'erro'); } inpFoto.value = ''; });
 
   await recarregarInbox();
   timerInbox = setInterval(recarregarInbox, 8000);

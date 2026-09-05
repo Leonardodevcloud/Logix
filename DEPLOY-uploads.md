@@ -13,12 +13,13 @@
 - **Correção de segurança**: `concluir` e `concluir-sem-ponto` do app agora exigem que a entrega
   seja da empresa e esteja atribuída ao motoboy (antes qualquer id válido era aceito).
 
-## OBRIGATÓRIO: CORS no bucket R2
-Sem isto o navegador (painel) bloqueia o PUT direto. No Cloudflare → R2 → bucket → Settings → CORS:
+## OBRIGATÓRIO: CORS no bucket R2 (uma vez, vale para todos os clientes)
+Sem isto o navegador (painel) bloqueia o PUT direto. Cloudflare → R2 → bucket `logix-docs` →
+Settings → CORS policy:
 ```json
 [
   {
-    "AllowedOrigins": ["https://painel.logix.api.br", "https://logix-ochre.vercel.app", "https://painel.ig-express.com", "https://logix-apresentacao.vercel.app"],
+    "AllowedOrigins": ["*"],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["Content-Type"],
     "ExposeHeaders": ["ETag"],
@@ -26,8 +27,10 @@ Sem isto o navegador (painel) bloqueia o PUT direto. No Cloudflare → R2 → bu
   }
 ]
 ```
-Inclua TODOS os domínios white-label (cada cliente novo entra aqui também — ou use um
-domínio único do painel com o BFF; o app nativo não precisa de CORS).
+`"*"` é seguro aqui: a proteção está na **URL assinada** (só quem a recebeu da API, para
+aquela chave, com aquele Content-Type, por 10 min, consegue fazer o PUT; leituras também são
+assinadas). Não há cookie/sessão envolvida no bucket. Cliente white-label novo não precisa de
+nada aqui.
 
 ## Conferência pós-deploy
 1. Painel → concluir um ponto com foto (fluxo antigo, base64): funciona; no banco
